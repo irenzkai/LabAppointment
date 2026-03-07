@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\URL;
 use App\Models\User;
 
 class AppServiceProvider extends ServiceProvider
@@ -28,5 +29,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('isStaff', function (User $user) {
             return in_array($user->role, ['staff', 'admin']);
         });
+
+        if (config('app.env') === 'production') {
+            URL::forceScheme('https');
+        }
     }
 }
