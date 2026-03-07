@@ -1,4 +1,4 @@
-🚀 Getting Started (For Collaborators)
+# 🚀 Getting Started (For Collaborators)
 1. Repository Setup
 
 Open VS Code in an empty folder and run the following commands:
