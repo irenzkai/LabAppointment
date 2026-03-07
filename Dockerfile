@@ -1,37 +1,34 @@
 FROM php:8.2-apache
 
-# Install system dependencies
+# 1. Install system dependencies
 RUN apt-get update && apt-get install -y \
-    libpng-dev libonig-dev libxml2-dev zip unzip git curl libzip-dev
+    libpng-dev libonig-dev libxml2-dev zip unzip git curl libzip-dev \
+    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip opcache \
+    && a2enmod rewrite
 
-# Install PHP extensions
-RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
-
-# Enable Apache mod_rewrite
-RUN a2enmod rewrite
-
-# Install OPcache for faster PHP execution
-RUN docker-php-ext-install opcache
-
-# Set working directory
+# 2. Set working directory
 WORKDIR /var/www/html
 
-# Copy project files
+# 3. Cache Composer dependencies
+COPY composer.json composer.lock ./
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+
+# 4. Copy the project
 COPY . .
 
-# Set permissions for Laravel
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+# 5. Finish Composer and set permissions
+RUN composer dump-autoload --optimize \
+    && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Point Apache to Laravel's public folder
+# 6. Prepare the Entrypoint Script
+# We give the script execution permissions
+RUN chmod +x /var/www/html/entrypoint.sh
+
+# 7. Apache Config
 RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-RUN composer install --no-dev --optimize-autoloader
-
-# Expose port 80
 EXPOSE 80
 
-# Final Start Command: Optimize -> Migrate -> Seed -> Start Apache
-# We use 'sh -c' to ensure the shell handles the '&&' operators correctly
-CMD php artisan optimize && php artisan migrate --force && php artisan db:seed --class=AdminSeeder --force && apache2-foreground
+# 8. Set the Entrypoint
+ENTRYPOINT ["/var/www/html/entrypoint.sh"]
