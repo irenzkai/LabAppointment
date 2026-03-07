@@ -1,5 +1,5 @@
 # 🚀 Getting Started (For Collaborators)
-1. Repository Setup
+# 1. Repository Setup
 
 Open VS Code in an empty folder and run the following commands:
 
@@ -17,7 +17,7 @@ cd LabAppointment
 # Configure your Git identity
 git config user.name "Your GitHub Username"
 git config user.email "your-email@example.com"
-2. Local Environment Setup (XAMPP)
+# 2. Local Environment Setup (XAMPP)
 
 Ensure Apache and MySQL are running in your XAMPP Control Panel.
 
