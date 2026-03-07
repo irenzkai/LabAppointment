@@ -13,7 +13,8 @@ class Appointment extends Model
         'user_id',
         'service_id',
         'appointment_date',
-        'status', // 'pending', 'approved', 'returned'
+        'time_slot',     
+        'status',
         'return_reason',
     ];
 

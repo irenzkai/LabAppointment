@@ -26,19 +26,34 @@ class AppointmentController extends Controller
 
     // User creates an appointment
     public function store(Request $request) {
+        $x_hours = 0; 
+        
         $request->validate([
-            'service_id' => 'required|exists:services,id',
-            'appointment_date' => 'required|date|after:today',
+            'service_id' => 'required',
+            'appointment_date' => 'required|date|after_or_equal:today',
+            'time_slot' => 'required'
         ]);
 
-        Appointment::create([
-            'user_id' => Auth::id(),
-            'service_id' => $request->service_id,
-            'appointment_date' => $request->appointment_date,
-            'status' => 'pending'
-        ]);
+        // Time-block logic: If date is today, check if time is at least X hours ahead
+        if($request->appointment_date == date('Y-m-d')) {
+            $currentTime = now()->addHours($x_hours)->format('H:i');
+            if($request->time_slot <= $currentTime) {
+                return back()->withErrors(['time_slot' => "You cannot book a time slot in the past or within the next $x_hours hour(s)."]);
+            }
+        }
 
-        return back()->with('success', 'Appointment booked! Please wait for staff approval.');
+        try {
+            Appointment::create([
+                'user_id' => auth()->id(),
+                'service_id' => $request->service_id,
+                'appointment_date' => $request->appointment_date,
+                'time_slot' => $request->time_slot,
+                'status' => 'pending'
+            ]);
+            return redirect()->route('appointments.index')->with('success', 'Booking successful!');
+        } catch (\Exception $e) {
+            return back()->withErrors(['time_slot' => 'This slot is already occupied.']);
+        }
     }
 
     // Staff/Admin Approve or Return

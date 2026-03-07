@@ -34,4 +34,9 @@ class User extends Authenticatable
             'birthdate' => 'date', // Casts the string to a Carbon date object
         ];
     }
+
+    public function isStaff()
+    {
+        return in_array($this->role, ['staff', 'admin']);
+    }
 }

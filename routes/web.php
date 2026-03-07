@@ -6,23 +6,29 @@ use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AdminController;
 use Illuminate\Support\Facades\Route;
 
+// --- PUBLIC ROUTES (No Login Required) ---
 Route::get('/', function () {
     return view('welcome');
 });
 
-// Dashboard - Redirect based on login
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+// Everyone can see services, but booking logic is handled in the view via @auth
+Route::get('/services', [ServiceController::class, 'index'])->name('services.index');
 
+
+// --- AUTHENTICATED ROUTES (Login Required) ---
 Route::middleware('auth')->group(function () {
-    // PROFILE ROUTES (User Edit/Delete Account)
+    
+    // Dashboard
+    Route::get('/dashboard', function () {
+        return view('dashboard');
+    })->name('dashboard');
+
+    // PROFILE ROUTES (Edit/Delete Account)
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // SHARED ROUTES (Everyone can see)
-    Route::get('/services', [ServiceController::class, 'index'])->name('services.index');
+    // APPOINTMENTS INDEX (Shared among all roles, but must be logged in)
     Route::get('/appointments', [AppointmentController::class, 'index'])->name('appointments.index');
 
     // USER ONLY ROUTES
@@ -31,14 +37,14 @@ Route::middleware('auth')->group(function () {
         Route::put('/appointments/{appointment}', [AppointmentController::class, 'update'])->name('appointments.update');
     });
 
-    // STAFF & ADMIN ROUTES (Manage Services & Appointments)
-        Route::middleware(['auth', 'role:staff,admin'])->group(function () {
-            Route::post('/services', [ServiceController::class, 'store'])->name('services.store');
-            Route::put('/services/{service}', [ServiceController::class, 'update'])->name('services.update');
-            Route::patch('/services/{service}/toggle', [ServiceController::class, 'toggle'])->name('services.toggle');
-            Route::delete('/services/{service}', [ServiceController::class, 'destroy'])->name('services.destroy');
-            Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus'])->name('appointments.status'); 
-        });
+    // STAFF & ADMIN ROUTES (Manage Services & Appointment Status)
+    Route::middleware('role:staff,admin')->group(function () {
+        Route::post('/services', [ServiceController::class, 'store'])->name('services.store');
+        Route::put('/services/{service}', [ServiceController::class, 'update'])->name('services.update');
+        Route::patch('/services/{service}/toggle', [ServiceController::class, 'toggle'])->name('services.toggle');
+        Route::delete('/services/{service}', [ServiceController::class, 'destroy'])->name('services.destroy');
+        Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus'])->name('appointments.status'); 
+    });
 
     // ADMIN ONLY ROUTES (User Management)
     Route::middleware('role:admin')->group(function () {

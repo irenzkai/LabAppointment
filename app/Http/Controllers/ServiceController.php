@@ -32,10 +32,10 @@ class ServiceController extends Controller
         return back()->with('success', 'Service updated!');
     }
 
-    // Toggle Availability (The Staff Function)
+    // Toggle Availability
     public function toggle(Service $service) {
         $service->update(['is_available' => !$service->is_available]);
-        return back();
+        return back()->with('success', 'Service status updated.');
     }
 
     // Delete service

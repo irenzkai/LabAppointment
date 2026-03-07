@@ -16,6 +16,11 @@ return new class extends Migration
             $table->foreignId('service_id')->constrained()->onDelete('cascade');
             
             $table->date('appointment_date');
+            // Removed ->after() - the column will naturally appear here
+            $table->time('time_slot');
+            
+            // This prevents two people from booking the same date AND time
+            $table->unique(['appointment_date', 'time_slot']);
             
             // Status: pending, approved, returned
             $table->string('status')->default('pending'); 
@@ -28,9 +33,5 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('appointments');
-
-        Schema::table('appointments', function (Blueprint $table) {
-            $table->dropColumn('return_reason');
-        });
     }
 };

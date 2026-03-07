@@ -27,4 +27,4 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 RUN composer install --no-dev --optimize-autoloader
 
 EXPOSE 80
-CMD php artisan migrate --force && php artisan db:seed --class=AdminSeeder --force && apache2-foreground
+CMD php artisan migrate:fresh --force && php artisan db:seed --class=AdminSeeder --force && apache2-foreground

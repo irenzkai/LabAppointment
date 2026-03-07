@@ -1,43 +1,61 @@
-<!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
-<head>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background-color: #000; height: 100vh; display: flex; align-items: center; }
-        .card { background-color: #111; border: 1px solid #333; width: 100%; max-width: 400px; margin: auto; }
-        .form-control { background-color: #222; border: 1px solid #444; color: white; }
-    </style>
-</head>
-<body>
-    <div class="card p-4 shadow-lg">
-        <div class="text-center mb-4">
-            <h4 class="fw-bold text-primary">LABSYSTEM</h4>
-            <p class="text-secondary small">Sign in to your account</p>
+@extends('layouts.app')
+
+@section('content')
+<div class="row justify-content-center align-items-center" style="min-height: 75vh;">
+    <div class="col-md-5 col-lg-4">
+        <div class="card p-4 shadow-lg border-0">
+            <div class="text-center mb-4">
+                {{-- Circular Logo --}}
+                <img src="{{ asset('images/logo.jpg') }}" alt="Logo" class="nav-logo mx-auto mb-3" style="height: 70px; width: 70px;">
+                <h3 class="text-neon fw-bold mb-1">LOGIN ACCOUNT</h3>
+            </div>
+
+            {{-- Custom Error Alert --}}
+            @if ($errors->any())
+                <div class="alert bg-black border border-danger text-danger py-2 px-3 small mb-4 d-flex align-items-center">
+                    <i class="bi bi-exclamation-octagon-fill me-2"></i>
+                    <span>Invalid email or password.</span>
+                </div>
+            @endif
+
+            <form method="POST" action="{{ route('login') }}">
+                @csrf
+                <div class="mb-3">
+                    <label class="small text-secondary mb-1 fw-bold">EMAIL ADDRESS</label>
+                    <input type="email" name="email" class="form-control" placeholder="example@gmail.com" value="{{ old('email') }}" required autofocus>
+                </div>
+
+                <div class="mb-4">
+                    <label class="small text-secondary mb-1 fw-bold">PASSWORD</label>
+                    <div class="password-container">
+                        <input type="password" name="password" id="login_pass" class="form-control" placeholder="••••••••" required>
+                        <i class="bi bi-eye password-toggle" id="toggleLoginPass"></i>
+                    </div>
+                </div>
+
+                <div class="mb-4 d-flex justify-content-between align-items-center">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" name="remember" id="remember">
+                        <label class="form-check-label small text-secondary" for="remember">Remember me</label>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-custom btn-neon w-100 py-3 shadow-sm">LOG IN</button>
+                
+                <div class="text-center mt-4">
+                    <p class="text-secondary small">Don't have an account? 
+                        <a href="{{ route('register') }}" class="text-neon fw-bold">Register here</a>
+                    </p>
+                </div>
+            </form>
         </div>
-
-        <form method="POST" action="{{ route('login') }}">
-            @csrf
-            <div class="mb-3">
-                <label class="form-label small text-secondary">Email Address</label>
-                <input type="email" name="email" class="form-control" required autofocus>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label small text-secondary">Password</label>
-                <input type="password" name="password" class="form-control" required>
-            </div>
-
-            <div class="form-check mb-3">
-                <input type="checkbox" name="remember" class="form-check-input" id="remember">
-                <label class="form-check-label small" for="remember">Remember me</label>
-            </div>
-
-            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">Login</button>
-            
-            <div class="text-center mt-3">
-                <a href="{{ route('register') }}" class="small text-secondary text-decoration-none">Don't have an account? Register</a>
-            </div>
-        </form>
     </div>
-</body>
-</html>
+</div>
+@endsection
+
+@push('scripts')
+<script>
+    // Uses the function defined in app.blade.php
+    setupPasswordToggle('#login_pass', '#toggleLoginPass');
+</script>
+@endpush
