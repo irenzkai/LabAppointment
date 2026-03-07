@@ -34,4 +34,4 @@ EXPOSE 80
 
 # Final Start Command: Optimize -> Migrate -> Seed -> Start Apache
 # We use 'sh -c' to ensure the shell handles the '&&' operators correctly
-CMD sh -c "php artisan optimize && php artisan migrate --force && php artisan db:seed --class=AdminSeeder --force && apache2-foreground"
+CMD php artisan optimize && php artisan migrate --force && php artisan db:seed --class=AdminSeeder --force && apache2-foreground
