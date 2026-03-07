@@ -49,7 +49,7 @@
                 </div>
             @endif
 
-            <form method="post" action="{{ route('password.update') }}">
+            <form method="post" action="{{ route('profile.password.update') }}">
                 @csrf @method('put')
                 <div class="row g-3">
                     <div class="col-md-12">
