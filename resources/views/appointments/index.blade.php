@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-<h2 class="text-neon fw-bold mb-4 uppercase">Appointment Management</h2>
+<h2 class="text-neon fw-bold mb-4 uppercase">LABORATORY APPOINTMENTS</h2>
 
 <div class="card p-0 border-0 shadow-lg" style="background: transparent;">
     <div class="table-responsive" style="overflow: visible;"> {{-- Changed to visible --}}

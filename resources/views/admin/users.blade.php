@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-<h3 class="text-neon fw-bold mb-4 uppercase" style="letter-spacing: 2px;">User Management</h3>
+<h3 class="text-neon fw-bold mb-4 uppercase" style="letter-spacing: 2px;">USER MANAGEMENT</h3>
 
 <div class="card p-0 border-0 shadow-lg overflow-hidden">
     <div class="table-responsive">
