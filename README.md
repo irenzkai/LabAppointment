@@ -1,59 +1,121 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+🚀 Getting Started (For Collaborators)
+1. Repository Setup
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Open VS Code in an empty folder and run the following commands:
 
-## About Laravel
+code
+Bash
+download
+content_copy
+expand_less
+# Clone the repository
+git clone https://github.com/irenzkai/LabAppointment.git
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+# Enter the project directory
+cd LabAppointment
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+# Configure your Git identity
+git config user.name "Your GitHub Username"
+git config user.email "your-email@example.com"
+2. Local Environment Setup (XAMPP)
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Ensure Apache and MySQL are running in your XAMPP Control Panel.
 
-## Learning Laravel
+code
+Bash
+download
+content_copy
+expand_less
+# 1. Install PHP dependencies
+composer install
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+# 2. Install & Build Frontend assets
+npm install
+npm run build
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+# 3. Setup the Environment file
+cp .env.example .env
 
-## Laravel Sponsors
+# 4. Generate Security Key
+php artisan key:generate
+3. Database Configuration
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Open http://localhost/phpmyadmin.
 
-### Premium Partners
+Create a new database named: labappointment.
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+Open the .env file in VS Code and update these lines:
 
-## Contributing
+code
+Env
+download
+content_copy
+expand_less
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=labappointment
+DB_USERNAME=root
+DB_PASSWORD=
+4. Initialize Data
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Run the migrations and seed the default admin account:
 
-## Code of Conduct
+code
+Bash
+download
+content_copy
+expand_less
+# Create tables
+php artisan migrate
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+# Create default admin (admin@lab.com | password123)
+php artisan db:seed --class=AdminSeeder
+5. Run the Project
+code
+Bash
+download
+content_copy
+expand_less
+php artisan serve
 
-## Security Vulnerabilities
+Visit the site at: http://127.0.0.1:8000
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+🛠 Daily Workflow
 
-## License
+To avoid code conflicts, always follow this order when working:
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Update your local code (Do this before starting work):
+
+code
+Bash
+download
+content_copy
+expand_less
+git pull origin main
+
+Make your edits in VS Code.
+
+Submit your changes:
+
+code
+Bash
+download
+content_copy
+expand_less
+git add .
+git commit -m "Briefly describe what you changed"
+git push origin main
+
+Note: Once pushed, Render will automatically start a new deployment for the live site.
+
+🗄 Remote Database Access
+
+To view the live data on Aiven SQL, use MySQL Workbench or DBeaver.
+
+Setting	Value
+Host	mysql-1c9f6347-online-7a36.k.aivencloud.com
+Port	19906
+User	avnadmin
+Password	[Ask Project Owner for Password]
+SSL CA Cert	Found in storage/certs/ca.pem
