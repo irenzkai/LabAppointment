@@ -19,8 +19,8 @@ return new class extends Migration
             
             // Status: pending, approved, returned
             $table->string('status')->default('pending'); 
-            $table->text('return_reason')->nullable()->after('status');
-            
+            $table->text('return_reason')->nullable(); 
+
             $table->timestamps();
         });
     }
