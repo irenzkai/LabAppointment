@@ -16,7 +16,7 @@ class AdminSeeder extends Seeder
             ['email' => 'renzmamon2@gmail.com'], // Check if this email exists
             [
                 'name' => 'System Admin',
-                'password' => bcrypt('password123'),
+                'password' => bcrypt('1@23qweASD'), // Use bcrypt to hash the password
                 'role' => 'admin',
                 'phone' => '09399510464',
                 'birthdate' => '2005-05-05',
