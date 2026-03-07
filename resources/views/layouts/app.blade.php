@@ -90,14 +90,25 @@
         }
 
         /* Password Eye Toggle */
-        .password-container { position: relative; }
+        .password-container { 
+            position: relative; 
+            width: 100%;
+        }
+
         .password-toggle { 
             position: absolute; 
             right: 15px; 
             top: 50%; 
             transform: translateY(-50%); 
             cursor: pointer; 
-            color: var(--neon); 
+            z-index: 10;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .password-container input {
+            padding-right: 45px !important;
         }
     </style>
 </head>
