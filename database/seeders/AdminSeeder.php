@@ -10,16 +10,19 @@ class AdminSeeder extends Seeder
     /**
      * Run the database seeds.
      */
-    public function run(): void {
-        \App\Models\User::create([
-            'name' => 'System Admin',
-            'email' => 'admin@lab.com',
-            'password' => bcrypt('password123'),
-            'role' => 'admin',
-            'phone' => '09123456789',
-            'birthdate' => '1990-01-01',
-            'sex' => 'Male',
-            'address' => 'Lab Main Office',
-        ]);
+    public function run(): void
+    {
+        \App\Models\User::updateOrCreate(
+            ['email' => 'renzmamon2@gmail.com'], // Check if this email exists
+            [
+                'name' => 'System Admin',
+                'password' => bcrypt('password123'),
+                'role' => 'admin',
+                'phone' => '09399510464',
+                'birthdate' => '2005-05-05',
+                'sex' => 'Male',
+                'address' => 'HTC',
+            ]
+        );
     }
 }
