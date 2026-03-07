@@ -11,9 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('appointments', function (Blueprint $table) {
-            $table->text('return_reason')->nullable()->after('status');
-        });
+        // Only try to add the column if it DOES NOT exist yet
+        if (!Schema::hasColumn('appointments', 'return_reason')) {
+            Schema::table('appointments', function (Blueprint $table) {
+                $table->text('return_reason')->nullable()->after('status');
+            });
+        }
     }
 
     /**
