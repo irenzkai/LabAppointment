@@ -92,6 +92,7 @@
         /* Password Eye Toggle */
         .password-container { 
             position: relative; 
+            display: block;
             width: 100%;
         }
 
@@ -101,7 +102,7 @@
             top: 50%; 
             transform: translateY(-50%); 
             cursor: pointer; 
-            z-index: 10;
+            z-index: 5;
             font-size: 1.1rem;
             display: flex;
             align-items: center;

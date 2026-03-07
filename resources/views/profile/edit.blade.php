@@ -105,10 +105,14 @@
                 <div class="modal-body p-4">
                     <p class="text-white small mb-4 text-center">Please enter your password to confirm account deletion.</p>
                     
+                    <label class="smaller text-secondary fw-bold mb-2 uppercase">Password</label>
+                    
                     <div class="password-container">
-                        <label class="smaller text-secondary fw-bold mb-2 uppercase">Password</label>
-                        <input type="password" name="password" id="del_pass" class="form-control border-danger" placeholder="••••••••" required>
-                        <i class="bi bi-eye password-toggle text-danger" id="toggleDelPass"></i>
+                        <input type="password" name="password" id="del_pass" 
+                            class="form-control border-danger bg-dark text-white" 
+                            placeholder="••••••••" required>
+                        
+                        <i class="bi bi-eye password-toggle text-danger-neon" id="toggleDelPass"></i>
                     </div>
                 </div>
                 
