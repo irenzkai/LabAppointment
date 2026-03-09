@@ -30,6 +30,13 @@
                         <label class="smaller text-secondary fw-bold mb-1 uppercase">Birthdate</label>
                         <input type="date" name="birthdate" class="form-control" value="{{ $user->birthdate ? $user->birthdate->format('Y-m-d') : '' }}" required>
                     </div>
+                    <div class="col-md-12">
+                        <label class="smaller text-secondary fw-bold mb-1 uppercase">Sex</label>
+                        <select name="sex" class="form-select" required>
+                            <option value="Male" {{ old('sex', $user->sex) == 'Male' ? 'selected' : '' }}>Male</option>
+                            <option value="Female" {{ old('sex', $user->sex) == 'Female' ? 'selected' : '' }}>Female</option>
+                        </select>
+                    </div>
                     <div class="col-12">
                         <label class="smaller text-secondary fw-bold mb-1 uppercase">Address</label>
                         <textarea name="address" class="form-control" rows="2" required>{{ old('address', $user->address) }}</textarea>

@@ -20,7 +20,7 @@ class ProfileUpdateRequest extends FormRequest
                 'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,'.$this->user()->id],
                 'phone' => ['required', 'string', 'max:20'],
                 'birthdate' => ['required', 'date'],
-                'sex' => ['required', 'string'],
+                'sex' => ['required', 'string', 'in:Male,Female'],
                 'address' => ['required', 'string'],
             ];
         }
