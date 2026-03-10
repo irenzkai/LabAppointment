@@ -5,7 +5,7 @@
     <div class="col-md-8">
         <div class="d-flex align-items-center gap-3 mb-4">
             <img src="{{ asset('images/logo.jpg') }}" alt="Logo" class="nav-logo" style="height: 50px; width: 50px; border-radius: 50%;">
-            <h3 class="text-neon fw-bold mb-0 uppercase" style="letter-spacing: 2px;">Account Settings</h3>
+            <h3 class="text-neon fw-bold mb-0 uppercase" style="letter-spacing: 2px;">ACCOUNT SETTINGS</h3>
         </div>
 
         {{-- 1. PERSONAL INFORMATION --}}
