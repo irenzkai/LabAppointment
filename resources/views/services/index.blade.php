@@ -84,7 +84,7 @@
                                     <form action="{{ route('cart.add', $service->id) }}" method="POST">
                                         @csrf
                                         <button type="submit" class="btn-custom {{ $alreadyInCart ? 'btn-outline-neon' : 'btn-neon' }} w-100 py-2 fw-bold">
-                                            {{ $alreadyInCart ? 'ADDED TO LIST' : 'ADD TO BOOKING' }}
+                                            {{ $alreadyInCart ? 'ADDED TO LIST' : 'ADD TO LIST' }}
                                         </button>
                                     </form>
                                 @endif

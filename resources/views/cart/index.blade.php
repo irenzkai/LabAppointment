@@ -3,7 +3,7 @@
 @section('content')
 <div class="row justify-content-center">
     <div class="col-md-9 text-start">
-        <h3 class="text-neon fw-bold mb-4 uppercase" style="letter-spacing: 2px;">Booking Summary</h3>
+        <h3 class="text-neon fw-bold mb-4 uppercase" style="letter-spacing: 2px;">TEST SUMMARY</h3>
 
         @if(count($services) > 0)
         <div class="row g-4">

@@ -7,7 +7,7 @@ echo "Optimizing Laravel..."
 php artisan optimize
 
 echo "Running Migrations..."
-php artisan migrate:fresh --force
+php artisan migrate --force
 
 echo "Running Seeders..."
 php artisan db:seed --class=AdminSeeder --force
