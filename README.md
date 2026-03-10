@@ -55,13 +55,14 @@ php artisan key:generate
     ```
 
 ### 4. Initialize Local Data
-Run migrations and seed the default admin account:
+Run migrations and seed the default database information:
 ```bash
 # Create tables
 php artisan migrate
 
-# Create default admin 
+# Create default accounts and services
 php artisan db:seed --class=AdminSeeder
+php artisan db:seed --class=ServiceSeeder
 ```
 
 ### 5. Run the Project
