@@ -9,9 +9,9 @@
             <thead class="bg-black text-secondary smaller fw-bold">
                 <tr>
                     <th class="px-4 py-3">PATIENT / SERVICE</th>
-                    <th>DATE & TIME</th>
-                    <th>STATUS</th>
-                    @can('isStaff') <th class="text-end px-4">ACTIONS</th> @endcan
+                    <th class="px-4 py-3">DATE & TIME</th>
+                    <th class="px-4 py-3">STATUS</th>
+                    @can('isStaff') <th class="px-4 py-3">ACTIONS</th> @endcan
                 </tr>
             </thead>
             <tbody class="text-white">

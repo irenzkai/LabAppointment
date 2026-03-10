@@ -14,6 +14,8 @@ class Service extends Model
         'price',
         'description',
         'preparation',
+        'category', 
+        'gender_restriction',
         'is_available',
     ];
 

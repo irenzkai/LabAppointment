@@ -16,21 +16,31 @@ class ServiceController extends Controller
     // Store new service (Staff/Admin only)
     public function store(Request $request) {
         $validated = $request->validate([
-            'name' => 'required|string',
+            'name' => 'required|string|max:255',
             'price' => 'required|numeric',
-            'description' => 'required',
-            'preparation' => 'required',
+            'description' => 'required|string',
+            'preparation' => 'required|string',
+            'category' => 'required|in:individual,package',
+            'gender_restriction' => 'required|in:male,female,both',
         ]);
 
         Service::create($validated);
-        return back()->with('success', 'Service created successfully!');
+        return back()->with('success', 'New service added successfully.');
     }
 
-    // Update service
     public function update(Request $request, Service $service) {
-        $service->update($request->all());
-        return back()->with('success', 'Service updated!');
-    }
+    $validated = $request->validate([
+        'name' => 'required|string|max:255',
+        'price' => 'required|numeric',
+        'description' => 'required|string',
+        'preparation' => 'required|string',
+        'category' => 'required|in:individual,package',
+        'gender_restriction' => 'required|in:male,female,both',
+    ]);
+
+    $service->update($validated);
+    return back()->with('success', 'Service updated.');
+}
 
     // Toggle Availability
     public function toggle(Service $service) {

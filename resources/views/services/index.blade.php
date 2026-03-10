@@ -3,56 +3,102 @@
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-5">
     <div>
-        <h2 class="text-neon fw-bold mb-0">LABORATORY SERVICES</h2>
-        <p class="text-secondary small">Medscreen Quality & Affordable Tests</p>
+        <h2 class="text-neon fw-bold mb-0 uppercase">Laboratory Services</h2>
+        <p class="text-secondary small">Quality and affordable diagnostic solutions</p>
     </div>
-    @can('isStaff')
-        <button class="btn-custom btn-neon px-4 fw-bold" data-bs-toggle="modal" data-bs-target="#addServiceModal">
-            <i class="bi bi-plus-lg me-1"></i> ADD TEST
-        </button>
-    @endcan
+    <div class="d-flex gap-2">
+        {{-- Cart Button --}}
+        <a href="{{ route('cart.index') }}" class="btn-custom btn-outline-neon position-relative px-4">
+            <i class="bi bi-cart-check-fill me-2"></i> 
+            MY LIST 
+            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-black" style="font-size: 0.6rem;">
+                {{ count(session('cart', [])) }}
+            </span>
+        </a>
+        
+        @can('isStaff')
+            <button class="btn-custom btn-neon px-4 fw-bold" data-bs-toggle="modal" data-bs-target="#addServiceModal">
+                <i class="bi bi-plus-lg me-1"></i> ADD NEW
+            </button>
+        @endcan
+    </div>
 </div>
 
-<div class="row g-4">
-    @foreach($services as $service)
-        {{-- Logic: Staff sees everything, Patients/Guests only see enabled tests --}}
-        @if((Auth::check() && Auth::user()->isStaff()) || $service->is_available)
+{{-- Category Navigation --}}
+<ul class="nav nav-pills mb-5 border-bottom border-secondary pb-3" id="serviceTabs" role="tablist">
+    <li class="nav-item">
+        <button class="nav-link active text-white small fw-bold uppercase px-4" data-bs-toggle="pill" data-bs-target="#tab-individual">INDIVIDUAL TESTS</button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link text-white small fw-bold uppercase px-4" data-bs-toggle="pill" data-bs-target="#tab-package">TEST PACKAGES</button>
+    </li>
+</ul>
+
+<div class="tab-content" id="serviceTabsContent">
+    @foreach(['individual', 'package'] as $cat)
+    <div class="tab-pane fade {{ $cat == 'individual' ? 'show active' : '' }}" id="tab-{{ $cat }}">
+        <div class="row g-4 text-start">
+            @php $filtered = $services->where('category', $cat); @endphp
+            
+            @forelse($filtered as $service)
+            {{-- Logic: Staff sees everything, Patients/Guests only see enabled tests --}}
+            @if((Auth::check() && Auth::user()->isStaff()) || $service->is_available)
             <div class="col-md-6 col-lg-4">
-                <div class="card h-100 shadow {{ !$service->is_available ? 'opacity-50 border-secondary' : 'border-neon' }}">
+                <div class="card h-100 shadow-lg {{ !$service->is_available ? 'opacity-50 border-secondary' : 'border-neon' }}">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <h5 class="text-white fw-bold mb-0">{{ strtoupper($service->name) }}</h5>
-                            <span class="btn-custom btn-outline-neon py-1 px-2 border-neon" style="font-size: 0.7rem; cursor: default;">
-                                ₱{{ number_format($service->price, 2) }}
-                            </span>
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h5 class="text-white fw-bold mb-0 small">{{ strtoupper($service->name) }}</h5>
+                            <span class="text-neon fw-bold" style="font-size: 0.9rem;">₱{{ number_format($service->price, 2) }}</span>
                         </div>
-                        <p class="small text-secondary mb-4">{{ $service->description }}</p>
+
+                        {{-- Gender Restriction Badge --}}
+                        <div class="mb-3">
+                            @if($service->gender_restriction == 'male')
+                                <span class="badge border border-info text-info smaller"><i class="bi bi-gender-male me-1"></i>MALE ONLY</span>
+                            @elseif($service->gender_restriction == 'female')
+                                <span class="badge border border-pink text-pink smaller" style="color: #ff69b4; border-color: #ff69b4;"><i class="bi bi-gender-female me-1"></i>FEMALE ONLY</span>
+                            @else
+                                <span class="badge border border-secondary text-secondary smaller">ALL GENDERS</span>
+                            @endif
+                        </div>
+                        
+                        <p class="smaller text-secondary mb-4" style="min-height: 40px;">{{ $service->description }}</p>
                         
                         <div class="p-2 bg-black rounded border border-secondary mb-2">
-                            <label class="text-neon fw-bold mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">PREPARATION:</label>
-                            <p class="text-white-50 small mb-0">{{ $service->preparation }}</p>
+                            <label class="text-neon fw-bold mb-1" style="font-size: 0.6rem; letter-spacing: 1px;">PREPARATION REQUIRED:</label>
+                            <p class="text-white-50 smaller mb-0">{{ $service->preparation }}</p>
                         </div>
                     </div>
 
                     <div class="card-footer bg-transparent border-0 pb-4 px-3">
                         @auth
                             @if(Auth::user()->role == 'user')
-                                <button class="btn-custom btn-neon w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#bookModal{{$service->id}}">
-                                    BOOK APPOINTMENT
-                                </button>
-                            @else
-                                {{-- Staff/Admin Controls --}}
-                                <div class="d-flex gap-2 text-center">
-                                    <button class="btn-custom btn-outline-neon flex-grow-1 fw-bold" data-bs-toggle="modal" data-bs-target="#editModal{{$service->id}}">EDIT</button>
-                                    <form action="{{ route('services.toggle', $service->id) }}" method="POST" class="flex-grow-1">
-                                        @csrf @method('PATCH')
-                                        <button type="submit" class="btn-custom w-100 fw-bold {{ $service->is_available ? 'border-warning text-warning' : 'btn-outline-neon' }}">
-                                            {{ $service->is_available ? 'DISABLE' : 'ENABLE' }}
+                                @php 
+                                    $genderMismatch = ($service->gender_restriction !== 'both' && Auth::user()->sex !== ucfirst($service->gender_restriction));
+                                    $alreadyInCart = isset(session('cart')[$service->id]);
+                                @endphp
+
+                                @if($genderMismatch)
+                                    <button class="btn-custom btn-outline-secondary w-100 py-2 disabled" style="font-size: 0.65rem;">GENDER RESTRICTED</button>
+                                @else
+                                    <form action="{{ route('cart.add', $service->id) }}" method="POST">
+                                        @csrf
+                                        <button type="submit" class="btn-custom {{ $alreadyInCart ? 'btn-outline-neon' : 'btn-neon' }} w-100 py-2 fw-bold">
+                                            {{ $alreadyInCart ? 'ADDED TO LIST' : 'ADD TO BOOKING' }}
                                         </button>
                                     </form>
-                                    <button class="btn-custom btn-danger-custom" data-bs-toggle="modal" data-bs-target="#delModal{{$service->id}}">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
+                                @endif
+                            @else
+                                {{-- Staff Controls --}}
+                                <div class="d-flex gap-2">
+                                    <button class="btn-custom btn-outline-neon flex-grow-1 fw-bold btn-sm" data-bs-toggle="modal" data-bs-target="#editModal{{$service->id}}">EDIT</button>
+                                    <form action="{{ route('services.toggle', $service->id) }}" method="POST" class="flex-grow-1">
+                                        @csrf @method('PATCH')
+                                        <button type="submit" class="btn-custom w-100 btn-sm fw-bold {{ $service->is_available ? 'border-warning text-warning' : 'btn-outline-neon' }}">
+                                            {{ $service->is_available ? 'OFF' : 'ON' }}
+                                        </button>
+                                    </form>
+                                    <button class="btn-custom btn-danger-custom btn-sm" data-bs-toggle="modal" data-bs-target="#delModal{{$service->id}}"><i class="bi bi-trash"></i></button>
                                 </div>
                             @endif
                         @else
@@ -61,24 +107,33 @@
                     </div>
                 </div>
             </div>
-        @endif
+            @endif
+            @empty
+                <div class="col-12 py-5 text-center text-secondary">No services available in this category.</div>
+            @endforelse
+        </div>
+    </div>
     @endforeach
 </div>
 
-{{-- --- MODALS SECTION --- --}}
+{{-- --- MODALS --- --}}
 
-{{-- Add Service Modal (Global) --}}
+{{-- Add Service Modal --}}
 @can('isStaff')
 <div class="modal fade" id="addServiceModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <form action="{{ route('services.store') }}" method="POST" class="modal-content border-neon bg-black">
+        <form action="{{ route('services.store') }}" method="POST" class="modal-content border-neon bg-black shadow-lg">
             @csrf
-            <div class="modal-header border-neon bg-dark"><h5 class="modal-title text-neon fw-bold">ADD NEW TEST</h5></div>
-            <div class="modal-body p-4">
-                <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Test Name</label><input type="text" name="name" class="form-control" required></div>
-                <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Price (₱)</label><input type="number" step="0.01" name="price" class="form-control" required></div>
+            <div class="modal-header border-neon bg-dark"><h5 class="modal-title text-neon fw-bold">CREATE NEW SERVICE</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body p-4 text-start">
+                <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Service Name</label><input type="text" name="name" class="form-control" placeholder="e.g. CBC" required></div>
+                <div class="row g-2">
+                    <div class="col-md-6 mb-3"><label class="text-secondary small fw-bold uppercase">Price (₱)</label><input type="number" step="0.01" name="price" class="form-control" required></div>
+                    <div class="col-md-6 mb-3"><label class="text-secondary small fw-bold uppercase">Category</label><select name="category" class="form-select"><option value="individual">Individual</option><option value="package">Package</option></select></div>
+                </div>
+                <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Gender Rule</label><select name="gender_restriction" class="form-select"><option value="both">Both (All)</option><option value="male">Male Only</option><option value="female">Female Only</option></select></div>
                 <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Description</label><textarea name="description" class="form-control" rows="2" required></textarea></div>
-                <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Preparation</label><textarea name="preparation" class="form-control" rows="2" required></textarea></div>
+                <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Prep Requirements</label><textarea name="preparation" class="form-control" rows="2" required></textarea></div>
             </div>
             <div class="modal-footer border-neon bg-dark"><button type="submit" class="btn-custom btn-neon w-100 py-3">SAVE SERVICE</button></div>
         </form>
@@ -87,57 +142,24 @@
 @endcan
 
 @foreach($services as $service)
-    {{-- Booking Modal (User) --}}
-    @auth
-    <div class="modal fade" id="bookModal{{$service->id}}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <form action="{{ route('appointments.store') }}" method="POST" class="modal-content border-neon bg-black">
-                @csrf
-                <div class="modal-header border-neon bg-dark"><h5 class="modal-title text-neon fw-bold">BOOK {{ strtoupper($service->name) }}</h5></div>
-                <div class="modal-body p-4 text-white">
-                    <input type="hidden" name="service_id" value="{{ $service->id }}">
-                    <div class="row">
-                        <div class="col-md-5 mb-4 border-end border-secondary">
-                            <label class="fw-bold text-neon small mb-2 uppercase">1. Select Date</label>
-                            <input type="date" name="appointment_date" class="form-control date-selector" 
-                                   data-service="{{$service->id}}" required min="{{ date('Y-m-d') }}">
-                        </div>
-                        <div class="col-md-7">
-                            <label class="fw-bold text-neon small mb-2 uppercase">2. Select Time Slot</label>
-                            <div class="row g-2 time-grid-{{$service->id}}" style="max-height: 250px; overflow-y: auto;">
-                                @for($i = 0; $i < 24; $i++)
-                                    @php $val = sprintf('%02d:00', $i); @endphp
-                                    <div class="col-4 time-slot-item" data-hour="{{$i}}">
-                                        <input type="radio" class="btn-check" name="time_slot" id="t{{$service->id}}_{{$i}}" value="{{$val}}" required>
-                                        <label class="btn btn-outline-secondary w-100 btn-sm py-2 fw-bold" for="t{{$service->id}}_{{$i}}">
-                                            {{ date('h:i A', strtotime($val)) }}
-                                        </label>
-                                    </div>
-                                @endfor
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer border-neon bg-dark"><button type="submit" class="btn-custom btn-neon w-100 py-3">CONFIRM RESERVATION</button></div>
-            </form>
-        </div>
-    </div>
-    @endauth
-
-    {{-- Edit Service Modal (Staff) --}}
+    {{-- Edit Modal --}}
     @can('isStaff')
     <div class="modal fade" id="editModal{{$service->id}}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <form action="{{ route('services.update', $service->id) }}" method="POST" class="modal-content border-neon bg-black">
                 @csrf @method('PUT')
-                <div class="modal-header border-neon bg-dark"><h5 class="modal-title text-neon fw-bold uppercase">Edit {{ $service->name }}</h5></div>
-                <div class="modal-body p-4">
+                <div class="modal-header border-neon bg-dark"><h5 class="modal-title text-neon fw-bold">EDIT: {{ strtoupper($service->name) }}</h5></div>
+                <div class="modal-body p-4 text-start">
                     <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Name</label><input type="text" name="name" class="form-control" value="{{ $service->name }}" required></div>
-                    <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Price</label><input type="number" step="0.01" name="price" class="form-control" value="{{ $service->price }}" required></div>
+                    <div class="row g-2">
+                        <div class="col-md-6 mb-3"><label class="text-secondary small fw-bold uppercase">Price (₱)</label><input type="number" step="0.01" name="price" class="form-control" value="{{ $service->price }}" required></div>
+                        <div class="col-md-6 mb-3"><label class="text-secondary small fw-bold uppercase">Category</label><select name="category" class="form-select"><option value="individual" {{ $service->category == 'individual' ? 'selected' : '' }}>Individual</option><option value="package" {{ $service->category == 'package' ? 'selected' : '' }}>Package</option></select></div>
+                    </div>
+                    <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Gender Rule</label><select name="gender_restriction" class="form-select"><option value="both" {{ $service->gender_restriction == 'both' ? 'selected' : '' }}>Both (All)</option><option value="male" {{ $service->gender_restriction == 'male' ? 'selected' : '' }}>Male Only</option><option value="female" {{ $service->gender_restriction == 'female' ? 'selected' : '' }}>Female Only</option></select></div>
                     <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Description</label><textarea name="description" class="form-control" rows="2" required>{{ $service->description }}</textarea></div>
-                    <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Preparation</label><textarea name="preparation" class="form-control" rows="2" required>{{ $service->preparation }}</textarea></div>
+                    <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Prep Requirements</label><textarea name="preparation" class="form-control" rows="2" required>{{ $service->preparation }}</textarea></div>
                 </div>
-                <div class="modal-footer border-neon bg-dark"><button type="submit" class="btn-custom btn-neon w-100 py-3">UPDATE SERVICE</button></div>
+                <div class="modal-footer border-neon bg-dark"><button type="submit" class="btn-custom btn-neon w-100 py-3">UPDATE DETAILS</button></div>
             </form>
         </div>
     </div>
@@ -146,14 +168,14 @@
     <div class="modal fade" id="delModal{{$service->id}}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-sm modal-dialog-centered">
             <div class="modal-content border-danger bg-black text-center p-4">
-                <i class="bi bi-exclamation-octagon text-danger fs-1 mb-2"></i>
-                <h6 class="text-white fw-bold">DELETE SERVICE?</h6>
+                <i class="bi bi-trash3 text-danger fs-1 mb-2"></i>
+                <h6 class="text-white fw-bold">REMOVE SERVICE?</h6>
                 <p class="text-secondary smaller">Deleting <strong>{{ $service->name }}</strong> is permanent.</p>
                 <div class="d-flex gap-2 mt-3">
-                    <button class="btn-custom btn-outline-neon flex-grow-1" data-bs-dismiss="modal">NO</button>
+                    <button class="btn-custom btn-outline-neon flex-grow-1" data-bs-dismiss="modal">CANCEL</button>
                     <form action="{{ route('services.destroy', $service->id) }}" method="POST" class="flex-grow-1">
                         @csrf @method('DELETE')
-                        <button class="btn-custom btn-danger-custom w-100">YES</button>
+                        <button class="btn-custom btn-danger-custom w-100">DELETE</button>
                     </form>
                 </div>
             </div>
@@ -161,29 +183,4 @@
     </div>
     @endcan
 @endforeach
-
-@push('scripts')
-<script>
-    // past hour logic
-    document.querySelectorAll('.date-selector').forEach(input => {
-        input.addEventListener('change', function() {
-            const serviceId = this.dataset.service;
-            const selectedDate = this.value;
-            const today = new Date().toISOString().split('T')[0];
-            const currentHour = new Date().getHours();
-
-            document.querySelectorAll(`.time-grid-${serviceId} .time-slot-item`).forEach(item => {
-                const slotHour = parseInt(item.dataset.hour);
-                if (selectedDate === today && slotHour <= currentHour) {
-                    item.style.display = 'none';
-                    item.querySelector('input').disabled = true;
-                } else {
-                    item.style.display = 'block';
-                    item.querySelector('input').disabled = false;
-                }
-            });
-        });
-    });
-</script>
-@endpush
 @endsection

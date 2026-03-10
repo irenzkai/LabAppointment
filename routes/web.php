@@ -4,6 +4,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\CartController;
 use Illuminate\Support\Facades\Route;
 
 // --- PUBLIC ROUTES (No Login Required) ---
@@ -28,6 +29,11 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::put('/profile/password/change', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
+
+    // CART ROUTES 
+    Route::get('/cart', [CartController::class, 'index'])->name('cart.index');
+    Route::post('/cart/add/{service}', [CartController::class, 'add'])->name('cart.add');
+    Route::delete('/cart/remove/{id}', [CartController::class, 'remove'])->name('cart.remove');
     
     // APPOINTMENTS INDEX (Shared among all roles, but must be logged in)
     Route::get('/appointments', [AppointmentController::class, 'index'])->name('appointments.index');

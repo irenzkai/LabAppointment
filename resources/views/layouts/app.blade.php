@@ -34,6 +34,26 @@
         .text-neon { color: var(--neon) !important; }
         .nav-logo { height: 42px; width: 42px; object-fit: cover; border-radius: 50%; }
 
+        /* Override Bootstrap Nav-Pills Active State */
+        .nav-pills .nav-link.active, 
+        .nav-pills .show > .nav-link {
+            background-color: var(--neon) !important;
+            color: #000 !important; /* Black text on green background */
+        }
+
+        /* Hover effect for inactive tabs */
+        .nav-pills .nav-link:hover:not(.active) {
+            color: var(--neon) !important;
+            background-color: rgba(90, 247, 129, 0.1);
+        }
+
+        /* Ensure the pills look like your custom buttons */
+        .nav-pills .nav-link {
+            border-radius: 6px;
+            transition: 0.2s;
+            letter-spacing: 1px;
+        }
+
         /* Unified Button Styling - No Underlines, Sharp Look */
         .btn-custom {
             font-size: 0.7rem;

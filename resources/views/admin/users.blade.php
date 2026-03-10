@@ -9,9 +9,9 @@
             <thead class="bg-black text-secondary smaller fw-bold">
                 <tr>
                     <th class="px-4 py-3">NAME & CONTACT</th>
-                    <th>ROLE</th>
-                    <th>ACCOUNT DETAILS</th>
-                    <th class="text-end px-4">ACTION</th>
+                    <th class="px-4 py-3">ROLE</th>
+                    <th class="px-4 py-3">ACCOUNT DETAILS</th>
+                    <th class="px-4 py-3">ACTION</th>
                 </tr>
             </thead>
             <tbody class="text-white">
