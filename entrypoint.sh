@@ -7,10 +7,11 @@ echo "Optimizing Laravel..."
 php artisan optimize
 
 echo "Running Migrations..."
-php artisan migrate --force
+php artisan migrate:fresh --force
 
 echo "Running Seeders..."
 php artisan db:seed --class=AdminSeeder --force
+php artisan db:seed --class=ServiceSeeder --force
 
 echo "Starting Apache..."
 exec apache2-foreground

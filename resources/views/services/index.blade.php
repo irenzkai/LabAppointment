@@ -3,7 +3,7 @@
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-5">
     <div>
-        <h2 class="text-neon fw-bold mb-0 uppercase">Laboratory Services</h2>
+        <h2 class="text-neon fw-bold mb-0 uppercase">LABORATORY SERVICES</h2>
         <p class="text-secondary small">Quality and affordable diagnostic solutions</p>
     </div>
     <div class="d-flex gap-2">

@@ -5,6 +5,7 @@ use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\CartController;
+use App\Http\Controllers\AppointmentConfigController;
 use Illuminate\Support\Facades\Route;
 
 // --- PUBLIC ROUTES (No Login Required) ---
@@ -18,6 +19,7 @@ Route::get('/services', [ServiceController::class, 'index'])->name('services.ind
 
 // --- AUTHENTICATED ROUTES (Login Required) ---
 Route::middleware('auth')->group(function () {
+    Route::get('/api/check-slots', [AppointmentConfigController::class, 'checkOccupancy']);
     
     // Dashboard
     Route::get('/dashboard', function () {
@@ -51,6 +53,9 @@ Route::middleware('auth')->group(function () {
         Route::patch('/services/{service}/toggle', [ServiceController::class, 'toggle'])->name('services.toggle');
         Route::delete('/services/{service}', [ServiceController::class, 'destroy'])->name('services.destroy');
         Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus'])->name('appointments.status'); 
+
+        Route::get('/admin/appointment-settings', [AppointmentConfigController::class, 'index'])->name('admin.appointment-settings');
+        Route::put('/admin/appointment-settings', [AppointmentConfigController::class, 'update'])->name('admin.appointment-settings.update');
     });
 
     // ADMIN ONLY ROUTES (User Management)

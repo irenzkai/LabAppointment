@@ -10,21 +10,19 @@ return new class extends Migration
     {
         Schema::create('appointments', function (Blueprint $table) {
             $table->id();
-            // Connect to User (The patient)
+            // The Patient
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            // Connect to Service
-            $table->foreignId('service_id')->constrained()->onDelete('cascade');
             
+            // The Schedule
             $table->date('appointment_date');
-            // Removed ->after() - the column will naturally appear here
             $table->time('time_slot');
             
-            // This prevents two people from booking the same date AND time
-            $table->unique(['appointment_date', 'time_slot']);
-            
-            // Status: pending, approved, returned
+            // Status Logic: pending, approved, returned, completed
             $table->string('status')->default('pending'); 
             $table->text('return_reason')->nullable(); 
+
+            // Prevent two different people from booking the exact same slot
+            $table->unique(['appointment_date', 'time_slot']);
 
             $table->timestamps();
         });

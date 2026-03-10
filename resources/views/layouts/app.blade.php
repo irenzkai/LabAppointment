@@ -30,9 +30,16 @@
             background-color: rgba(0, 0, 0, 0.95); 
             border-bottom: 1px solid var(--border-color); 
             min-height: 75px;
+            z-index: 1050 !important; 
+            position: sticky;
+            top: 0;
         }
         .text-neon { color: var(--neon) !important; }
         .nav-logo { height: 42px; width: 42px; object-fit: cover; border-radius: 50%; }
+
+        .dropdown-menu {
+            z-index: 1060 !important;
+        }
 
         /* Override Bootstrap Nav-Pills Active State */
         .nav-pills .nav-link.active, 
@@ -75,7 +82,23 @@
         .btn-outline-neon { background: transparent; color: var(--neon) !important; }
         .btn-outline-neon:hover { background: rgba(90, 247, 129, 0.1); }
 
-        .btn-danger-custom { background: #ff4d4d; border: 1px solid #ff4d4d; color: white !important; }
+        .btn-danger-custom {
+            background-color: #ff4d4d !important; /* Vibrant Red */
+            color: #ffffff !important;           /* Pure White Text */
+            border: 1px solid #ff4d4d !important;
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .btn-danger-custom:hover {
+            background-color: #ff1a1a !important;
+            border-color: #ff1a1a !important;
+            transform: translateY(-1px);
+        }
 
         /* Card System */
         .card { 
@@ -162,6 +185,12 @@
                             
                             @can('isAdmin')
                                 <li><a class="dropdown-item text-neon" href="{{ url('/admin/users') }}"><i class="bi bi-people-fill me-2"></i> MANAGE USERS</a></li>
+                            @endcan
+
+                            @can('isStaff')
+                                <li><a class="dropdown-item text-neon" href="{{ route('admin.appointment-settings') }}">
+                                    <i class="bi bi-calendar-range me-2"></i> APPOINTMENT SETTINGS
+                                </a></li>
                             @endcan
 
                             {{-- Future Features Placeholder --}}

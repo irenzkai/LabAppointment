@@ -2,39 +2,24 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Appointment extends Model
 {
-    use HasFactory;
+    protected $fillable = ['user_id', 'appointment_date', 'time_slot', 'status', 'return_reason'];
 
-    protected $fillable = [
-        'user_id',
-        'service_id',
-        'appointment_date',
-        'time_slot',     
-        'status',
-        'return_reason',
-    ];
+    protected $casts = ['appointment_date' => 'date'];
 
-    protected $casts = [
-        'appointment_date' => 'date',
-    ];
-
-    /**
-     * Get the user that owns the appointment.
-     */
-    public function user()
-    {
+    public function user() {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * Get the service requested for this appointment.
-     */
-    public function service()
-    {
-        return $this->belongsTo(Service::class);
+    public function services() {
+        return $this->belongsToMany(Service::class, 'appointment_service');
+    }
+
+    // Helper to calculate total of all tests in this appointment
+    public function totalPrice() {
+        return $this->services->sum('price');
     }
 }
