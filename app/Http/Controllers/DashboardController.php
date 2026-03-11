@@ -13,8 +13,8 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
 
+        // 1. ADMIN LOGIC
         if ($user->role === 'admin') {
-            // ADMIN DATA
             $stats = [
                 'total_users' => User::where('role', 'user')->count(),
                 'pending_apps' => Appointment::where('status', 'pending')->count(),
@@ -23,15 +23,16 @@ class DashboardController extends Controller
             return view('dashboard', compact('stats'));
         }
 
-        // USER DATA (Main Menu)
-        // 1. Get 3 most booked services
-        $popularServices = Service::withCount('appointments')
-            ->where('is_available', true)
-            ->orderBy('appointments_count', 'desc')
-            ->take(3)
-            ->get();
+        // 2. USER LOGIC (Staff/Regular User)
+        // Safer way to get popular services
+        $popularServices = Service::has('appointments') 
+            ? Service::withCount('appointments')
+                ->where('is_available', true)
+                ->orderBy('appointments_count', 'desc')
+                ->take(3)
+                ->get()
+            : collect(); // Return empty list if no appointments exist yet
 
-        // 2. Get user's 3 most recent appointments
         $recentAppointments = Appointment::with('services')
             ->where('user_id', $user->id)
             ->latest()
