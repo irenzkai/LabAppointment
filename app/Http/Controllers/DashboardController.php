@@ -13,32 +13,32 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
 
-        // 1. ADMIN LOGIC
+        // Initialize all variables as empty so Blade never sees "null"
+        $stats = ['total_users' => 0, 'pending_apps' => 0, 'today_apps' => 0];
+        $popularServices = collect();
+        $recentAppointments = collect();
+
         if ($user->role === 'admin') {
             $stats = [
                 'total_users' => User::where('role', 'user')->count(),
                 'pending_apps' => Appointment::where('status', 'pending')->count(),
                 'today_apps' => Appointment::whereDate('appointment_date', now()->toDateString())->count(),
             ];
-            return view('dashboard', compact('stats'));
-        }
-
-        // 2. USER LOGIC (Staff/Regular User)
-        // Safer way to get popular services
-        $popularServices = Service::has('appointments') 
-            ? Service::withCount('appointments')
+        } else {
+            // Logic for Staff and Users (Main Menu)
+            $popularServices = Service::withCount('appointments')
                 ->where('is_available', true)
                 ->orderBy('appointments_count', 'desc')
                 ->take(3)
-                ->get()
-            : collect(); // Return empty list if no appointments exist yet
+                ->get();
 
-        $recentAppointments = Appointment::with('services')
-            ->where('user_id', $user->id)
-            ->latest()
-            ->take(3)
-            ->get();
+            $recentAppointments = Appointment::with('services')
+                ->where('user_id', $user->id)
+                ->latest()
+                ->take(3)
+                ->get();
+        }
 
-        return view('dashboard', compact('popularServices', 'recentAppointments'));
+        return view('dashboard', compact('stats', 'popularServices', 'recentAppointments'));
     }
 }
