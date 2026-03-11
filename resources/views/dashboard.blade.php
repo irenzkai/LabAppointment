@@ -79,13 +79,28 @@
     <div class="row g-4 text-start">
         <!-- Booking Card -->
         <div class="col-md-7">
-            <div class="card p-5 h-100 border-neon shadow-lg position-relative overflow-hidden" style="background: linear-gradient(45deg, #0a0a0a, #000);">
-                <div class="position-relative" style="z-index: 2;">
-                    <h2 class="text-white fw-bold mb-2">BOOK A TEST</h2>
-                    <p class="text-secondary mb-4" style="max-width: 400px;">Schedule your medical examination from our list of quality and affordable diagnostic services.</p>
-                    <a href="{{ route('services.index') }}" class="btn-custom btn-neon px-5 py-3 fs-6 shadow">BROWSE ALL SERVICES</a>
+            <div class="card h-100 border-neon shadow-lg overflow-hidden" style="background: linear-gradient(45deg, #0a0a0a, #000);">
+                <div class="card-body p-5 d-flex align-items-center justify-content-between">
+                    
+                    {{-- Left Side: Text and Button --}}
+                    <div class="text-start" style="flex: 1; z-index: 2;">
+                        <h2 class="text-white fw-bold mb-2 uppercase" style="letter-spacing: 1px;">Book a Test</h2>
+                        <p class="text-secondary small mb-4" style="max-width: 350px;">
+                            Schedule your medical examination from our list of quality and affordable diagnostic services.
+                        </p>
+                        <a href="{{ route('services.index') }}" class="btn-custom btn-neon px-5 py-3 fs-6 shadow-sm">
+                            BROWSE ALL SERVICES
+                        </a>
+                    </div>
+        
+                    {{-- Right Side: Centered Icon --}}
+                    <div class="d-none d-sm-block ms-4" style="z-index: 2;">
+                        <i class="bi bi-clipboard2-pulse text-neon" style="font-size: 8rem; line-height: 1;"></i>
+                    </div>
+        
+                    {{-- Optional subtle background glow behind the icon --}}
+                    <div class="position-absolute" style="right: 5%; top: 50%; transform: translateY(-50%); width: 150px; height: 150px; background: var(--neon); filter: blur(100px); opacity: 0.05; z-index: 1;"></div>
                 </div>
-                <i class="bi bi-clipboard2-pulse position-absolute text-neon opacity-10" style="font-size: 12rem; right: -20px; bottom: -40px;"></i>
             </div>
         </div>
 
