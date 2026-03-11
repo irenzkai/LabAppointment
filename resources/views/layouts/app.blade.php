@@ -180,7 +180,9 @@
                             <li class="px-3 py-2"><small class="text-neon fw-bold">ROLE: {{ strtoupper(Auth::user()->role) }}</small></li>
                             <li><hr class="dropdown-divider border-secondary"></li>
                             
-                            <li><a class="dropdown-item text-white" href="{{ route('dashboard') }}"><i class="bi bi-speedometer me-2"></i> DASHBOARD</a></li>
+                            <li><a class="dropdown-item text-white" href="{{ route('dashboard') }}">
+                                <i class="bi bi-house-door me-2"></i> {{ Auth::user()->role === 'user' ? 'MAIN MENU' : 'DASHBOARD' }}
+                            </a></li>
                             <li><a class="dropdown-item text-white" href="{{ route('profile.edit') }}"><i class="bi bi-gear-fill me-2"></i> ACCOUNT SETTINGS</a></li>
                             
                             @can('isAdmin')
