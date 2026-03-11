@@ -22,9 +22,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/api/check-slots', [AppointmentConfigController::class, 'checkOccupancy']);
     
     // Dashboard
-    Route::get('/dashboard', function () {
-        return view('dashboard');
-    })->name('dashboard');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // PROFILE ROUTES (Edit/Delete Account)
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
