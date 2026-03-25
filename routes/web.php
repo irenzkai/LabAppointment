@@ -51,6 +51,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/bulk-appointment/template/{type}', [BulkAppointmentController::class, 'downloadTemplate'])->name('appointments.bulk.template');
     Route::post('/bulk-appointment/parse', [BulkAppointmentController::class, 'parseExcel'])->name('appointments.bulk.parse');
 
+    // Download Test Results (PDF or CSV)
+    Route::get('/appointments/{appointment}/download/{type}', [AppointmentController::class, 'downloadResult'])->name('appointments.download');
+
     // 3. STAFF & ADMIN ONLY ROUTES
     Route::middleware('role:staff,admin')->group(function () {
         // Service Management (CRUD)
@@ -65,6 +68,11 @@ Route::middleware('auth')->group(function () {
         // Schedule Configuration (Opening Hours, Slot Duration)
         Route::get('/admin/appointment-settings', [AppointmentConfigController::class, 'index'])->name('admin.appointment-settings');
         Route::put('/admin/appointment-settings/{id}', [AppointmentConfigController::class, 'update'])->name('admin.appointment-settings.update');
+
+        // Test Result Management
+        Route::patch('/appointments/{appointment}/tested', [AppointmentController::class, 'markTested'])->name('appointments.tested');
+        Route::get('/appointments/{appointment}/encode', [AppointmentController::class, 'encodeResults'])->name('appointments.encode');
+        Route::post('/appointments/{appointment}/release', [AppointmentController::class, 'releaseResults'])->name('appointments.release');
     });
 
 

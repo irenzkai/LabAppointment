@@ -6,15 +6,23 @@ use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\Dependent;
 use App\Models\AppointmentConfig;
+use App\Models\AppointmentResult;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class AppointmentController extends Controller
 {
+    /**
+     * View Appointments (Categorized for Patients, Unified for Staff)
+     */
     public function index()
     {
         $user = Auth::user();
-        $query = Appointment::with(['services', 'user', 'dependent'])->latest();
+        $query = Appointment::with(['services', 'user', 'dependent', 'result'])->latest();
 
         if ($user->role === 'user') {
             $all = $query->where('user_id', $user->id)->get();
@@ -26,9 +34,8 @@ class AppointmentController extends Controller
             ]);
         }
 
-        // Staff Queue: Grouped by Batch for organization
-        $staffQueue = Appointment::with(['services', 'user', 'dependent'])
-            ->orderBy('appointment_date', 'asc')
+        // Unified Queue for Staff
+        $staffQueue = $query->orderBy('appointment_date', 'asc')
             ->orderBy('time_slot', 'asc')
             ->get()
             ->groupBy(function($item) {
@@ -38,6 +45,9 @@ class AppointmentController extends Controller
         return view('appointments.index', ['staffQueue' => $staffQueue, 'is_staff' => true]);
     }
 
+    /**
+     * Store Individual Booking (Self or Dependent)
+     */
     public function store(Request $request) {
         $request->validate([
             'appointment_date' => 'required|date|after_or_equal:today',
@@ -46,18 +56,18 @@ class AppointmentController extends Controller
             'dependent_id' => 'nullable|exists:dependents,id',
         ]);
 
+        // 1. Capacity Check
         $dayNum = date('w', strtotime($request->appointment_date));
         $config = AppointmentConfig::where('day_of_week', $dayNum)->first();
-        
         $bookedCount = Appointment::where('appointment_date', $request->appointment_date)
             ->where('time_slot', $request->time_slot)
-            ->whereIn('status', ['pending', 'approved'])
-            ->count();
+            ->whereIn('status', ['pending', 'approved'])->count();
 
         if ($bookedCount >= ($config->max_patients_per_slot ?? 1)) {
             return back()->withErrors(['time_slot' => 'This slot is now full.']);
         }
 
+        // 2. Data Snapshot
         $user = auth()->user();
         if ($request->filled('dependent_id')) {
             $patient = Dependent::findOrFail($request->dependent_id);
@@ -66,8 +76,7 @@ class AppointmentController extends Controller
                 'patient_birthdate' => $patient->birthdate,
                 'patient_sex' => $patient->sex,
                 'patient_address' => $patient->address,
-                'patient_email' => null,
-                'patient_phone' => $patient->phone,
+                'patient_email' => null, 'patient_phone' => $patient->phone,
             ];
         } else {
             $patientData = [
@@ -75,33 +84,32 @@ class AppointmentController extends Controller
                 'patient_birthdate' => $user->birthdate,
                 'patient_sex' => $user->sex,
                 'patient_address' => $user->address,
-                'patient_email' => $user->email,
-                'patient_phone' => $user->phone,
+                'patient_email' => $user->email, 'patient_phone' => $user->phone,
             ];
         }
 
-        try {
-            $appointment = Appointment::create(array_merge($patientData, [
-                'user_id' => $user->id,
-                'dependent_id' => $request->dependent_id,
-                'appointment_date' => $request->appointment_date,
-                'time_slot' => $request->time_slot,
-                'status' => 'pending'
-            ]));
+        // 3. Save
+        $appointment = Appointment::create(array_merge($patientData, [
+            'user_id' => $user->id,
+            'dependent_id' => $request->dependent_id,
+            'appointment_date' => $request->appointment_date,
+            'time_slot' => $request->time_slot,
+            'status' => 'pending'
+        ]));
 
-            $appointment->services()->attach($request->service_ids);
-            session()->forget('cart');
-            return redirect()->route('appointments.index')->with('success', 'Appointment submitted!');
-        } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Database error: ' . $e->getMessage()]);
-        }
+        $appointment->services()->attach($request->service_ids);
+        session()->forget('cart');
+        return redirect()->route('appointments.index')->with('success', 'Appointment submitted!');
     }
 
+    /**
+     * Transition 1: Approve or Return
+     */
     public function updateStatus(Request $request, Appointment $appointment)
     {
         $request->validate([
             'status' => 'required|in:approved,returned',
-            'return_reason' => 'required_if:status,returned|string|nullable'
+            'return_reason' => 'required_if:status,returned'
         ]);
 
         $appointment->update([
@@ -109,60 +117,151 @@ class AppointmentController extends Controller
             'return_reason' => ($request->status == 'returned') ? $request->return_reason : null,
         ]);
 
-        return back()->with('success', 'Appointment successfully ' . $request->status);
+        return back()->with('success', 'Status updated to ' . strtoupper($request->status));
     }
 
-    public function update(Request $request, Appointment $appointment)
+    /**
+     * Transition 2: Mark as Tested (With Duration Input)
+     */
+    public function markTested(Request $request, Appointment $appointment)
     {
-        $request->validate([
-            'appointment_date' => 'required|date|after_or_equal:today',
-            'time_slot' => 'required',
-            // Identity validation (Only required if it's a bulk appointment)
-            'patient_name' => 'nullable|string|max:255',
-            'patient_email' => 'nullable|email',
-            'patient_phone' => 'nullable|string',
-            'patient_address' => 'nullable|string',
+        $hours = (int) $request->input('est_hours', 0);
+        $minutes = (int) $request->input('est_minutes', 0);
+
+        $estimatedTime = ($hours > 0 || $minutes > 0) 
+            ? now()->addHours($hours)->addMinutes($minutes) 
+            : null;
+
+        $appointment->update([
+            'status' => 'tested',
+            'tested_at' => now(),
+            'result_estimated_at' => $estimatedTime
         ]);
 
-        // 1. RULE CHECK: Clinic hours and occupancy
-        $dayNum = date('w', strtotime($request->appointment_date));
-        $config = \App\Models\AppointmentConfig::where('day_of_week', $dayNum)->first();
+        return back()->with('success', 'Patient marked as tested. Counter started.');
+    }
 
-        if (!$config || !$config->is_open) {
-            return back()->withErrors(['error' => 'The clinic is closed on the selected date.']);
+    /**
+     * Transition 3: Encode and Release Results (Handles Files)
+     */
+    public function releaseResults(Request $request, Appointment $appointment) 
+    {
+        // 1. Validation (Ensure at least one report is included)
+        if (!$request->has('included_reports')) {
+            return back()->withErrors(['error' => 'Please select at least one report to issue.']);
         }
 
-        // 2. OCCUPANCY CHECK: Is the slot full? (Excluding this specific appointment)
+        $data = [];
+        $files = ['lab_scan', 'med_cert_scan', 'drug_test_scan', 'radio_scan', 'xray_image'];
+        
+        foreach ($files as $file) {
+            if ($request->hasFile($file)) {
+                $data[$file] = $request->file($file)->store('results', 'public');
+            }
+        }
+
+        // 2. Save clinical data
+        $appointment->result()->updateOrCreate(
+            ['appointment_id' => $appointment->id],
+            array_merge($data, [
+                'included_reports' => $request->included_reports,
+                'lab_data'         => $request->lab_data,
+                'med_cert_data'    => $request->med_cert_data,
+                'drug_test_data'   => $request->drug_test_data,
+                'radio_data'       => $request->radio_data
+            ])
+        );
+
+        // 3. Update Status to RELEASED
+        $appointment->update([
+            'status' => 'released',
+            'results_released_at' => now()
+        ]);
+
+        return redirect()->route('appointments.index')->with('success', 'Patient results have been released.');
+    }
+
+    /**
+     * Resubmit Returned Appointment
+     */
+    public function update(Request $request, Appointment $appointment)
+    {
+        if ($appointment->user_id !== auth()->id()) abort(403);
+
+        $request->validate(['appointment_date' => 'required|date|after_or_equal:today', 'time_slot' => 'required']);
+
+        // Check availability (exclude current ID)
+        $dayNum = date('w', strtotime($request->appointment_date));
+        $config = AppointmentConfig::where('day_of_week', $dayNum)->first();
         $bookedCount = Appointment::where('appointment_date', $request->appointment_date)
             ->where('time_slot', $request->time_slot)
-            ->where('id', '!=', $appointment->id) // Don't block the user from their own slot
-            ->whereIn('status', ['pending', 'approved'])
-            ->count();
+            ->where('id', '!=', $appointment->id)
+            ->whereIn('status', ['pending', 'approved'])->count();
 
-        if ($bookedCount >= $config->max_patients_per_slot) {
-            return back()->withErrors(['error' => 'This slot is no longer available. Please select another time.']);
+        if ($bookedCount >= ($config->max_patients_per_slot ?? 1)) {
+            return back()->withErrors(['error' => 'That time slot is full.']);
         }
 
-        // 3. UPDATE LOGIC
-        $data = [
+        $updateData = [
             'appointment_date' => $request->appointment_date,
             'time_slot' => $request->time_slot,
             'status' => 'pending',
             'return_reason' => null
         ];
 
-        // If it's a bulk appointment (has batch_id), update identity too
+        // Handle Identity edits for Bulk appointments
         if ($appointment->batch_id) {
-            $data['patient_name'] = $request->patient_name;
-            $data['patient_email'] = $request->patient_email;
-            $data['patient_phone'] = $request->patient_phone;
-            $data['patient_sex'] = $request->patient_sex;
-            $data['patient_birthdate'] = $request->patient_birthdate;
-            $data['patient_address'] = $request->patient_address;
+            $updateData = array_merge($updateData, $request->only(['patient_name', 'patient_email', 'patient_phone', 'patient_sex', 'patient_birthdate', 'patient_address']));
         }
 
-        $appointment->update($data);
+        $appointment->update($updateData);
 
-        return back()->with('success', 'Appointment resubmitted successfully.');
+        return back()->with('success', 'Appointment resubmitted.');
+    }
+
+    /**
+     * Show Encoding Form
+     */
+    public function encodeResults(Appointment $appointment) {
+        if (!in_array(auth()->user()->role, ['staff', 'admin'])) abort(403);
+        return view('appointments.encode', compact('appointment'));
+    }
+
+    public function downloadResult(Appointment $appointment, $type)
+    {
+        if ($appointment->status !== 'released') abort(403);
+        
+        $res = $appointment->result;
+        $patientSlug = Str::slug($appointment->patient_name);
+        $date = now()->format('Y-m-d');
+        
+        // 1. Logic: Check for direct file requests (X-Ray or Scans)
+        $fileMap = [
+            'lab' => 'lab_scan',
+            'med_cert' => 'med_cert_scan',
+            'drug' => 'drug_test_scan',
+            'radio' => 'radio_scan',
+            'xray' => 'xray_image'
+        ];
+
+        $field = $fileMap[$type] ?? null;
+        
+        if ($field && $res->$field) {
+            $path = storage_path('app/public/' . $res->$field);
+            if (file_exists($path)) {
+                $ext = pathinfo($path, PATHINFO_EXTENSION);
+                return response()->download($path, "{$date}_{$patientSlug}_{$type}.{$ext}");
+            }
+        }
+
+        // 2. Logic: If no scan, generate PDF (only for lab, med_cert, radio)
+        if (in_array($type, ['lab', 'med_cert', 'radio'])) {
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.report', [
+                'app' => $appointment, 'res' => $res, 'type' => $type
+            ]);
+            return $pdf->download("{$date}_{$patientSlug}_{$type}.pdf");
+        }
+
+        return back()->with('error', 'Result file not available.');
     }
 }

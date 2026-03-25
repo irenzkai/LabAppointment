@@ -1,12 +1,14 @@
 FROM php:8.2-apache
 
-# 1. Install system dependencies
+# 1. Install system dependencies + PDF/Image requirements
 RUN apt-get update && apt-get install -y \
     libpng-dev \
     libonig-dev \
     libxml2-dev \
-    libjpeg-dev \
+    libjpeg62-turbo-dev \
     libfreetype6-dev \
+    libfontconfig1 \
+    libxrender1 \
     zip \
     unzip \
     git \
@@ -32,7 +34,6 @@ RUN composer dump-autoload --optimize \
     && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 # 6. Prepare the Entrypoint Script
-# We give the script execution permissions
 RUN chmod +x /var/www/html/entrypoint.sh
 
 # 7. Apache Config

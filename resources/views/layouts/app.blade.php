@@ -41,6 +41,36 @@
             z-index: 1060 !important;
         }
 
+        /* FORCE scroll on dropdowns even with Popper.js active */
+        .dropdown-menu-scrollable {
+            max-height: 200px !important; /* Shorter height to force scroll for testing */
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            scrollbar-width: thin;
+            scrollbar-color: var(--neon) #000;
+        }
+
+        /* Ensure the Accordion doesn't clip the dropdown */
+        .accordion-collapse {
+            overflow: visible !important;
+        }
+
+        .accordion-body {
+            overflow: visible !important;
+        }
+
+        /* Webkit Scrollbar Styling */
+        .dropdown-menu-scrollable::-webkit-scrollbar {
+            width: 4px;
+        }
+        .dropdown-menu-scrollable::-webkit-scrollbar-track {
+            background: #000;
+        }
+        .dropdown-menu-scrollable::-webkit-scrollbar-thumb {
+            background-color: var(--neon);
+            border-radius: 10px;
+        }
+
         /* Override Bootstrap Nav-Pills Active State */
         .nav-pills .nav-link.active, 
         .nav-pills .show > .nav-link {

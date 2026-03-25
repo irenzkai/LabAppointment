@@ -6,7 +6,13 @@ set -e
 echo "Optimizing Laravel..."
 php artisan optimize
 
+echo "Linking Storage..."
+# Creates the shortcut for X-rays and Scans
+php artisan storage:link --force
+
 echo "Running Migrations..."
+# NOTE: migrate:fresh DELETES DATA. 
+# Use 'migrate --force' for production so you don't lose patient records.
 php artisan migrate:fresh --force
 
 echo "Running Seeders..."

@@ -66,6 +66,45 @@
             </form>
         </div>
     </div>
+    {{-- MODAL: MARK AS TESTED --}}
+    <div class="modal fade" id="testModal{{$app->id}}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form action="{{ route('appointments.tested', $app->id) }}" method="POST" class="modal-content border-neon bg-black shadow-lg">
+                @csrf @method('PATCH')
+                <div class="modal-header border-neon bg-dark py-3">
+                    <h6 class="modal-title text-neon fw-bold uppercase">Patient Sampling Completed</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                
+                <div class="modal-body p-4 text-start">
+                    <p class="text-white small mb-4">Confirm that the patient has completed the testing process. Set how long until the results are ready.</p>
+                    
+                    <label class="text-secondary small fw-bold mb-2 uppercase">ESTIMATED PROCESSING TIME</label>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <div class="input-group">
+                                <input type="number" name="est_hours" class="form-control bg-dark border-secondary text-white fw-bold" placeholder="0" min="0">
+                                <span class="input-group-text bg-black border-secondary text-secondary small uppercase" style="font-size: 0.6rem;">Hrs</span>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="input-group">
+                                <input type="number" name="est_minutes" class="form-control bg-dark border-secondary text-white fw-bold" placeholder="0" min="0" max="59">
+                                <span class="input-group-text bg-black border-secondary text-secondary small uppercase" style="font-size: 0.6rem;">Mins</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-secondary smaller mt-2 italic">
+                        <i class="bi bi-info-circle me-1"></i> Leave blank to use the default 4-hour "Please wait" message.
+                    </div>
+                </div>
+
+                <div class="modal-footer border-neon bg-dark p-0">
+                    <button type="submit" class="btn-custom btn-neon w-100 py-3 fw-bold fs-6">CONFIRM & NOTIFY PATIENT</button>
+                </div>
+            </form>
+        </div>
+    </div>
     @endcan
 
     {{-- MODAL: Resubmit (User) --}}

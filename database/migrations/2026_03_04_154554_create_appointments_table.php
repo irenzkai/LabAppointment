@@ -35,6 +35,11 @@ return new class extends Migration
             $table->string('status')->default('pending'); 
             $table->text('return_reason')->nullable(); 
 
+            // 6. WORKFLOW TIMESTAMPS
+            $table->timestamp('tested_at')->nullable();
+            $table->dateTime('result_estimated_at')->nullable();
+            $table->timestamp('results_released_at')->nullable();
+
             $table->timestamps();
         });
     }
