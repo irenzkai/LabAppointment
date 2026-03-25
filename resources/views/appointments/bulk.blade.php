@@ -189,7 +189,7 @@ function addRow(patient = null) {
             <td class="ps-4 py-3" style="min-width: 320px;">
                 <div class="mb-2">
                     <label class="text-white mb-1 uppercase" style="font-size: 0.6rem; letter-spacing:1px;">FULL NAME</label>
-                    <input type="text" name="patients[${rowCount}][name]" value="${name}" class="form-control form-control-sm fw-bold uppercase" placeholder="Enter Full Name" required>
+                    <input type="text" name="patients[${rowCount}][name]" value="${name}" class="form-control form-control-sm uppercase" placeholder="Enter Full Name" required>
                 </div>
                 <div class="mb-2">
                     <label class="text-white mb-1 uppercase" style="font-size: 0.6rem; letter-spacing:1px;">EMAIL</label>
