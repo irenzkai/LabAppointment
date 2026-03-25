@@ -70,9 +70,12 @@
             <p class="text-secondary mb-0">Select an action to proceed with your laboratory needs.</p>
         </div>
         <div class="col-md-4 text-md-end mt-3">
-            <span class="badge border border-secondary text-secondary p-2 px-3 fw-bold">
-                <i class="bi bi-bell-fill me-2"></i>0 NOTIFICATIONS
-            </span>
+            <a href="{{ route('notifications.index') }}" class="text-decoration-none">
+                @php $count = Auth::user()->unreadNotifications->count(); @endphp
+                <span class="badge border {{ $count > 0 ? 'border-neon text-neon shadow-neon' : 'border-secondary text-secondary' }} p-2 px-3 fw-bold">
+                    <i class="bi bi-bell-fill me-2"></i>{{ $count }} NEW NOTIFICATIONS
+                </span>
+            </a>
         </div>
     </div>
 

@@ -10,6 +10,7 @@ use App\Http\Controllers\DependentController;
 use App\Http\Controllers\AppointmentConfigController;
 use App\Http\Controllers\BulkAppointmentController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\NotificationController;
 
 // 1. PUBLIC ROUTES (Accessible without logging in)
 Route::get('/', function () { return view('welcome'); });
@@ -53,6 +54,11 @@ Route::middleware('auth')->group(function () {
 
     // Download Test Results (PDF or CSV)
     Route::get('/appointments/{appointment}/download/{type}', [AppointmentController::class, 'downloadResult'])->name('appointments.download');
+
+    // Mark Notifications as Read
+    Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::get('/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('notifications.markAsRead');
+    Route::get('/notifications/clear-all', [NotificationController::class, 'clearAll'])->name('notifications.clearAll');
 
     // 3. STAFF & ADMIN ONLY ROUTES
     Route::middleware('role:staff,admin')->group(function () {

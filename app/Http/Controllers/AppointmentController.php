@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Notifications\AppointmentNotification;
 use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\Dependent;
 use App\Models\AppointmentConfig;
 use App\Models\AppointmentResult;
+use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -97,6 +99,17 @@ class AppointmentController extends Controller
             'status' => 'pending'
         ]));
 
+        // 4. Notify Staff of New Appointment
+        $staffMembers = User::whereIn('role', ['staff', 'admin'])->get();
+        foreach($staffMembers as $staff) {
+            $staff->notify(new AppointmentNotification([
+                'title' => 'New Appointment Request',
+                'message' => "A new request has been submitted by " . auth()->user()->name,
+                'url' => route('appointments.index'),
+                'type' => 'info'
+            ]));
+        }
+
         $appointment->services()->attach($request->service_ids);
         session()->forget('cart');
         return redirect()->route('appointments.index')->with('success', 'Appointment submitted!');
@@ -116,6 +129,12 @@ class AppointmentController extends Controller
             'status' => $request->status,
             'return_reason' => ($request->status == 'returned') ? $request->return_reason : null,
         ]);
+
+        $appointment->user->notify(new AppointmentNotification([
+            'title' => 'Appointment ' . strtoupper($request->status),
+            'message' => "Your appointment for {$appointment->patient_name} has been marked as {$request->status}.",
+            'type' => $request->status == 'approved' ? 'success' : 'danger'
+        ]));
 
         return back()->with('success', 'Status updated to ' . strtoupper($request->status));
     }
@@ -137,6 +156,12 @@ class AppointmentController extends Controller
             'tested_at' => now(),
             'result_estimated_at' => $estimatedTime
         ]);
+
+        $appointment->user->notify(new AppointmentNotification([
+            'title' => 'Test Completed - Sample Collected',
+            'message' => "Laboratory sampling is done for {$appointment->patient_name}. Results expected shortly.",
+            'type' => 'info'
+        ]));
 
         return back()->with('success', 'Patient marked as tested. Counter started.');
     }
@@ -178,6 +203,13 @@ class AppointmentController extends Controller
             'results_released_at' => now()
         ]);
 
+        // Notify Patient of Results
+        $appointment->user->notify(new AppointmentNotification([
+            'title' => 'Results Released!',
+            'message' => "Medical reports for {$appointment->patient_name} are now available for download.",
+            'type' => 'success'
+        ]));
+
         return redirect()->route('appointments.index')->with('success', 'Patient results have been released.');
     }
 
@@ -215,6 +247,17 @@ class AppointmentController extends Controller
         }
 
         $appointment->update($updateData);
+
+        // Notify Staff of Resubmission
+        $staffMembers = User::whereIn('role', ['staff', 'admin'])->get();
+        foreach($staffMembers as $staff) {
+            $staff->notify(new AppointmentNotification([
+                'title' => 'Appointment Resubmitted',
+                'message' => "An appointment has been resubmitted by " . auth()->user()->name,
+                'url' => route('appointments.index'),
+                'type' => 'info'
+            ]));
+        }
 
         return back()->with('success', 'Appointment resubmitted.');
     }

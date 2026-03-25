@@ -77,6 +77,17 @@ class BulkAppointmentController extends Controller
             \DB::rollback();
             return back()->withInput()->withErrors(['error' => 'Database error: ' . $e->getMessage()]);
         }
+
+        // Notify Staff of New Appointments
+        $staffMembers = User::whereIn('role', ['staff', 'admin'])->get();
+        foreach($staffMembers as $staff) {
+            $staff->notify(new AppointmentNotification([
+                'title' => 'New Bulk Appointment Request',
+                'message' => "A new bulk request has been submitted by " . auth()->user()->name,
+                'url' => route('appointments.index'),
+                'type' => 'info'
+            ]));
+        }
     }
 
     public function storeExcel(Request $request) {

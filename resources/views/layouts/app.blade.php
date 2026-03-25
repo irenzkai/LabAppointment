@@ -71,6 +71,22 @@
             border-radius: 10px;
         }
 
+        /* Unread notification style */
+        .dropdown-item.bg-dark {
+            background-color: rgba(90, 247, 129, 0.03) !important;
+        }
+
+        /* Hover effect */
+        .dropdown-item:hover {
+            background-color: rgba(90, 247, 129, 0.1) !important;
+            color: white !important;
+        }
+
+        /* Red dot for bell when notifications exist */
+        .shadow-neon {
+            box-shadow: 0 0 10px var(--neon);
+        }
+
         /* Override Bootstrap Nav-Pills Active State */
         .nav-pills .nav-link.active, 
         .nav-pills .show > .nav-link {
@@ -128,6 +144,20 @@
             background-color: #ff1a1a !important;
             border-color: #ff1a1a !important;
             transform: translateY(-1px);
+        }
+
+        /* Tighten the bell notification badge */
+        .btn-outline-neon.position-relative i {
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        /* Ensure the red circle stays perfectly centered and small */
+        .bg-danger.rounded-pill {
+            line-height: 1;
+            min-width: 14px;
+            padding: 0;
+            box-shadow: 0 0 5px rgba(255, 0, 0, 0.4);
         }
 
         /* Card System */
@@ -201,6 +231,54 @@
                     <a href="{{ route('login') }}" class="btn-custom btn-outline-neon px-2 px-sm-3">LOGIN</a>
                     <a href="{{ route('register') }}" class="btn-custom btn-neon d-none d-sm-flex">REGISTER</a>
                 @else
+                @auth
+                    <div class="dropdown me-2">
+                        <button class="btn-custom btn-outline-neon position-relative px-1 border-0 shadow-none" data-bs-toggle="dropdown">
+                            <i class="bi bi-bell-fill fs-5 text-white"></i>
+                            @if(auth()->user()->unreadNotifications->count() > 0)
+                                <span class="position-absolute bg-danger border border-black rounded-pill d-flex align-items-center justify-content-center" 
+                                    style="top: 2px; right: -2px; width: 14px; height: 14px; font-size: 0.55rem; font-weight: 800;">
+                                    {{ auth()->user()->unreadNotifications->count() }}
+                                </span>
+                            @endif
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end bg-black border-neon shadow-lg mt-2 dropdown-menu-scrollable" style="width: 320px;">
+                            <li><hr class="dropdown-divider border-secondary"></li>
+                            <li>
+                                <a class="dropdown-item text-center text-neon small fw-bold py-2" href="{{ route('notifications.index') }}">
+                                    SEE ALL NOTIFICATIONS <i class="bi bi-arrow-right ms-1"></i>
+                                </a>
+                            </li>
+                            
+                            @forelse(auth()->user()->notifications->take(10) as $notification)
+                                <li class="border-bottom border-secondary border-opacity-25">
+                                    {{-- UPDATED: Points to markAsRead route with the ID --}}
+                                    <a class="dropdown-item py-3 {{ $notification->read_at ? 'opacity-50' : 'bg-dark border-start border-neon' }}" 
+                                    href="{{ route('notifications.markAsRead', $notification->id) }}">
+                                        
+                                        <div class="text-{{ $notification->data['type'] ?? 'neon' }} fw-bold small mb-1 uppercase" style="font-size: 0.7rem;">
+                                            {{ $notification->data['title'] }}
+                                        </div>
+                                        <div class="text-white small" style="white-space: normal; line-height: 1.2;">
+                                            {{ $notification->data['message'] }}
+                                        </div>
+                                        <div class="mt-2 d-flex justify-content-between align-items-center">
+                                            <small class="text-secondary" style="font-size: 0.6rem;">{{ $notification->created_at->diffForHumans() }}</small>
+                                            @if(!$notification->read_at)
+                                                <span class="badge bg-neon rounded-pill p-1" style="width: 6px; height: 6px;"> </span>
+                                            @endif
+                                        </div>
+                                    </a>
+                                </li>
+                            @empty
+                                <li class="text-center py-5 text-secondary small italic">
+                                    <i class="bi bi-bell-slash d-block fs-3 mb-2 opacity-25"></i>
+                                    No new notifications
+                                </li>
+                            @endforelse
+                        </ul>
+                    </div>
+                    @endauth
                     <!-- Classic Clickable Name Dropdown -->
                     <div class="dropdown">
                         <a href="#" class="btn-custom btn-outline-neon dropdown-toggle" role="button" data-bs-toggle="dropdown" aria-expanded="false">
