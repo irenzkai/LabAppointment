@@ -19,23 +19,16 @@ class CartController extends Controller
     }
 
     public function add(Service $service) {
-        // Gender Check
-        if (Auth::check() && $service->gender_restriction !== 'both') {
-            if (Auth::user()->sex !== $service->gender_restriction) {
-                return back()->with('error', "This test is only available for " . $service->gender_restriction . " patients.");
-            }
-        }
-
         $cart = session()->get('cart', []);
         
-        // Add to cart if not already there
-        if (!isset($cart[$service->id])) {
-            $cart[$service->id] = true;
-            session()->put('cart', $cart);
-            return back()->with('success', $service->name . ' added to your list.');
-        }
-
-        return back()->with('info', $service->name . ' is already in your list.');
+        // Store metadata so JS can validate without extra database hits
+        $cart[$service->id] = [
+            'name' => $service->name,
+            'gender' => $service->gender_restriction, // 'male', 'female', or 'both'
+        ];
+        
+        session()->put('cart', $cart);
+        return back()->with('success', $service->name . ' added to list.');
     }
 
     public function remove($id) {

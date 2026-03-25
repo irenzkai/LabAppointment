@@ -85,6 +85,13 @@
                     <a href="{{ route('services.index') }}" class="btn-custom btn-outline-neon w-100 py-2 small">
                         <i class="bi bi-plus-lg me-1"></i> ADD MORE TESTS
                     </a>
+
+                    <div class="text-center pt-4 border-top border-secondary">
+                        <p class="text-white smaller mb-2 italic">Booking for a company or large group?</p>
+                        <a href="{{ route('appointments.bulk') }}" class="btn-custom text-neon fw-bold small text-decoration-none">
+                            BOOK FOR AN ORGANIZATION INSTEAD <i class="bi bi-arrow-right ms-1"></i>
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -108,61 +115,56 @@
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <form action="{{ route('appointments.store') }}" method="POST" class="modal-content border-neon bg-black shadow-lg">
             @csrf
-            {{-- Hidden inputs to pass selected services --}}
-            @foreach($services as $item)
-                <input type="hidden" name="service_ids[]" value="{{ $item->id }}">
-            @endforeach
+            @foreach($services as $item) <input type="hidden" name="service_ids[]" value="{{ $item->id }}"> @endforeach
 
-            <div class="modal-header border-neon bg-dark py-3">
-                <h5 class="modal-title text-neon fw-bold uppercase small">Schedule Your Appointment</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
+            <div class="modal-header border-neon bg-dark"><h5 class="modal-title text-neon fw-bold uppercase small">Schedule Booking</h5></div>
             
             <div class="modal-body p-4 text-white text-start">
-                @php 
-                    $config = \App\Models\AppointmentConfig::first() ?? (object)[
-                        'opening_time' => '08:00', 
-                        'closing_time' => '17:00', 
-                        'slot_duration' => 60
-                    ]; 
-                @endphp
-                
+                {{-- Patient Selector --}}
+                <div class="mb-4 pb-4 border-bottom border-secondary">
+                    <div class="d-flex justify-content-between align-items-end mb-2">
+                        <label class="fw-bold text-neon small mb-0 uppercase">Who is this booking for?</label>
+                        {{-- Quick Switch to Bulk --}}
+                        <a href="{{ route('appointments.bulk') }}" class="text-neon smaller fw-bold text-decoration-none uppercase">
+                            <i class="bi bi-buildings me-1"></i> Switch to Bulk Booking
+                        </a>
+                    </div>
+                    
+                    <select name="dependent_id" class="form-select bg-dark border-neon text-white fw-bold py-3 shadow-none">
+                        <option value="">SELF ({{ strtoupper(Auth::user()->name) }})</option>
+                        @foreach(Auth::user()->dependents as $dep)
+                            <option value="{{ $dep->id }}">{{ strtoupper($dep->name) }} ({{ strtoupper($dep->relationship) }})</option>
+                        @endforeach
+                    </select>
+                    
+                    <div class="text-white mt-2 d-flex align-items-center" style="font-size: 0.65rem;">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <span>Results will be issued under the selected patient's name.</span>
+                    </div>
+                </div>
+
+                <div id="gender_error" class="alert bg-black border-danger text-danger small py-3 mb-4" style="display:none; border-style: dashed;">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-gender-ambiguous fs-4 me-3"></i>
+                        <div>
+                            <div class="fw-bold uppercase">Gender Incompatibility Detected</div>
+                            <div class="smaller opacity-75">One or more tests in your list are restricted. Please check patient selection or remove the restricted test.</div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="row">
-                    {{-- 1. Date Picker --}}
                     <div class="col-md-5 mb-4 border-end border-secondary">
-                        <label class="fw-bold text-neon small mb-2 uppercase">1. Select Date</label>
-                        <input type="date" name="appointment_date" id="checkout_date" class="form-control mb-2" required min="{{ date('Y-m-d') }}">
-                        <div id="date_hint" class="text-secondary smaller italic">Available dates are shown from today onwards.</div>
+                        <label class="fw-bold text-neon small mb-2 uppercase">SELECT DATE</label>
+                        <input type="date" name="appointment_date" id="checkout_date" class="form-control" required min="{{ date('Y-m-d') }}">
                     </div>
 
-                    {{-- 2. Dynamic Time Grid --}}
                     <div class="col-md-7">
-                        <label class="fw-bold text-neon small mb-2 uppercase">2. Select Time Block</label>
-                        <div class="row g-2" id="time_slot_container" style="max-height: 300px; overflow-y: auto; display:none;">
-                            @php
-                                $start = strtotime($config->opening_time);
-                                $end = strtotime($config->closing_time);
-                                $i = 0; // Create a manual counter here
-                            @endphp
-
-                            @while($start < $end)
-                                @php $timeVal = date('H:i:00', $start); @endphp
-                                <div class="col-4 time-block-wrapper" data-time="{{ $timeVal }}" data-hour="{{ date('H', $start) }}">
-                                    {{-- Use $i instead of $loop->index --}}
-                                    <input type="radio" class="btn-check" name="time_slot" id="slot_{{ $i }}" value="{{ $timeVal }}" required>
-                                    <label class="btn btn-outline-secondary w-100 btn-sm py-2 fw-bold" for="slot_{{ $i }}">
-                                        {{ date('h:i A', $start) }}
-                                    </label>
-                                </div>
-                                @php 
-                                    $start = strtotime("+$config->slot_duration minutes", $start); 
-                                    $i++; // Increment the counter
-                                @endphp
-                            @endwhile
-                        </div>
+                        <label class="fw-bold text-neon small mb-2 uppercase">AVAILABLE TIMES</label>
+                        <div id="time_slot_container" class="row g-2" style="max-height: 280px; overflow-y: auto;"></div>
                         <div id="slot_placeholder" class="text-center py-5 text-secondary border border-secondary border-dashed rounded bg-dark">
-                            <i class="bi bi-calendar-event fs-2 d-block mb-2 opacity-50"></i>
-                            Please select a date first
+                            <i class="bi bi-calendar-check fs-2 d-block mb-2 opacity-50"></i>
+                            Select a date first
                         </div>
                     </div>
                 </div>
@@ -177,62 +179,143 @@
 
 @push('scripts')
 <script>
-document.getElementById('checkout_date').addEventListener('change', function() {
-    const selectedDate = this.value;
-    const container = document.getElementById('time_slot_container');
-    const placeholder = document.getElementById('slot_placeholder');
-    const confirmBtn = document.getElementById('confirm_btn');
+const dateInput = document.getElementById('checkout_date');
+const patientSelect = document.querySelector('select[name="dependent_id"]');
+const genderError = document.getElementById('gender_error');
+const confirmBtn = document.getElementById('confirm_btn');
+const container = document.getElementById('time_slot_container');
+const placeholder = document.getElementById('slot_placeholder');
 
-    // Show grid, hide placeholder
-    container.style.display = 'flex';
-    placeholder.style.display = 'none';
+// Pass cart data from PHP to JS
+const cartItems = @json(session('cart', []));
 
-    // Fetch Occupancy from API
-    fetch(`/api/check-slots?date=${selectedDate}`)
-        .then(response => response.json())
+function updateSchedule() {
+    const selectedDate = dateInput.value;
+    const dependentId = patientSelect.value;
+
+    if (!selectedDate) return;
+
+    // 1. Improved UI: Smaller spinner, don't clear everything immediately
+    container.style.opacity = '0.5'; 
+    confirmBtn.disabled = true;
+    confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>VALIDATING SCHEDULE...';
+
+    fetch(`/api/check-slots?date=${selectedDate}&dependent_id=${dependentId}`)
+        .then(res => res.json())
         .then(data => {
-            const fullSlots = data.full_slots; 
-            
-            // Get local date/hour instead of UTC to avoid mismatch in Philippines
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const todayLocal = `${year}-${month}-${day}`;
-            const currentHour = now.getHours();
+            container.style.opacity = '1';
+            placeholder.style.display = 'none';
+            genderError.style.display = 'none';
 
-            document.querySelectorAll('.time-block-wrapper').forEach(wrapper => {
-                const timeValue = wrapper.dataset.time;
-                const slotHour = parseInt(wrapper.dataset.hour);
-                const input = wrapper.querySelector('input');
-                const label = wrapper.querySelector('label');
-
-                // Reset styles
-                wrapper.style.display = 'block';
-                input.disabled = false;
-                input.checked = false;
-                label.classList.remove('btn-danger', 'opacity-25');
-                label.classList.add('btn-outline-secondary');
-                label.innerText = label.innerText.replace(' (FULL)', '');
-
-                // Logic A: Disable past hours for TODAY
-                if (selectedDate === todayLocal && slotHour <= currentHour) {
-                    wrapper.style.display = 'none';
-                    input.disabled = true;
-                }
-
-                // Logic B: Disable if FULL
-                if (fullSlots.includes(timeValue)) {
-                    input.disabled = true;
-                    label.classList.remove('btn-outline-secondary');
-                    label.classList.add('btn-danger', 'opacity-25');
-                    label.innerText += ' (FULL)';
-                }
+            // 2. Gender Validation (Instant)
+            let patientGender = data.patient_gender;
+            let hasConflict = false;
+            Object.values(cartItems).forEach(item => {
+                if (item.gender !== 'both' && item.gender !== patientGender) hasConflict = true;
             });
 
+            if (hasConflict) {
+                showErrorState('bi-person-x', 'Gender Incompatibility', 'danger');
+                genderError.style.display = 'block';
+                return;
+            }
+
+            // 3. Closed Check
+            if (data.is_closed) {
+                showErrorState('bi-moon-stars', 'Laboratory Closed', 'warning');
+                return;
+            }
+
+            // 4. Fast Render
+            renderSlots(data, selectedDate);
+            
+            confirmBtn.innerHTML = 'CONFIRM RESERVATION';
             confirmBtn.disabled = false;
+        })
+        .catch(err => {
+            confirmBtn.innerHTML = 'RETRY';
+            confirmBtn.disabled = false;
+            console.error(err);
         });
-});
+}
+
+function showErrorState(icon, message, colorClass) {
+    container.innerHTML = '';
+    placeholder.innerHTML = `<i class="bi ${icon} text-${colorClass} fs-1 d-block mb-2"></i><span class="text-${colorClass} fw-bold uppercase">${message}</span>`;
+    placeholder.style.display = 'block';
+    confirmBtn.innerHTML = 'SCHEDULE UNAVAILABLE';
+}
+
+function renderSlots(data, selectedDate) {
+    let html = '';
+    let start = new Date(`2000-01-01 ${data.config.opening_time}`);
+    let end = new Date(`2000-01-01 ${data.config.closing_time}`);
+    let now = new Date();
+    // Format today's date correctly for comparison
+    let todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    
+    let i = 0;
+    while(start < end) {
+        let timeStr = start.toTimeString().split(' ')[0].substring(0, 5) + ":00";
+        let displayTime = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        let isLunch = (data.config.has_lunch_break && timeStr >= data.config.lunch_start && timeStr < data.config.lunch_end);
+
+        if(!isLunch) {
+            let isPast = (selectedDate === todayStr && start.getHours() <= now.getHours());
+            let isFull = data.full_slots.includes(timeStr);
+            
+            html += `
+                <div class="col-4">
+                    <input type="radio" class="btn-check" name="time_slot" id="s${i}" value="${timeStr}" ${isPast || isFull ? 'disabled' : ''} required>
+                    <label class="btn ${isFull ? 'btn-danger opacity-25' : 'btn-outline-secondary'} w-100 btn-sm py-2 fw-bold" for="s${i}">
+                        ${displayTime} ${isFull ? '<br>(FULL)' : ''}
+                    </label>
+                </div>`;
+        }
+        start.setMinutes(start.getMinutes() + data.config.slot_duration);
+        i++;
+    }
+    container.innerHTML = html;
+    container.style.display = 'flex';
+}
+
+function generateTimeSlots(data, selectedDate) {
+    let html = '';
+    let start = new Date(`2000-01-01 ${data.config.opening_time}`);
+    let end = new Date(`2000-01-01 ${data.config.closing_time}`);
+    let now = new Date();
+    let todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    
+    let i = 0;
+    while(start < end) {
+        let timeStr = start.toTimeString().split(' ')[0];
+        let displayTime = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        let isLunch = (data.config.has_lunch_break && timeStr >= data.config.lunch_start && timeStr < data.config.lunch_end);
+
+        if(!isLunch) {
+            let isPast = (selectedDate === todayStr && start.getHours() <= now.getHours());
+            let isFull = data.full_slots.includes(timeStr);
+            
+            html += `
+                <div class="col-4">
+                    <input type="radio" class="btn-check" name="time_slot" id="s${i}" value="${timeStr}" ${isPast || isFull ? 'disabled' : ''} required>
+                    <label class="btn ${isFull ? 'btn-danger opacity-25' : 'btn-outline-secondary'} w-100 btn-sm py-2 fw-bold" for="s${i}">
+                        ${displayTime} ${isFull ? '<br>(FULL)' : ''}
+                    </label>
+                </div>`;
+        }
+        start.setMinutes(start.getMinutes() + data.config.slot_duration);
+        i++;
+    }
+    container.innerHTML = html;
+    container.style.display = 'flex';
+    confirmBtn.disabled = false;
+}
+
+dateInput.addEventListener('change', updateSchedule);
+patientSelect.addEventListener('change', updateSchedule);
 </script>
 @endpush
 @endsection

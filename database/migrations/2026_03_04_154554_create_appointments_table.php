@@ -10,19 +10,30 @@ return new class extends Migration
     {
         Schema::create('appointments', function (Blueprint $table) {
             $table->id();
-            // The Patient
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
             
-            // The Schedule
+            // 1. RELATIONSHIPS
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->foreignId('dependent_id')->nullable()->constrained()->onDelete('set null');
+
+            // 2. BULK PATIENT IDENTITY
+            $table->string('patient_name')->nullable();
+            $table->string('patient_email')->nullable();
+            $table->string('patient_phone')->nullable();
+            $table->string('patient_sex')->nullable();
+            $table->date('patient_birthdate')->nullable();
+
+            // 3. ORGANIZATION & BATCHING
+            $table->string('organization_name')->nullable();
+            $table->string('batch_id')->nullable(); 
+            
+            // 4. SCHEDULE & LOCATION
             $table->date('appointment_date');
             $table->time('time_slot');
+            $table->text('patient_address')->nullable();
             
-            // Status Logic: pending, approved, returned, completed
+            // 5. STATUS LOGIC
             $table->string('status')->default('pending'); 
             $table->text('return_reason')->nullable(); 
-
-            // Prevent two different people from booking the exact same slot
-            $table->unique(['appointment_date', 'time_slot']);
 
             $table->timestamps();
         });

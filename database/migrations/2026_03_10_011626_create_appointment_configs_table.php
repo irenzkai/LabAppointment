@@ -12,6 +12,8 @@ return new class extends Migration
     public function up(): void {
         Schema::create('appointment_configs', function (Blueprint $table) {
             $table->id();
+            $table->integer('day_of_week');
+            $table->boolean('is_open')->default(true);
             $table->time('opening_time')->default('08:00');
             $table->time('closing_time')->default('17:00');
             $table->integer('slot_duration')->default(60); // in minutes

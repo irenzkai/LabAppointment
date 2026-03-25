@@ -14,7 +14,7 @@ class AdminSeeder extends Seeder
     public function run(): void
     {
         User::updateOrCreate(
-            ['email' => 'renzmamon2@gmail.com'], // Check if this email exists
+            ['email' => 'admin@gmail.com'], // Check if this email exists
             [
                 'name' => 'System Admin',
                 'password' => bcrypt('1@23qweASD'), // Use bcrypt to hash the password
@@ -52,11 +52,22 @@ class AdminSeeder extends Seeder
             ]
         );
 
-        \App\Models\AppointmentConfig::updateOrCreate(['id' => 1], [
-            'opening_time' => '08:00:00',
-            'closing_time' => '17:00:00',
-            'slot_duration' => 60,
-            'max_patients_per_slot' => 1
-        ]);
+        $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+        foreach($days as $index => $day) {
+            \App\Models\AppointmentConfig::updateOrCreate(
+                ['day_of_week' => $index],
+                [
+                    'is_open' => ($index == 0) ? false : true,
+                    'opening_time' => '08:00:00',
+                    'closing_time' => '17:00:00',
+                    'slot_duration' => 60,
+                    'max_patients_per_slot' => 1,
+                    'has_lunch_break' => true,
+                    'lunch_start' => '12:00:00',
+                    'lunch_end' => '13:00:00'
+                ]
+            );
+        }
     }
 }

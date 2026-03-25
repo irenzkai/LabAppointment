@@ -44,4 +44,8 @@ class User extends Authenticatable
     {
         return in_array($this->role, ['staff', 'admin']);
     }
+
+    public function dependents() {
+        return $this->hasMany(Dependent::class);
+    }
 }

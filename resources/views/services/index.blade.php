@@ -7,6 +7,10 @@
         <p class="text-secondary small">Quality and affordable diagnostic solutions</p>
     </div>
     <div class="d-flex gap-2">
+        <a href="{{ route('appointments.bulk') }}" class="btn-custom btn-outline-neon text-info px-3">
+            <i class="bi bi-people-fill me-2"></i> BULK BOOKING
+        </a>
+
         {{-- Cart Button --}}
         <a href="{{ route('cart.index') }}" class="btn-custom btn-outline-neon position-relative px-4">
             <i class="bi bi-cart-check-fill me-2"></i> 
@@ -79,7 +83,7 @@
                                 @endphp
 
                                 @if($genderMismatch)
-                                    <button class="btn-custom btn-outline-secondary w-100 py-2 disabled" style="font-size: 0.65rem;">GENDER RESTRICTED</button>
+                                    <button class="btn-danger-custom btn-outline-danger w-100 py-2 disabled" style="font-size: 0.65rem;">GENDER RESTRICTED</button>
                                 @else
                                     <form action="{{ route('cart.add', $service->id) }}" method="POST">
                                         @csrf
@@ -94,7 +98,7 @@
                                     <button class="btn-custom btn-outline-neon flex-grow-1 fw-bold btn-sm" data-bs-toggle="modal" data-bs-target="#editModal{{$service->id}}">EDIT</button>
                                     <form action="{{ route('services.toggle', $service->id) }}" method="POST" class="flex-grow-1">
                                         @csrf @method('PATCH')
-                                        <button type="submit" class="btn-custom w-100 btn-sm fw-bold {{ $service->is_available ? 'border-warning text-warning' : 'btn-outline-neon' }}">
+                                        <button type="submit" class="btn-custom w-100 btn-sm fw-bold {{ $service->is_available ? 'btn-custom btn-neon' : 'btn-outline-neon' }}">
                                             {{ $service->is_available ? 'OFF' : 'ON' }}
                                         </button>
                                     </form>

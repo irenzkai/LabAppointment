@@ -1,146 +1,145 @@
 @extends('layouts.app')
 
 @section('content')
-<h2 class="text-neon fw-bold mb-4 uppercase">LABORATORY APPOINTMENTS</h2>
+<h2 class="text-neon fw-bold mb-4 uppercase" style="letter-spacing: 2px;">LABORATORY APPOINTMENTS</h2>
 
-<div class="accordion" id="appAccordion">
-    @forelse($appointments as $app)
-    <div class="accordion-item border-secondary mb-3 bg-black rounded overflow-hidden shadow-lg">
-        {{-- Accordion Header --}}
-        <h2 class="accordion-header">
-            <button class="accordion-button collapsed bg-black text-white py-4 px-4 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ $app->id }}">
-                <div class="row w-100 align-items-center g-0">
-                    <div class="col-md-4 text-start">
-                        <span class="text-neon fw-bold small">Appointment {{ $app->id }}</span>
-                        <div class="fw-bold text-white small uppercase">
-                            @if(Auth::user()->isStaff()) {{ $app->user->name }} @else {{ $app->services->count() }} TEST(S) SELECTED @endif
-                        </div>
-                    </div>
-                    <div class="col-md-4 text-center">
-                        <div class="small">{{ $app->appointment_date->format('M d, Y') }}</div>
-                        <div class="text-neon fw-bold small"><i class="bi bi-clock me-1"></i>{{ date('h:i A', strtotime($app->time_slot)) }}</div>
-                    </div>
-                    <div class="col-md-4 text-end d-flex justify-content-end align-items-center gap-3">
-                        <span class="badge border py-2 px-3 {{ $app->status == 'pending' ? 'text-warning border-warning' : ($app->status == 'approved' ? 'text-success border-success' : 'text-danger border-danger') }}">
-                            {{ strtoupper($app->status) }}
-                        </span>
-                        <i class="bi bi-chevron-down text-secondary"></i>
-                    </div>
-                </div>
-            </button>
-        </h2>
+@if($is_staff)
+    @include('appointments.partials.list', ['apps' => $staffQueue, 'type' => 'queue'])
+@else
+<ul class="nav nav-pills mb-5 border-bottom border-secondary pb-3 gap-2" id="appTabs" role="tablist">
+    <li class="nav-item">
+        <button class="nav-link active small fw-bold uppercase px-4 text-white" data-bs-toggle="pill" data-bs-target="#pane-self">
+            <i class="bi bi-person me-2"></i> My Appointments
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link small fw-bold uppercase px-4 text-white" data-bs-toggle="pill" data-bs-target="#pane-family">
+            <i class="bi bi-people me-2"></i> Family / Dependents
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link small fw-bold uppercase px-4 text-white" data-bs-toggle="pill" data-bs-target="#pane-bulk">
+            <i class="bi bi-buildings me-2"></i> Organization / Bulk
+        </button>
+    </li>
+</ul>
 
-        {{-- Expanded Body --}}
-        <div id="collapse{{ $app->id }}" class="accordion-collapse collapse" data-bs-parent="#appAccordion">
-            <div class="accordion-body bg-black border-top border-secondary p-4 text-start">
-                <div class="row g-4">
-                    {{-- Left Side: Tests List --}}
-                    <div class="col-md-7">
-                        <h6 class="text-neon fw-bold mb-3 small uppercase">Included Laboratory Tests</h6>
-                        <ul class="list-group list-group-flush border border-secondary rounded">
-                            @foreach($app->services as $service)
-                            <li class="list-group-item bg-black border-secondary text-white small d-flex justify-content-between">
-                                <span>{{ strtoupper($service->name) }}</span>
-                                <span class="text-secondary">₱{{ number_format($service->price, 2) }}</span>
-                            </li>
-                            @endforeach
-                            <li class="list-group-item bg-dark border-secondary text-neon fw-bold d-flex justify-content-between">
-                                <span>TOTAL AMOUNT</span>
-                                <span>₱{{ number_format($app->totalPrice(), 2) }}</span>
-                            </li>
-                        </ul>
-                    </div>
-
-                    {{-- Right Side: Notes & Actions --}}
-                    <div class="col-md-5">
-                        <h6 class="text-neon fw-bold mb-3 small uppercase">Details & Actions</h6>
-                        @if($app->return_reason)
-                            <div class="p-3 bg-dark border border-danger rounded mb-3">
-                                <small class="text-danger fw-bold d-block mb-1">STAFF MESSAGE:</small>
-                                <p class="text-white small mb-0">{{ $app->return_reason }}</p>
-                            </div>
-                        @endif
-
-                        <div class="mt-4 pt-3 border-top border-secondary">
-                            @can('isStaff')
-                                @if($app->status == 'pending')
-                                    <div class="d-flex gap-2">
-                                        <form action="{{ route('appointments.status', $app->id) }}" method="POST" class="flex-grow-1">
-                                            @csrf @method('PATCH')
-                                            <input type="hidden" name="status" value="approved">
-                                            <button class="btn-custom btn-neon w-100">APPROVE</button>
-                                        </form>
-                                        <button class="btn-danger-custom px-4" data-bs-toggle="modal" data-bs-target="#retModal{{$app->id}}">RETURN</button>
-                                    </div>
-                                @endif
-                            @endcan
-
-                            @if($app->status == 'returned' && Auth::id() == $app->user_id)
-                                <button class="btn-custom btn-neon w-100" data-bs-toggle="modal" data-bs-target="#resubmitModal{{$app->id}}">UPDATE & RESUBMIT</button>
-                            @endif
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+<div class="tab-content">
+    {{-- 1. SELF SECTION --}}
+    <div class="tab-pane fade show active" id="pane-self">
+        @include('appointments.partials.list', ['apps' => $self, 'type' => 'self'])
     </div>
-    @empty
-    <div class="card p-5 text-center text-secondary border-secondary">No appointment records found.</div>
-    @endforelse
-</div>
 
-{{-- MODALS OUTSIDE ACCORDION TO PREVENT TYPING ISSUES --}}
-@foreach($appointments as $app)
+    {{-- 2. FAMILY SECTION --}}
+    <div class="tab-pane fade" id="pane-family">
+        @include('appointments.partials.list', ['apps' => $dependents, 'type' => 'family'])
+    </div>
+
+    {{-- 3. BULK SECTION --}}
+    <div class="tab-pane fade" id="pane-bulk">
+        {{-- Here we pass bulkGroups into a variable named 'groups' --}}
+        @include('appointments.partials.bulk_list', ['groups' => $bulkGroups])
+    </div>
+</div>
+@endif
+
+{{-- --- MODALS MASTER LOOP --- --}}
+@php $flatApps = $is_staff ? $staffQueue->flatten() : $self->concat($dependents)->concat($bulkGroups->flatten()); @endphp
+
+@foreach($flatApps as $app)
+    {{-- MODAL: Return (Staff) --}}
     @can('isStaff')
     <div class="modal fade" id="retModal{{$app->id}}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <form action="{{ route('appointments.status', $app->id) }}" method="POST" class="modal-content border-danger bg-black">
                 @csrf @method('PATCH')
-                <div class="modal-header border-danger bg-dark"><h5 class="modal-title text-danger fw-bold uppercase">Return to Patient</h5></div>
+                <div class="modal-header border-danger bg-dark"><h5 class="modal-title text-danger fw-bold uppercase small">Return to Patient</h5></div>
                 <div class="modal-body p-4 text-start">
                     <input type="hidden" name="status" value="returned">
                     <label class="text-secondary smaller fw-bold mb-2 uppercase">Reason for return</label>
-                    <textarea name="return_reason" class="form-control" rows="4" placeholder="Explain what the patient needs to change..." required></textarea>
+                    <textarea name="return_reason" class="form-control" rows="4" required></textarea>
                 </div>
                 <div class="modal-footer border-danger bg-dark">
                     <button type="button" class="btn-custom btn-outline-neon" data-bs-dismiss="modal">CANCEL</button>
-                    <button type="submit" class="btn-custom btn-danger-custom px-4">SEND RETURN</button>
+                    <button type="submit" class="btn-danger-custom px-4 py-2 border-0">SEND RETURN</button>
                 </div>
             </form>
         </div>
     </div>
     @endcan
 
+    {{-- MODAL: Resubmit (User) --}}
     @if($app->status == 'returned' && Auth::id() == $app->user_id)
-    <div class="modal fade" id="resubmitModal{{$app->id}}" tabindex="-1" aria-hidden="true">
+    <div class="modal fade resubmit-modal" id="resubmitModal{{$app->id}}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <form action="{{ route('appointments.update', $app->id) }}" method="POST" class="modal-content border-neon bg-black">
                 @csrf @method('PUT')
-                <div class="modal-header border-neon bg-dark"><h5 class="modal-title text-neon fw-bold uppercase">Resubmit Appointment</h5></div>
+                <div class="modal-header border-neon bg-dark"><h5 class="modal-title text-neon fw-bold uppercase small">Resubmit Appointment #{{ $app->id }}</h5></div>
+                
                 <div class="modal-body p-4 text-start text-white">
+                    
+                    {{-- SECTION A: IDENTITY EDITING (Only for Bulk) --}}
+                    @if($app->batch_id)
+                    <div class="mb-4 pb-4 border-bottom border-secondary">
+                        <h6 class="text-white fw-bold mb-3 small uppercase text-neon">Correct Patient Details</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Full Name</label>
+                                <input type="text" name="patient_name" class="form-control" value="{{ $app->patient_name }}" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Email Address</label>
+                                <input type="email" name="patient_email" class="form-control" value="{{ $app->patient_email }}" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Phone Number</label>
+                                <input type="text" name="patient_phone" class="form-control" value="{{ $app->patient_phone }}" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Sex</label>
+                                <select name="patient_sex" class="form-select">
+                                    <option value="Male" {{ $app->patient_sex == 'Male' ? 'selected' : '' }}>Male</option>
+                                    <option value="Female" {{ $app->patient_sex == 'Female' ? 'selected' : '' }}>Female</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Birthdate</label>
+                                {{-- We add ?->format('Y-m-d') to ensure the browser can read it --}}
+                                <input type="date" name="patient_birthdate" class="form-control" 
+                                    value="{{ $app->patient_birthdate ? $app->patient_birthdate->format('Y-m-d') : '' }}" 
+                                    required>
+                            </div>
+                            <div class="col-12">
+                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Address</label>
+                                <textarea name="patient_address" class="form-control" rows="2" required>{{ $app->patient_address }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                    @endif
+
+                    {{-- SECTION B: NEW SCHEDULE (Strict) --}}
                     <div class="row">
                         <div class="col-md-5 mb-3 border-end border-secondary">
-                            <label class="text-secondary smaller fw-bold mb-2 uppercase">Select New Date</label>
-                            <input type="date" name="appointment_date" class="form-control date-selector" 
-                                   data-service="res{{$app->id}}" value="{{ $app->appointment_date->format('Y-m-d') }}" 
-                                   required min="{{ date('Y-m-d') }}">
+                            <label class="text-secondary smaller fw-bold mb-2 uppercase">Date</label>
+                            {{-- Added class 'resubmit-date' and data-app-id --}}
+                            <input type="date" name="appointment_date" 
+                                class="form-control resubmit-date" 
+                                data-app-id="{{$app->id}}" 
+                                value="{{ $app->appointment_date->format('Y-m-d') }}" 
+                                required min="{{ date('Y-m-d') }}" 
+                                onchange="updateResubmitSlots(this)">
                         </div>
                         <div class="col-md-7">
                             <label class="text-secondary smaller fw-bold mb-2 uppercase">Select New Time Slot</label>
-                            <div class="row g-2 time-grid-res{{$app->id}}" style="max-height: 250px; overflow-y: auto;">
-                                @for($i = 0; $i < 24; $i++)
-                                    @php $t = sprintf('%02d:00', $i); @endphp
-                                    <div class="col-4 time-slot-item" data-hour="{{$i}}">
-                                        <input type="radio" class="btn-check" name="time_slot" id="rs{{$app->id}}_{{$i}}" value="{{$t}}" required>
-                                        <label class="btn btn-outline-secondary w-100 btn-sm fw-bold" for="rs{{$app->id}}_{{$i}}">{{ date('h:i A', strtotime($t)) }}</label>
-                                    </div>
-                                @endfor
-                            </div>
+                            <select name="time_slot" id="ts-{{$app->id}}" class="form-select border-neon text-white fw-bold py-3" required>
+                                <option value="">Loading schedule...</option>
+                            </select>
+                            <small class="text-white mt-2 d-block" style="font-size: 0.6rem;">* Only available clinic hours are shown.</small>
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer border-neon bg-dark">
-                    <button type="submit" class="btn-custom btn-neon w-100 py-3 fw-bold">RESUBMIT FOR APPROVAL</button>
+                    <button type="submit" class="btn-custom btn-neon w-100 py-3 fw-bold">UPDATE AND RESUBMIT FOR APPROVAL</button>
                 </div>
             </form>
         </div>
@@ -151,5 +150,89 @@
 <style>
     .accordion-button::after { display: none; }
     .accordion-button:not(.collapsed) { background-color: #050505; color: var(--neon); }
+    .nav-pills .nav-link.active { background-color: var(--neon) !important; color: #000 !important; }
 </style>
+
+@push('scripts')
+<script>
+// --- AUTOMATIC TRIGGER WHEN MODAL OPENS ---
+document.addEventListener('show.bs.modal', function (event) {
+    // Check if the opened modal is a resubmit modal
+    const modal = event.target;
+    if (modal.classList.contains('resubmit-modal')) {
+        // Find the date input inside this specific modal
+        const dateInput = modal.querySelector('.resubmit-date');
+        if (dateInput) {
+            console.log("Modal opened, auto-loading slots for date:", dateInput.value);
+            updateResubmitSlots(dateInput);
+        }
+    }
+});
+
+// --- THE CORE LOGIC ---
+async function updateResubmitSlots(input) {
+    const date = input.value;
+    const appId = input.dataset.appId;
+    const select = document.getElementById(`ts-${appId}`);
+    
+    if(!date || !select) return;
+
+    select.innerHTML = '<option value="">Checking slots...</option>';
+    select.disabled = true;
+
+    try {
+        const res = await fetch(`/api/check-slots?date=${date}&exclude_id=${appId}`);
+        const data = await res.json();
+        
+        // Log to console so you can verify the array is no longer empty
+        console.log("Excluded slots for this date:", data.full_slots);
+
+        if(data.is_closed) {
+            select.innerHTML = '<option value="">CLINIC CLOSED</option>';
+            return;
+        }
+
+        const config = data.config;
+        let html = '<option value="">Choose Available Time</option>';
+        
+        let start = new Date(`2000-01-01 ${config.opening_time}`);
+        let end = new Date(`2000-01-01 ${config.closing_time}`);
+        let availableCount = 0;
+
+        while(start < end) {
+            // Generate HH:MM:SS manually to match MySQL exactly
+            let hours = start.getHours().toString().padStart(2, '0');
+            let minutes = start.getMinutes().toString().padStart(2, '0');
+            let tStr = `${hours}:${minutes}:00`; 
+            
+            // Generate comparison variables
+            let isFull = data.full_slots.includes(tStr);
+            let isLunch = (config.has_lunch_break && tStr >= config.lunch_start && tStr < config.lunch_end);
+            let isPast = (date === new Date().toLocaleDateString('en-CA') && start.getHours() <= new Date().getHours());
+
+            // THE REMOVAL LOGIC:
+            // If any condition is met, skip this slot and go to the next increment
+            if (isFull || isLunch || isPast) {
+                start.setMinutes(start.getMinutes() + parseInt(config.slot_duration));
+                continue; 
+            }
+
+            // If we are here, the slot is truly available
+            let disp = start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            html += `<option value="${tStr}">${disp}</option>`;
+            availableCount++;
+            
+            start.setMinutes(start.getMinutes() + parseInt(config.slot_duration));
+        }
+        
+        select.innerHTML = availableCount > 0 ? html : '<option value="">NO SLOTS AVAILABLE</option>';
+        select.disabled = availableCount === 0;
+
+    } catch (e) {
+        console.error("Fetch error:", e);
+        select.innerHTML = '<option value="">Error syncing schedule</option>';
+    }
+}
+</script>
+@endpush
 @endsection

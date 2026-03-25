@@ -85,6 +85,91 @@
             </form>
         </div>
 
+        {{-- MANAGE DEPENDENTS SECTION --}}
+        <div class="card p-4 mb-4 shadow-lg border-secondary text-start">
+            <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary pb-2">
+                <h5 class="text-white fw-bold mb-0 uppercase small">Manage Dependents</h5>
+                <button class="btn-custom btn-neon btn-sm" data-bs-toggle="modal" data-bs-target="#addDepModal">
+                    <i class="bi bi-person-plus-fill me-1"></i> ADD NEW
+                </button>
+            </div>
+
+            <div class="row g-3">
+                @forelse($user->dependents as $dep)
+                    <div class="col-md-6">
+                        <div class="p-3 rounded border border-secondary bg-black d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-white fw-bold small">{{ strtoupper($dep->name) }}</div>
+                                <div class="text-secondary" style="font-size: 0.65rem;">
+                                    {{ strtoupper($dep->relationship) }} | {{ $dep->sex }} | {{ $dep->birthdate->age }} YRS OLD
+                                </div>
+                            </div>
+                            <form action="{{ route('dependents.destroy', $dep->id) }}" method="POST">
+                                @csrf @method('DELETE')
+                                <button type="submit" class="btn-custom btn-danger-custom py-1 px-2 border-0" onclick="return confirm('Remove member?')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                @empty
+                    <div class="col-12"><p class="text-secondary small italic">No family members registered yet.</p></div>
+                @endforelse
+            </div>
+        </div>
+
+        <div class="modal fade" id="addDepModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <form action="{{ route('dependents.store') }}" method="POST" class="modal-content border-neon bg-black">
+                    @csrf
+                    <div class="modal-header border-neon bg-dark py-3">
+                        <h5 class="modal-title text-neon fw-bold small">ADD FAMILY MEMBER RECORD</h5>
+                    </div>
+                    
+                    <div class="modal-body p-4 text-start">
+                        <div class="mb-3">
+                            <label class="text-secondary small fw-bold mb-1 uppercase">Full Name</label>
+                            <input type="text" name="name" class="form-control" placeholder="Enter complete name" required>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-6 mb-3">
+                                <label class="text-secondary small fw-bold mb-1 uppercase">Birthdate</label>
+                                <input type="date" name="birthdate" class="form-control" required>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <label class="text-secondary small fw-bold mb-1 uppercase">Sex</label>
+                                <select name="sex" class="form-select">
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="text-secondary small fw-bold mb-1 uppercase">Relationship</label>
+                            <input type="text" name="relationship" class="form-control" placeholder="e.g. Son, Daughter, Parent" required>
+                        </div>
+
+                        <div class="mb-3 border-top border-secondary pt-3 mt-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="text-secondary small fw-bold uppercase">Home Address</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" name="inherit_address" id="useMyAddress" value="1" checked>
+                                    <label class="form-check-label text-neon fw-bold" style="font-size: 0.6rem;" for="useMyAddress">INHERIT MY ADDRESS</label>
+                                </div>
+                            </div>
+                            <textarea name="address" id="depAddressInput" class="form-control" rows="2" 
+                                    placeholder="Enter different address if needed" disabled></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-neon bg-dark">
+                        <button type="submit" class="btn-custom btn-neon w-100 py-3 fw-bold">SAVE TO FAMILY LIST</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         {{-- 3. DANGER ZONE --}}
         <div class="card p-4 border-danger shadow-sm mb-5 text-start">
             <h5 class="text-danger fw-bold mb-3 border-bottom border-danger pb-2 uppercase" style="letter-spacing: 1px;">Danger Zone</h5>
@@ -142,5 +227,17 @@
     
     // Eye toggle for Delete Modal (RED)
     setupPasswordToggle('#del_pass', '#toggleDelPass');
+
+    document.getElementById('useMyAddress').addEventListener('change', function() {
+            const input = document.getElementById('depAddressInput');
+            if (this.checked) {
+                input.disabled = true;
+                input.value = "";
+                input.placeholder = "Inheriting your address...";
+            } else {
+                input.disabled = false;
+                input.placeholder = "Enter specific address for this person";
+            }
+        });
 </script>
 @endpush
