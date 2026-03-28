@@ -528,9 +528,9 @@
                     </div>
                 </div>
 
-                {{-- FINAL RELEASE BUTTON: ONLY THIS SUBMITS --}}
+                {{-- FINAL RELEASE BUTTON ON BOTTOM --}}
                 <div class="mt-5 border-top border-secondary pt-4 text-center">
-                    <button type="submit" class="btn-custom btn-neon px-5 py-3 fs-5 shadow-lg">
+                    <button type="button" onclick="confirmRelease()" class="btn-custom btn-neon px-5 py-3 fs-5 shadow-lg">
                         <i class="bi bi-cloud-arrow-up-fill me-2"></i> RELEASE FINAL RESULTS
                     </button>
                 </div>
