@@ -7,19 +7,28 @@ use Illuminate\Database\Eloquent\Model;
 class Appointment extends Model
 {
     protected $fillable = [
-        'user_id', 'dependent_id',
-        'patient_name', 'patient_email', 'patient_phone', 'patient_sex', 'patient_birthdate', 
-        'organization_name', 'batch_id',          
-        'appointment_date', 'time_slot', 'patient_address',
-        'status', 'return_reason',
-        // NEW: Workflow Timestamps
-        'tested_at', 'result_estimated_at', 'results_released_at'
+        'user_id',
+        'dependent_id',
+        'organization_name',
+        'batch_id',
+        'appointment_date',
+        'time_slot',
+        'patient_name',      
+        'patient_email',     
+        'patient_phone',     
+        'patient_sex',       
+        'patient_birthdate', 
+        'patient_address',
+        'status',
+        'return_reason',
+        'tested_at',
+        'result_estimated_at',
+        'results_released_at'
     ];
 
     protected $casts = [
         'appointment_date' => 'date',
         'patient_birthdate' => 'date',
-        // Ensure these are treated as Carbon objects for diffForHumans()
         'tested_at' => 'datetime',
         'result_estimated_at' => 'datetime', 
         'results_released_at' => 'datetime',

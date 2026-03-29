@@ -5,9 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Appointment;
 use App\Models\AppointmentConfig;
 use App\Models\Service;
+use App\Models\User; 
+use App\Notifications\AppointmentNotification; 
 use App\Imports\BulkAppointmentImport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB; 
 use Maatwebsite\Excel\Facades\Excel;
 
 class BulkAppointmentController extends Controller
@@ -26,14 +29,12 @@ class BulkAppointmentController extends Controller
         ]);
 
         $dayNum = date('w', strtotime($request->appointment_date));
-        $config = \App\Models\AppointmentConfig::where('day_of_week', $dayNum)->first();
+        $config = AppointmentConfig::where('day_of_week', $dayNum)->first();
         $limit = $config->max_patients_per_slot ?? 1;
 
-        // 1. Group the submitted patients by time slot to check against limit
+        // 1. Capacity Check
         $submittedCounts = collect($request->patients)->groupBy('time_slot')->map->count();
-
         foreach ($submittedCounts as $slot => $count) {
-            // Check existing bookings in DB for this slot
             $existingCount = Appointment::where('appointment_date', $request->appointment_date)
                 ->where('time_slot', $slot)
                 ->whereIn('status', ['pending', 'approved'])
@@ -41,14 +42,14 @@ class BulkAppointmentController extends Controller
 
             if (($existingCount + $count) > $limit) {
                 $formattedTime = date('h:i A', strtotime($slot));
-                return back()->withInput()->withErrors(['error' => "The $formattedTime slot exceeds the clinic limit of $limit patients. Please re-run the Smart Scheduler."]);
+                return back()->withInput()->withErrors(['error' => "The $formattedTime slot exceeds the limit of $limit patients."]);
             }
         }
 
-        $batchId = \Illuminate\Support\Str::random(10);
+        $batchId = Str::random(10);
 
-        // 2. Process the saves
-        \DB::beginTransaction();
+        // 2. Database Transaction
+        DB::beginTransaction();
         try {
             foreach ($request->patients as $p) {
                 $appointment = Appointment::create([
@@ -59,34 +60,36 @@ class BulkAppointmentController extends Controller
                     'time_slot' => $p['time_slot'],
                     'patient_name' => $p['name'],
                     'patient_email' => $p['email'],
-                    'patient_phone' => $p['phone'],
+                    'patient_phone' => $p['phone'], 
                     'patient_sex' => $p['sex'],
                     'patient_birthdate' => $p['birthdate'],
                     'patient_address' => $p['address'],
                     'status' => 'pending'
                 ]);
                 
-                if (isset($p['service_ids']) && count($p['service_ids']) > 0) {
+                if (!empty($p['service_ids'])) {
                     $appointment->services()->attach($p['service_ids']);
                 }
             }
-            \DB::commit();
+
+            // 3. Notify Staff (Must happen inside the try block)
+            $staffMembers = User::whereIn('role', ['staff', 'admin'])->get();
+            foreach($staffMembers as $staff) {
+                $staff->notify(new AppointmentNotification([
+                    'title' => 'New Bulk Request',
+                    'message' => "{$request->organization_name} submitted " . count($request->patients) . " patients.",
+                    'url' => route('appointments.index'),
+                    'type' => 'info'
+                ]));
+            }
+
+            DB::commit();
             return redirect()->route('appointments.index')->with('success', 'Bulk appointments recorded successfully.');
 
         } catch (\Exception $e) {
-            \DB::rollback();
-            return back()->withInput()->withErrors(['error' => 'Database error: ' . $e->getMessage()]);
-        }
-
-        // Notify Staff of New Appointments
-        $staffMembers = User::whereIn('role', ['staff', 'admin'])->get();
-        foreach($staffMembers as $staff) {
-            $staff->notify(new AppointmentNotification([
-                'title' => 'New Bulk Appointment Request',
-                'message' => "A new bulk request has been submitted by " . auth()->user()->name,
-                'url' => route('appointments.index'),
-                'type' => 'info'
-            ]));
+            DB::rollback();
+            // This will force the error to appear on your screen
+            dd("DATABASE ERROR: " . $e->getMessage(), "LINE: " . $e->getLine()); 
         }
     }
 

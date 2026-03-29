@@ -165,6 +165,16 @@ let rowCount = 0;
 let activeRowIdx = null;
 let cachedConfigs = JSON.parse(document.getElementById('clinic-rules').dataset.configs);
 let cachedOccupancy = [];
+const masterOrg = document.getElementById('master_org');
+const masterDate = document.getElementById('master_date');
+
+function performGlobalSync() {
+    document.querySelectorAll('.sync-org').forEach(el => el.value = masterOrg.value);
+    document.querySelectorAll('.sync-date').forEach(el => el.value = masterDate.value);
+}
+
+masterOrg.addEventListener('input', performGlobalSync);
+masterDate.addEventListener('change', performGlobalSync);
 
 // Helper: Show custom modal
 function showAlert(msg) {
@@ -270,6 +280,8 @@ function addRow(patient = null) {
     // Automatically fetch slots for the new row
     const newTr = document.getElementById(`r_${rowCount}`);
     updateRowSlots(newTr.querySelector('.row-date-input'));
+
+    performGlobalSync(); 
     
     rowCount++;
 }
@@ -346,7 +358,7 @@ async function fetchOccupancy() {
 function updateRowSlots(input) {
     const td = input.closest('td');
     const select = td.querySelector('.t-select');
-    const selectedDate = input.value; // YYYY-MM-DD from input
+    const selectedDate = input.value; // Format: YYYY-MM-DD
 
     if (!selectedDate || !cachedConfigs) {
         select.innerHTML = '<option value="">Pick Date First</option>';
@@ -367,35 +379,27 @@ function updateRowSlots(input) {
     let availableCount = 0;
 
     while (start < end) {
-        // Precise Time String for Comparison
         const tStr = start.toTimeString().split(' ')[0]; // "08:00:00"
-        const displayTime = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
-        // A. Check Lunch
+        // CHECK LUNCH
         const isLunch = (parseInt(config.has_lunch_break) === 1 && tStr >= config.lunch_start && tStr < config.lunch_end);
         
-        // B. Check Database Occupancy (Strict Match)
-        const dbMatch = cachedOccupancy.find(o => 
-            o.appointment_date === selectedDate && o.time_slot === tStr
-        );
+        // CHECK DB OCCUPANCY
+        const dbMatch = (cachedOccupancy || []).find(o => o.appointment_date === selectedDate && o.time_slot === tStr);
         const isFull = dbMatch ? parseInt(dbMatch.patient_count) >= parseInt(config.max_patients_per_slot) : false;
 
-        // C. Logic: If NOT full and NOT lunch, add to dropdown
+        // ONLY ADD TO DROPDOWN IF NOT FULL AND NOT LUNCH
         if (!isLunch && !isFull) {
-            html += `<option value="${tStr}">${displayTime}</option>`;
+            let disp = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            html += `<option value="${tStr}">${disp}</option>`;
             availableCount++;
         }
         
         start.setMinutes(start.getMinutes() + parseInt(config.slot_duration));
     }
 
-    if (availableCount === 0) {
-        select.innerHTML = '<option value="">FULLY BOOKED</option>';
-        select.disabled = true;
-    } else {
-        select.innerHTML = html;
-        select.disabled = false;
-    }
+    select.innerHTML = (availableCount > 0) ? html : '<option value="">FULLY BOOKED</option>';
+    select.disabled = (availableCount === 0);
 }
 
 async function runSmartScheduler() {
@@ -404,10 +408,10 @@ async function runSmartScheduler() {
 
     const btn = document.getElementById('smartSchedBtn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>CALCULATING...';
+    btn.innerHTML = 'SCHEDULING...';
 
     try {
-        await fetchOccupancy(); 
+        await fetchOccupancy(); // Get latest data from database
         let localTracker = {}; 
         let currentPtrDate = new Date(mDateInput);
         const rows = document.querySelectorAll('#rowContainer tr');
@@ -418,8 +422,7 @@ async function runSmartScheduler() {
 
             while (!assigned && daySafety < 30) {
                 const dStr = currentPtrDate.toLocaleDateString('en-CA');
-                const dayNum = currentPtrDate.getDay();
-                const config = cachedConfigs[dayNum];
+                const config = cachedConfigs[currentPtrDate.getDay()];
 
                 if (!config || parseInt(config.is_open) === 0) {
                     currentPtrDate.setDate(currentPtrDate.getDate() + 1);
@@ -444,7 +447,7 @@ async function runSmartScheduler() {
                             const tSelect = tr.querySelector('.t-select');
 
                             dInput.value = dStr;
-                            updateRowSlots(dInput); 
+                            updateRowSlots(dInput); // Refill dropdown
                             tSelect.value = tStr;
 
                             localTracker[`${dStr}_${tStr}`] = localCount + 1;
@@ -539,15 +542,36 @@ function bulkCopy(sourceIdx, genderTarget) {
     // Optional: Visual feedback
     console.log(`Copied tests from row ${sourceIdx} to ${count} rows.`);
 }
+
+
+
 document.getElementById('master_date').addEventListener('change', async function() {
+    const selectedDate = this.value;
+    if(!selectedDate) return;
     await fetchOccupancy();
+
     document.querySelectorAll('.row-date-input').forEach(input => {
-        input.value = this.value;
-        input.min = this.value;
+        input.value = selectedDate;
+
+        input.min = selectedDate;
+        
         updateRowSlots(input);
     });
+
+    document.querySelectorAll('.sync-date').forEach(el => el.value = selectedDate);
+    
+    console.log("All rows synced to: " + selectedDate);
 });
-document.getElementById('master_org').addEventListener('input', e => document.querySelectorAll('.sync-org').forEach(el => el.value = e.target.value));
+
+document.getElementById('bulkForm').addEventListener('submit', function(e) {
+    performGlobalSync();
+
+    if (!masterDate.value) {
+        e.preventDefault();
+        showAlert("Please select an Appointment Date at the top first.");
+    }
+});
+
 window.onload = async () => {
     await fetchOccupancy();
     addRow(); 
