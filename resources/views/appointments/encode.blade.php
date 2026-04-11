@@ -337,7 +337,7 @@
                         </div>
 
                         {{-- FOOTER NOTICES --}}
-                        <div class="card p-3 bg-dark border-secondary border-opacity-50 small text-white-50 italic">
+                        <div class="card p-3 bg-dark border-secondary border-opacity-50 small text-white italic">
                             <p class="mb-1"><i class="bi bi-info-circle me-2"></i><strong>Reminder:</strong> Tests left blank or without recorded results are considered not performed or not requested by patient.</p>
                             <p class="mb-0"><i class="bi bi-info-circle me-2"></i><strong>Important Notice:</strong> This laboratory report is designed for interpretation by a qualified medical doctor.</p>
                         </div>

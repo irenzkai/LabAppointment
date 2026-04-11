@@ -35,6 +35,7 @@
             top: 0;
         }
         .text-neon { color: var(--neon) !important; }
+        .border-neon { border-color: var(--neon) !important; }
         .nav-logo { height: 42px; width: 42px; object-fit: cover; border-radius: 50%; }
 
         .dropdown-menu {
@@ -214,6 +215,136 @@
         .password-container input {
             padding-right: 45px !important;
         }
+
+        .welcome-img {
+            background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), url('images/fb_cover.jpg');
+            background-size: cover;
+            background-position: center;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* --- THEME TOGGLE & BACK TO TOP STYLING --- */
+        .floating-controls {
+            position: fixed;
+            bottom: 25px;
+            right: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 2000;
+        }
+
+        .btn-float {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: var(--neon);
+            color: #000 !important;
+            border: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-float:hover { transform: scale(1.1); background: #48d66e; }
+
+        /* Back to Top - Hidden by default */
+        #btn-back-to-top { display: none; background: #fff; border: 1px solid var(--neon); }
+
+        /* --- LIGHT MODE SPECIFIC OVERRIDES --- */
+        [data-bs-theme="light"] {
+            --dark-pure: #f8f9fa;
+            --dark-card: #ffffff;
+            --border-color: #dee2e6;
+        }
+        [data-bs-theme="light"] body { background-color: #f4f7f6; color: #1a1a1a; }
+        [data-bs-theme="light"] .welcome-img { background: linear-gradient(rgba(255,255,255,0.8), rgba(255,255,255,0.8)), url('images/fb_cover.jpg'); background-size: cover; background-position: center; position: absolute; top:0; left:0; width:100%; height:100%; z-index:1; }
+        [data-bs-theme="light"] .navbar { background-color: #ffffff !important; border-bottom: 1px solid #ddd; }
+        [data-bs-theme="light"] .navbar-brand span { color: #000 !important; }
+        [data-bs-theme="light"] .nav-pills .nav-link.active, [data-bs-theme="light"] .nav-pills .show > .nav-link { background-color: #1d7835 !important; color: #ffffff !important; }
+        [data-bs-theme="light"] .nav-pills .nav-link:hover:not(.active) { color: #1d7835 !important; background-color: rgba(46, 128, 67, 0.1); }
+        [data-bs-theme="light"] .text-white { color: #000 !important; }
+        [data-bs-theme="light"] .text-neon { color: #1d7835 !important; }
+        [data-bs-theme="light"] .text-secondary { color: #555 !important; }
+        [data-bs-theme="light"] .hover-neon:hover { color: #1d7835 !important; }
+        [data-bs-theme="light"] .btn-custom { border-color: #1d7835; }
+        [data-bs-theme="light"] .btn-neon { background-color: #1d7835; color: #fff !important; }
+        [data-bs-theme="light"] .btn-neon:hover { background-color: #166224; }
+        [data-bs-theme="light"] .btn-outline-neon { background: transparent; color: #1d7835 !important; }
+        [data-bs-theme="light"] .btn-outline-neon:hover { background: rgba(29, 120, 53, 0.1); }
+        [data-bs-theme="light"] .card { background-color: #fff; border-color: #ddd; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        [data-bs-theme="light"] .bg-black { background-color: #e9e9e9 !important; }
+        [data-bs-theme="light"] .bg-dark { background-color: #f0f0f0 !important; }
+        [data-bs-theme="light"] .border-secondary { border-color: #dcdcdc !important; }
+        [data-bs-theme="light"] .text-warning { color: #c69501 !important; }
+        [data-bs-theme="light"] .border-warning { border-color: #c69501 !important; }
+        [data-bs-theme="light"] .text-info { color: #17a2b8 !important; }
+        [data-bs-theme="light"] .border-info { border-color: #17a2b8 !important; }
+        [data-bs-theme="light"] .border-neon { border-color: #1d7835 !important; }
+        [data-bs-theme="light"] .table { color: #000; }
+        [data-bs-theme="light"] .form-control { background-color: #fff; border-color: #ccc; color: #000;}
+        [data-bs-theme="light"] .form-select { background-color: #fff; border-color: #ccc; color: #000;}
+        [data-bs-theme="light"] .accordion-button { background-color: #fff; color: #000; }
+        [data-bs-theme="light"] .accordion-item { background-color: #fff; border-color: #ddd; }
+        [data-bs-theme="light"] .card-body { background-color: #ffffff; }
+        [data-bs-theme="light"] .dropdown-menu { background-color: #fff; border-color: #ddd; }
+        [data-bs-theme="light"] .dropdown-menu-scrollable { scrollbar-color: #1d7835 #fff; }
+
+        [data-bs-theme="light"] .table-dark {
+            --bs-table-color: #1a1a1a;
+            --bs-table-bg: #ffffff;
+            --bs-table-border-color: #dee2e6;
+            --bs-table-striped-bg: #f8f9fa;
+            --bs-table-active-bg: #e9ecef;
+            --bs-table-hover-bg: #f1f3f5;
+            color: #1a1a1a !important;
+        }
+
+        [data-bs-theme="light"] thead.bg-black {
+            background-color: #f1f3f5 !important;
+            color: #444 !important;
+            border-bottom: 2px solid #ddd !important;
+        }
+
+        [data-bs-theme="light"] .table td, [data-bs-theme="light"] .table th {
+            border-color: #dee2e6 !important;
+        }
+
+        [data-bs-theme="light"] #rowContainer input, 
+        [data-bs-theme="light"] #rowContainer select, 
+        [data-bs-theme="light"] #rowContainer textarea {
+            background-color: #ffffff !important;
+            border: 1px solid #dee2e6 !important;
+            color: #1a1a1a !important;
+        }
+
+        [data-bs-theme="light"] #rowContainer .bg-black {
+            background-color: #f8f9fa !important;
+            border-color: #dee2e6 !important;
+        }
+
+        [data-bs-theme="light"] #rowContainer label {
+            font-weight: 600;
+            color: #000000 !important;
+        }
+
+        #patientTable {
+            table-layout: fixed;
+            width: 100%;
+        }
+
+        #patientTable th {
+            white-space: nowrap;
+        }
+
     </style>
 </head>
 <body>
@@ -236,7 +367,7 @@
                         <button class="btn-custom btn-outline-neon position-relative px-1 border-0 shadow-none" data-bs-toggle="dropdown">
                             <i class="bi bi-bell-fill fs-5 text-white"></i>
                             @if(auth()->user()->unreadNotifications->count() > 0)
-                                <span class="position-absolute bg-danger border border-black rounded-pill d-flex align-items-center justify-content-center" 
+                                <span class="position-absolute badge bg-danger border border-black rounded-pill d-flex align-items-center justify-content-center" 
                                     style="top: 2px; right: -2px; width: 14px; height: 14px; font-size: 0.55rem; font-weight: 800;">
                                     {{ auth()->user()->unreadNotifications->count() }}
                                 </span>
@@ -351,7 +482,64 @@
         @yield('content')
     </div>
 
+    <div class="floating-controls">
+        <!-- Go Back to Top -->
+        <button type="button" id="btn-back-to-top" class="btn-float" title="Back to Top">
+            <i class="bi bi-arrow-up-short fs-4"></i>
+        </button>
+
+        <!-- Theme Switcher -->
+        <button type="button" id="theme-toggle" class="btn-float" title="Switch Display Mode">
+            <i class="bi bi-sun-fill fs-5" id="theme-icon"></i>
+        </button>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // 1. THEME SWITCHER LOGIC
+        const themeToggle = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+        const htmlElement = document.documentElement;
+
+        // Load saved theme on refresh
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        htmlElement.setAttribute('data-bs-theme', savedTheme);
+        updateIcon(savedTheme);
+
+        themeToggle.addEventListener('click', () => {
+            let currentTheme = htmlElement.getAttribute('data-bs-theme');
+            let newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            htmlElement.setAttribute('data-bs-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateIcon(newTheme);
+        });
+
+        function updateIcon(theme) {
+            if (theme === 'light') {
+                themeIcon.className = 'bi bi-moon-stars-fill fs-5';
+            } else {
+                themeIcon.className = 'bi bi-sun-fill fs-5';
+            }
+        }
+
+        // 2. BACK TO TOP LOGIC
+        const backToTopBtn = document.getElementById("btn-back-to-top");
+
+        window.onscroll = function() {
+            if (document.body.scrollTop > 200 || document.documentElement.scrollTop > 200) {
+                backToTopBtn.style.display = "flex";
+            } else {
+                backToTopBtn.style.display = "none";
+            }
+        };
+
+        backToTopBtn.addEventListener("click", () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    </script>
+
     <script>
         // Password Eye Logic
         function setupPasswordToggle(inputId, toggleId) {

@@ -5,15 +5,15 @@
             $batchGrandTotal = $apps->sum(fn($a) => $a->totalPrice());
         @endphp
         
-        <div class="accordion-item border-info mb-4 bg-black rounded overflow-hidden shadow-lg" style="border-width: 1px;">
+        <div class="accordion-item border-info mb-1 bg-black rounded overflow-hidden shadow-lg" style="border-width: 1px;">
             <h2 class="accordion-header">
                 <button class="accordion-button collapsed bg-black text-white py-4 px-4 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#batch-{{ $batchId }}">
                     <div class="row w-100 align-items-center g-0">
                         <div class="col-md-5 text-start">
                             <div class="fw-bold text-white fs-5 uppercase">{{ $first->organization_name }}</div>
                             <div class="d-flex gap-3 mt-1">
-                                <small class="text-secondary fw-bold uppercase" style="font-size: 0.6rem;">Count: {{ $apps->count() }} patients</small>
-                                <small class="text-neon fw-bold uppercase" style="font-size: 0.7rem;">Batch Total: ₱{{ number_format($batchGrandTotal, 2) }}</small>
+                                <small class="text-secondary fw-bold uppercase" style="font-size: 0.8rem;">Count: {{ $apps->count() }} patients</small>
+                                <small class="text-neon fw-bold uppercase" style="font-size: 0.8rem;">Batch Total: ₱{{ number_format($batchGrandTotal, 2) }}</small>
                             </div>
                         </div>
                         <div class="col-md-4 text-center">
@@ -29,9 +29,9 @@
                 <div class="accordion-body bg-black border-top border-info p-0">
                     <div class="table-responsive">
                         <table class="table table-dark table-hover mb-0 align-middle">
-                            <thead class="bg-dark text-secondary small uppercase" style="font-size: 0.65rem; letter-spacing: 1px;">
+                            <thead class="bg-dark text-secondary small uppercase" style="font-size: 0.8rem; letter-spacing: 1px;">
                                 <tr>
-                                    <th class="ps-4 py-3">Patient Details</th>
+                                    <th class="ps-4">Patient Details</th>
                                     <th>Schedule</th>
                                     <th>Status</th>
                                     <th class="text-end">Patient Total</th>
@@ -43,14 +43,14 @@
                                 <tr class="border-secondary border-opacity-25">
                                     <td class="ps-4">
                                         <div class="fw-bold text-white">{{ strtoupper($app->patient_name) }}</div>
-                                        <div class="text-neon fw-bold" style="font-size: 0.65rem;">{{ strtoupper($app->patient_sex) }} | {{ $app->patient_age }} YRS OLD</div>
+                                        <div class="text-neon fw-bold" style="font-size: 0.8rem;">{{ strtoupper($app->patient_sex) }} | {{ $app->patient_age }} YRS OLD</div>
                                     </td>
                                     <td>
-                                        <div class="small text-white-50">{{ $app->appointment_date->format('M d, Y') }}</div>
+                                        <div class="small text-white">{{ $app->appointment_date->format('M d, Y') }}</div>
                                         <div class="text-neon small fw-bold">{{ date('h:i A', strtotime($app->time_slot)) }}</div>
                                     </td>
                                     <td>
-                                        <span class="badge border py-1 px-2 {{ $app->status == 'pending' ? 'text-warning border-warning' : ($app->status == 'approved' ? 'text-success border-success' : 'text-danger border-danger') }}" style="font-size: 0.6rem;">{{ strtoupper($app->status) }}</span>
+                                        <span class="badge border py-1 px-2 {{ $app->status == 'pending' ? 'text-warning border-warning' : ($app->status == 'approved' ? 'text-success border-success' : 'text-danger border-danger') }}" style="font-size: 0.8rem;">{{ strtoupper($app->status) }}</span>
                                     </td>
                                     <td class="text-end text-white fw-bold small">₱{{ number_format($app->totalPrice(), 2) }}</td>
                                     <td class="text-end pe-4">

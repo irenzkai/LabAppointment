@@ -7,7 +7,7 @@
         <p class="text-secondary small">Quality and affordable diagnostic solutions</p>
     </div>
     <div class="d-flex gap-2">
-        <a href="{{ route('appointments.bulk') }}" class="btn-custom btn-outline-neon text-info px-3">
+        <a href="{{ route('appointments.bulk') }}" class="btn-custom btn-outline-neon text-neon px-3">
             <i class="bi bi-people-fill me-2"></i> BULK BOOKING
         </a>
 
@@ -62,15 +62,15 @@
                             @elseif($service->gender_restriction == 'female')
                                 <span class="badge border border-pink text-pink smaller" style="color: #ff69b4; border-color: #ff69b4;"><i class="bi bi-gender-female me-1"></i>FEMALE ONLY</span>
                             @else
-                                <span class="badge border border-secondary text-secondary smaller">ALL GENDERS</span>
+                                <span class="badge border border-secondary text-white smaller">ALL GENDERS</span>
                             @endif
                         </div>
                         
-                        <p class="smaller text-secondary mb-4" style="min-height: 40px;">{{ $service->description }}</p>
+                        <p class="smaller text-white mb-4" style="min-height: 40px;">{{ $service->description }}</p>
                         
                         <div class="p-2 bg-black rounded border border-secondary mb-2">
                             <label class="text-neon fw-bold mb-1" style="font-size: 0.6rem; letter-spacing: 1px;">PREPARATION REQUIRED:</label>
-                            <p class="text-white-50 smaller mb-0">{{ $service->preparation }}</p>
+                            <p class="text-secondary smaller mb-0">{{ $service->preparation }}</p>
                         </div>
                     </div>
 

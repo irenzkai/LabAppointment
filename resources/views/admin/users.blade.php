@@ -11,7 +11,7 @@
                     <th class="px-4 py-3">NAME & CONTACT</th>
                     <th class="px-4 py-3">ROLE</th>
                     <th class="px-4 py-3">ACCOUNT DETAILS</th>
-                    <th class="px-4 py-3">ACTION</th>
+                    <th class="px-4 py-3 text-center">ACTION</th>
                 </tr>
             </thead>
             <tbody class="text-white">
@@ -28,24 +28,24 @@
                         </span>
                     </td>
                     <td>
-                        <div class="smaller text-white-50">
+                        <div class="smaller text-white">
                             {{ $user->sex }} | 
                             {{ $user->birthdate ? \Carbon\Carbon::parse($user->birthdate)->age : 'N/A' }} yrs old<br>
                             <span class="text-secondary">{{ $user->address }}</span>
                         </div>
                     </td>
-                    <td class="text-end px-4">
+                    <td class="text-center px-4">
                         @if($user->id !== Auth::id())
-                            <div class="d-flex justify-content-end gap-2">
+                            <div class="d-flex justify-content-center gap-2">
                                 @if($user->role == 'user')
                                     <form action="{{ url('admin/users/'.$user->id.'/staff') }}" method="POST">
                                         @csrf @method('PATCH')
-                                        <button type="submit" class="btn-custom btn-outline-neon text-info py-1 px-3" style="font-size: 0.65rem;">PROMOTE</button>
+                                        <button type="submit" class="btn-custom btn-outline-neon text-neon py-1 px-3" style="font-size: 0.65rem;">PROMOTE</button>
                                     </form>
                                 @elseif($user->role == 'staff')
                                     <form action="{{ url('admin/users/'.$user->id.'/user') }}" method="POST">
                                         @csrf @method('PATCH')
-                                        <button type="submit" class="btn-custom btn-outline-neon text-warning py-1 px-3" style="font-size: 0.65rem;">DEMOTE</button>
+                                        <button type="submit" class="btn-custom btn-outline-neon text-neon py-1 px-3" style="font-size: 0.65rem;">DEMOTE</button>
                                     </form>
                                 @endif
                                 

@@ -56,7 +56,7 @@
                     <h6 class="text-warning fw-bold mb-3 small uppercase">
                         <i class="bi bi-exclamation-triangle-fill me-2"></i>Preparation Checklist
                     </h6>
-                    <ul class="text-white-50 small mb-0 ps-3">
+                    <ul class="text-white small mb-0 ps-3">
                         @foreach($services as $item)
                             <li class="mb-2">
                                 <strong class="text-white">{{ strtoupper($item->name) }}:</strong> 
@@ -72,11 +72,11 @@
                 <div class="card p-4 shadow-lg sticky-top border-neon" style="top: 100px;">
                     <h5 class="text-white fw-bold mb-4 border-bottom border-secondary pb-2 uppercase small">Payment Summary</h5>
                     <div class="d-flex justify-content-between align-items-center mb-4">
-                        <span class="text-secondary small fw-bold">TOTAL AMOUNT</span>
+                        <span class="text-white small fw-bold">TOTAL AMOUNT</span>
                         <h3 class="text-neon fw-bold mb-0">₱{{ number_format($totalPrice, 2) }}</h3>
                     </div>
 
-                    <p class="smaller text-secondary mb-4 italic">Next step: Choose your appointment date and available time block.</p>
+                    <p class="smaller text-white mb-4 italic">Next step: Choose your appointment date and available time block.</p>
                     
                     <button class="btn-custom btn-neon w-100 py-3 fw-bold fs-6 mb-2" data-bs-toggle="modal" data-bs-target="#finalCheckoutModal">
                         PICK SCHEDULE

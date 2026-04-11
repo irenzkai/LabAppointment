@@ -23,7 +23,7 @@
                                 <small class="text-secondary">{{ $notif->created_at->diffForHumans() }}</small>
                             </div>
                             @if(!$notif->read_at)
-                                <span class="badge bg-neon text-black rounded-pill smaller fw-bold">NEW</span>
+                                <span class="badge bg-neon text-white rounded-pill smaller fw-bold">NEW</span>
                             @endif
                         </div>
                     </a>

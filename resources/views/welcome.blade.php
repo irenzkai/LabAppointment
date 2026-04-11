@@ -4,7 +4,7 @@
 <!-- Hero Section -->
 <div class="card p-0 mb-5 border-0 shadow-lg position-relative overflow-hidden" style="min-height: 400px; border-radius: 20px;">
     <!-- Background Image with Overlay -->
-    <div style="background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), url('images/fb_cover.jpg'); background-size: cover; background-position: center; position: absolute; top:0; left:0; width:100%; height:100%; z-index:1;"></div>
+    <div class="welcome-img"></div>
     
     <!-- Hero Content -->
     <div class="position-relative d-flex flex-column align-items-center justify-content-center text-center p-5 h-100" style="z-index: 2; min-height: 400px;">
@@ -45,7 +45,7 @@
                         <p class="text-white fw-bold mb-0 small">Download Mobile App</p>
                         <p class="text-secondary mb-0" style="font-size: 0.7rem;">Direct APK Installation</p>
                     </div>
-                    <a href="#" class="btn-custom btn-outline-neon btn-sm disabled opacity-50">STAY TUNED</a>
+                    <a href="#" class="btn-custom btn-outline-neon btn-sm">STAY TUNED</a>
                 </div>
             </div>
         </div>

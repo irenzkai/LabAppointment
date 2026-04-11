@@ -95,7 +95,7 @@
                         </div>
                     </div>
                     <div class="text-secondary smaller mt-2 italic">
-                        <i class="bi bi-info-circle me-1"></i> Leave blank to use the default 4-hour "Please wait" message.
+                        <i class="bi bi-info-circle me-1"></i> Leave blank to use the default "Please wait" message.
                     </div>
                 </div>
 

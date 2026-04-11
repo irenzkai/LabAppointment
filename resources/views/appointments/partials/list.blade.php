@@ -15,33 +15,33 @@
                     
                     {{-- Column 1: Patient / Entity Info --}}
                     <div class="col-md-4 text-start">
-                        <div class="fw-bold text-white small uppercase">
+                        <div class="fw-bold text-white uppercase">
                             {{ $isBulkBatch ? $first->organization_name : $first->patient_name }}
                         </div>
                         
                         @if(!$isBulkBatch)
-                            <div class="text-neon fw-bold" style="font-size: 0.65rem; letter-spacing: 0.5px;">
+                            <div class="text-neon fw-bold" style="font-size: 0.8rem; letter-spacing: 0.5px;">
                                 {{ strtoupper($first->patient_sex) }} | {{ $first->patient_age }} YRS OLD
                             </div>
                         @else
-                            <div class="text-secondary fw-bold" style="font-size: 0.65rem;">
+                            <div class="text-neon fw-bold" style="font-size: 0.8rem;">
                                 {{ $item->count() }} PATIENTS IN BATCH
                             </div>
                         @endif
 
                         @if(isset($is_staff) && $is_staff)
-                            <div class="mt-2" style="font-size: 0.65rem; opacity: 1; letter-spacing: 1px;">
-                                @if($first->batch_id) <span class="text-info border border-info px-1 rounded">BULK</span>
-                                @elseif($first->dependent_id) <span class="text-white border border-white px-1 rounded">FAMILY</span>
-                                @else <span class="text-neon border border-neon px-1 rounded">INDIVIDUAL</span> @endif
-                                <span class="ms-2 opacity-50 small text-white">REF: #{{ $first->id }}</span>
+                            <div class="mt-2" style="font-size: 0.8rem; opacity: 1; letter-spacing: 1px;">
+                                @if($first->batch_id) <span class="text-info border border-info px-2 rounded">BULK</span>
+                                @elseif($first->dependent_id) <span class="text-white border border-white px-2 rounded">FAMILY</span>
+                                @else <span class="text-neon border border-neon px-2 rounded">INDIVIDUAL</span> @endif
+                                <span class="ms-2 small text-white">REF: #{{ $first->id }}</span>
                             </div>
                         @endif
                     </div>
 
                     {{-- Column 2: Schedule --}}
                     <div class="col-md-4 text-center">
-                        <div class="small text-white-50">{{ $first->appointment_date->format('M d, Y') }}</div>
+                        <div class="small text-white">{{ $first->appointment_date->format('M d, Y') }}</div>
                         <div class="text-neon fw-bold small">
                             @if($isBulkBatch) <i class="bi bi-calendar-range me-1"></i> MULTIPLE SLOTS
                             @else <i class="bi bi-clock me-1"></i> {{ date('h:i A', strtotime($first->time_slot)) }} @endif
@@ -130,12 +130,13 @@
                 
                 @if($isBulkBatch)
                     {{-- BULK BATCH VIEW --}}
-                    <div class="table-responsive rounded border border-secondary">
+                    <div class="table-responsive rounded border border-secondary overflow-hidden">
                         <table class="table table-dark table-hover mb-0 align-middle">
                             <thead class="bg-black text-secondary small uppercase">
-                                <tr>
-                                    <th class="ps-3 py-3">Patient</th>
+                                <tr style="font-size: 0.8rem;">
+                                    <th class="ps-3">Patient Info</th>
                                     <th>Schedule</th>
+                                    <th style="width: 25%;">Tests and Payment</th>
                                     <th class="text-center">Status</th>
                                     <th class="text-end pe-3">Actions</th>
                                 </tr>
@@ -143,20 +144,43 @@
                             <tbody>
                                 @foreach($item as $subApp)
                                 <tr class="border-secondary border-opacity-25">
+                                    {{-- 1. Patient Details --}}
                                     <td class="ps-3 py-3">
                                         <div class="text-white fw-bold small">{{ strtoupper($subApp->patient_name) }}</div>
-                                        <div class="text-neon fw-bold" style="font-size: 0.6rem;">{{ strtoupper($subApp->patient_sex) }} | {{ $subApp->patient_age }} YRS</div>
+                                        <div class="text-neon fw-bold" style="font-size: 0.7rem;">
+                                            {{ strtoupper($subApp->patient_sex) }} | {{ $subApp->patient_age }} YRS OLD
+                                        </div>
                                     </td>
+
+                                    {{-- 2. Schedule (Date + Time) --}}
                                     <td>
-                                        <div class="text-white-50 small">{{ $subApp->appointment_date->format('M d') }}</div>
+                                        <div class="text-white small">{{ $subApp->appointment_date->format('M d, Y') }}</div>
                                         <div class="text-neon small fw-bold">{{ date('h:i A', strtotime($subApp->time_slot)) }}</div>
                                     </td>
+
+                                    {{-- 3. TESTS PER PATIENT --}}
+                                    <td>
+                                        <div class="text-white fw-bold" style="font-size: 0.7rem;">
+                                            @foreach($subApp->services as $service)
+                                                {{ ($service->name) }}{{ !$loop->last ? ',' : '' }}
+                                            @endforeach
+                                        </div>
+                                        <div class="text-neon fw-bold" style="font-size: 0.7rem;">
+                                            SUBTOTAL: ₱{{ number_format($subApp->totalPrice(), 2) }}
+                                        </div>
+                                    </td>
+
+                                    {{-- 4. Status --}}
                                     <td class="text-center">
-                                        <span class="badge border py-1 px-2 {{ $subApp->status == 'pending' ? 'text-warning border-warning' : ($subApp->status == 'approved' ? 'text-success border-success' : 'text-danger border-danger') }}" style="font-size: 0.55rem;">
+                                        <span class="badge border py-1 px-2 {{ $subApp->status == 'pending' ? 'text-warning border-warning' : ($subApp->status == 'approved' ? 'text-success border-success' : 'text-danger border-danger') }}" style="font-size: 0.7rem;">
                                             {{ strtoupper($subApp->status) }}
                                         </span>
                                     </td>
-                                    <td class="text-end pe-3">@include('appointments.partials.actions', ['app' => $subApp])</td>
+
+                                    {{-- 5. Actions --}}
+                                    <td class="text-end pe-3">
+                                        @include('appointments.partials.actions', ['app' => $subApp])
+                                    </td>
                                 </tr>
                                 @endforeach
                             </tbody>

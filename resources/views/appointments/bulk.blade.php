@@ -12,11 +12,11 @@
         <div class="card p-4 border-secondary mb-4 shadow-lg">
             <div class="row g-3">
                 <div class="col-md-7">
-                    <label class="text-secondary small fw-bold mb-1 uppercase">Organization / Company Name</label>
+                    <label class="text-white small fw-bold mb-1 uppercase">Organization / Company Name</label>
                     <input type="text" id="master_org" class="form-control border-neon py-3 fw-bold shadow-none" placeholder="Enter Requesting Entity...">
                 </div>
                 <div class="col-md-5">
-                    <label class="text-secondary small fw-bold mb-1 uppercase">Preferred Start Date</label>
+                    <label class="text-white small fw-bold mb-1 uppercase">Preferred Start Date</label>
                     <input type="date" id="master_date" class="form-control border-neon py-3 fw-bold shadow-none" min="{{ date('Y-m-d') }}">
                 </div>
             </div>
@@ -44,7 +44,7 @@
                             <table class="table table-dark align-top mb-0">
                                 <thead class="bg-black text-secondary uppercase small">
                                     <tr style="letter-spacing: 1px;">
-                                        <th class="ps-4 py-3" style="width: 350px;">Patient Info</th>
+                                        <th class="ps-4" style="width: 350px;">Patient Info</th>
                                         <th>Address</th>
                                         <th style="width: 200px;">Tests</th>
                                         <th style="width: 220px;">Schedule Slot</th>
@@ -59,7 +59,7 @@
                     <div class="d-flex justify-content-between align-items-center mt-4 flex-wrap gap-2">
                         <button type="button" class="btn-custom btn-outline-neon px-4" onclick="addRow()">+ ADD PATIENT</button>
                         <div class="d-flex gap-2">
-                            <button type="button" id="smartSchedBtn" class="btn-custom btn-outline-neon border-neon text-info px-4" onclick="runSmartScheduler()">
+                            <button type="button" id="smartSchedBtn" class="btn-custom btn-outline-neon border-neon text-neon px-4" onclick="runSmartScheduler()">
                                 <i class="bi bi-cpu me-1"></i> SMART AUTO-TIME
                             </button>
                             <button type="submit" class="btn-custom btn-neon px-5 py-3">SUBMIT BULK BOOKING</button>
@@ -75,13 +75,13 @@
                     <div class="col-md-5">
                         <div class="card p-4 h-100 border-secondary bg-black shadow-lg">
                             <h5 class="text-white fw-bold mb-3 small uppercase" style="letter-spacing: 1px;">DOWNLOAD TEMPLATE</h5>
-                            <p class="text-secondary smaller mb-4">Download the base file. Enter patient names, birthdates, and contact info, then save.</p>
+                            <p class="text-white smaller mb-4">Download the base file. Enter patient names, birthdates, and contact info, then save.</p>
                             
                             <div class="d-grid gap-2">
-                                <a href="{{ route('appointments.bulk.template', 'csv') }}" class="btn-custom btn-outline-neon border-neon text-info py-3 shadow-none">
+                                <a href="{{ route('appointments.bulk.template', 'csv') }}" class="btn-custom btn-outline-neon border-neon text-neon py-3 shadow-none">
                                     <i class="bi bi-filetype-csv me-2"></i> DOWNLOAD .CSV
                                 </a>
-                                <a href="{{ route('appointments.bulk.template', 'xlsx') }}" class="btn-custom btn-outline-neon border-neon text-info py-3 shadow-none">
+                                <a href="{{ route('appointments.bulk.template', 'xlsx') }}" class="btn-custom btn-outline-neon border-neon text-neon py-3 shadow-none">
                                     <i class="bi bi-filetype-xlsx me-2"></i> DOWNLOAD .XLSX
                                 </a>
                             </div>
@@ -242,7 +242,7 @@ function addRow(patient = null) {
                     </button>
 
                     <div class="dropdown">
-                        <button class="btn-custom btn-outline-neon border-neon text-info py-1 px-2" type="button" data-bs-toggle="dropdown">
+                        <button class="btn-custom btn-outline-neon border-neon text-neon py-1 px-2" type="button" data-bs-toggle="dropdown">
                             <i class="bi bi-copy"></i>
                         </button>
                         <ul class="dropdown-menu bg-black border-neon shadow-lg">
