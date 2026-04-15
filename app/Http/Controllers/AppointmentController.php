@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Notifications\AppointmentNotification;
 use App\Models\Appointment;
 use App\Models\Service;
@@ -13,6 +14,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -112,6 +114,9 @@ class AppointmentController extends Controller
 
         $appointment->services()->attach($request->service_ids);
         session()->forget('cart');
+
+        ActivityLog::record('BOOKED APPOINTMENT', 'New test request', $patientData['patient_name'], $appointment->id);
+
         return redirect()->route('appointments.index')->with('success', 'Appointment submitted!');
     }
 
@@ -135,6 +140,8 @@ class AppointmentController extends Controller
             'message' => "Your appointment for {$appointment->patient_name} has been marked as {$request->status}.",
             'type' => $request->status == 'approved' ? 'success' : 'danger'
         ]));
+
+        ActivityLog::record($request->status . ' APPOINTMENT', 'Status changed by staff', $appointment->patient_name, $appointment->id);
 
         return back()->with('success', 'Status updated to ' . strtoupper($request->status));
     }
@@ -163,6 +170,8 @@ class AppointmentController extends Controller
             'type' => 'info'
         ]));
 
+        ActivityLog::record('PATIENT TESTED', 'Sampling completed', $appointment->patient_name, $appointment->id);
+
         return back()->with('success', 'Patient marked as tested. Counter started.');
     }
 
@@ -171,11 +180,27 @@ class AppointmentController extends Controller
      */
     public function releaseResults(Request $request, Appointment $appointment) 
     {
-        // 1. Validation (Ensure at least one report is included)
-        if (!$request->has('included_reports')) {
-            return back()->withErrors(['error' => 'Please select at least one report to issue.']);
+        // 1. PRIVACY ENFORCEMENT
+        // Strictly block Admins from accessing this clinical logic
+        if (Auth::user()->role !== 'staff') {
+            abort(403, 'Administrative accounts are restricted from modifying clinical patient data.');
         }
 
+        // 2. CHECK IF MODIFICATION
+        $isEdit = $appointment->status === 'released';
+
+        // 3. VALIDATION
+        $request->validate([
+            'included_reports' => 'required|array',
+            'edit_reason' => $isEdit ? 'required|string|max:1000' : 'nullable', // Required only on edit
+            'lab_scan' => 'nullable|file|mimes:pdf,jpg,png|max:5120',
+            'med_cert_scan' => 'nullable|file|mimes:pdf,jpg,png|max:5120',
+            'drug_test_scan' => 'nullable|file|mimes:pdf,jpg,png|max:5120',
+            'radio_scan' => 'nullable|file|mimes:pdf,jpg,png|max:5120',
+            'xray_image' => 'nullable|image|max:10240',
+        ]);
+
+        // 4. HANDLE FILE UPLOADS
         $data = [];
         $files = ['lab_scan', 'med_cert_scan', 'drug_test_scan', 'radio_scan', 'xray_image'];
         
@@ -185,7 +210,7 @@ class AppointmentController extends Controller
             }
         }
 
-        // 2. Save clinical data
+        // 5. SAVE CLINICAL DATA
         $appointment->result()->updateOrCreate(
             ['appointment_id' => $appointment->id],
             array_merge($data, [
@@ -197,20 +222,32 @@ class AppointmentController extends Controller
             ])
         );
 
-        // 3. Update Status to RELEASED
+        // 6. UPDATE APPOINTMENT STATUS
         $appointment->update([
             'status' => 'released',
             'results_released_at' => now()
         ]);
 
-        // Notify Patient of Results
+        // 7. AUDIT LOGGING (For Admin oversight)
+        ActivityLog::create([
+            'user_id' => Auth::id(),
+            'appointment_id' => $appointment->id,
+            'patient_name' => $appointment->patient_name,
+            'action' => $isEdit ? 'Modified Results' : 'Released Results',
+            'reason' => $isEdit ? $request->edit_reason : 'Initial clinical release',
+        ]);
+
+        // 8. NOTIFY PATIENT
         $appointment->user->notify(new AppointmentNotification([
-            'title' => 'Results Released!',
-            'message' => "Medical reports for {$appointment->patient_name} are now available for download.",
-            'type' => 'success'
+            'title' => $isEdit ? 'Updated Results Released' : 'Results Released!',
+            'message' => "Medical reports for {$appointment->patient_name} have been published.",
+            'type' => 'success',
+            'url' => route('appointments.index')
         ]));
 
-        return redirect()->route('appointments.index')->with('success', 'Patient results have been released.');
+        ActivityLog::record('RELEASED RESULTS', ($isEdit ? 'Updated' : 'Initial') . ' release by staff', $appointment->patient_name, $appointment->id);
+
+        return redirect()->route('appointments.index')->with('success', 'Results ' . ($isEdit ? 'updated' : 'released') . ' and action logged.');
     }
 
     /**
@@ -259,8 +296,11 @@ class AppointmentController extends Controller
             ]));
         }
 
+        ActivityLog::record('RESUBMITTED', 'Patient corrected details', $appointment->patient_name, $appointment->id);
+
         return back()->with('success', 'Appointment resubmitted.');
     }
+
 
     /**
      * Show Encoding Form
@@ -271,7 +311,10 @@ class AppointmentController extends Controller
     }
 
     public function downloadResult(Appointment $appointment, $type)
-    {
+    {   
+        if (auth()->user()->role === 'admin') {
+            abort(403, 'Administrative accounts cannot download clinical records.');
+        }
         if ($appointment->status !== 'released') abort(403);
         
         $res = $appointment->result;
@@ -306,5 +349,71 @@ class AppointmentController extends Controller
         }
 
         return back()->with('error', 'Result file not available.');
+    }
+
+    // 1. Logic to show the file (Preview or Download)
+    public function accessResult(Appointment $appointment, $type, $mode)
+    {
+        // 1. HARD BLOCK ADMIN
+        if (auth()->user()->role === 'admin') {
+            abort(403, 'Administrators cannot view clinical data.');
+        }
+
+        // 2. ENFORCE AUDIT LOG HANDSHAKE
+        // Logic: If NOT the owner, check if they provided a reason via session
+        if (auth()->id() !== $appointment->user_id) {
+            if (!session()->has("access_granted_{$appointment->id}_{$type}")) {
+                return redirect()->route('appointments.index')->with('error', 'Authorization required to access patient data.');
+            }
+            // One-time use for staff: forget permission after serving
+            session()->forget("access_granted_{$appointment->id}_{$type}");
+        }
+
+        // 3. One-time use: Remove the permission immediately after serving the file
+        session()->forget("access_granted_{$appointment->id}_{$type}");
+
+        $res = $appointment->result;
+        $date = now()->format('Y-m-d');
+        $filename = "{$date}_" . Str::slug($appointment->patient_name) . "_{$type}";
+
+        // Handle File (Scan/Xray)
+        $fileMap = ['lab' => 'lab_scan', 'med_cert' => 'med_cert_scan', 'drug' => 'drug_test_scan', 'radio' => 'radio_scan', 'xray' => 'xray_image'];
+        $field = $fileMap[$type] ?? null;
+
+        if ($field && $res->$field) {
+            $path = storage_path('app/public/' . $res->$field);
+            return $mode === 'preview' ? response()->file($path) : response()->download($path);
+        }
+
+        // Handle System Generated PDF
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.report', ['app' => $appointment, 'res' => $res, 'type' => $type]);
+
+        ActivityLog::record('ACCESSED RESULT', strtoupper($mode) . " " . strtoupper($type) . " accessed", $appointment->patient_name, $appointment->id);
+        
+        return $mode === 'preview' ? $pdf->stream() : $pdf->download("{$filename}.pdf");
+    }
+
+    // 2. Logic to save the Reason and "Unlock" the result
+    public function logAccess(Request $request, Appointment $appointment)
+    {
+        $request->validate(['access_reason' => 'required|string|min:5', 'type' => 'required', 'mode' => 'required']);
+
+        // Log the action to the Audit Table
+        \App\Models\ActivityLog::create([
+            'user_id' => auth()->id(),
+            'appointment_id' => $appointment->id,
+            'patient_name' => $appointment->patient_name,
+            'action' => strtoupper($request->mode) . " (" . strtoupper($request->type) . ")",
+            'reason' => $request->access_reason,
+        ]);
+
+        // Grant permission for this specific file in this session
+        session()->put("access_granted_{$appointment->id}_{$request->type}", true);
+
+        return redirect()->route('appointments.result.access', [
+            'appointment' => $appointment->id,
+            'type' => $request->type,
+            'mode' => $request->mode
+        ]);
     }
 }

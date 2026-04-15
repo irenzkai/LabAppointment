@@ -186,6 +186,42 @@
     @endif
 @endforeach
 
+<div class="modal fade" id="accessReasonModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form id="accessReasonForm" method="POST" class="modal-content border-neon bg-black shadow-lg">
+            @csrf
+            <input type="hidden" name="type" id="access_type">
+            <input type="hidden" name="mode" id="access_mode">
+            
+            <div class="modal-header border-neon bg-dark py-3">
+                <h6 class="modal-title text-neon fw-bold uppercase">
+                    <i class="bi bi-shield-lock-fill me-2"></i> Access Authorization Required
+                </h6>
+            </div>
+            <div class="modal-body p-4 text-start">
+                <p class="text-white small mb-3">All access to medical data is recorded. Please provide a brief reason for accessing this file.</p>
+                <label class="text-secondary smaller fw-bold mb-2 uppercase">Reason for accessing records</label>
+                <textarea name="access_reason" class="form-control bg-dark border-secondary text-white shadow-none" rows="3" required 
+                          placeholder="e.g., Personal review, clinician consultation, encoding verification..."></textarea>
+            </div>
+            <div class="modal-footer border-neon bg-dark">
+                <button type="button" class="btn-custom btn-outline-neon border-0 text-white" data-bs-dismiss="modal">CANCEL</button>
+                <button type="submit" class="btn-custom btn-neon px-4 py-2">AUTHORIZE & VIEW</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function promptAccess(appId, type, mode) {
+        const form = document.getElementById('accessReasonForm');
+        form.action = `/appointments/${appId}/log-access`;
+        document.getElementById('access_type').value = type;
+        document.getElementById('access_mode').value = mode;
+        new bootstrap.Modal(document.getElementById('accessReasonModal')).show();
+    }
+</script>
+
 <style>
     .accordion-button::after { display: none; }
     .accordion-button:not(.collapsed) { background-color: #050505; color: var(--neon); }

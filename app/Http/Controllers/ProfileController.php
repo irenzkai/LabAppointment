@@ -43,6 +43,8 @@ class ProfileController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
+        ActivityLog::record('ACCOUNT DELETED', 'User voluntarily deleted their account', $user->name);
+
         return Redirect::to('/');
     }
 

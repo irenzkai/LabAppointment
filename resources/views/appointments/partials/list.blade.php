@@ -91,37 +91,68 @@
                 @endif
 
                 {{-- B. VIEW RESULTS BUTTON (If Released) --}}
-                @if($first->status == 'released' && $first->result)
+                @if($first->status == 'released' && (Auth::id() == $first->user_id || Auth::user()->isStaff()))
+                @php
+                    // Standardized Name Map
+                    $reportNames = [
+                        'lab'      => 'LABORATORY REPORT',
+                        'drug'     => 'DRUG TEST REPORT',
+                        'med_cert' => 'MEDICAL CERTIFICATE',
+                        'radio'    => 'RADIOLOGIC REPORT',
+                        'xray'     => 'X-RAY SCAN'
+                    ];
+                @endphp
+
                     <div class="dropdown w-100 mb-3">
                         <button class="btn-custom btn-neon w-100 py-3 fw-bold dropdown-toggle shadow" 
-                                type="button" 
-                                data-bs-toggle="dropdown" 
-                                {{-- ADD THIS: Prevents Popper from moving the menu --}}
-                                data-bs-display="static" 
-                                aria-expanded="false">
-                            <i class="bi bi-download me-2"></i> GET DIGITAL RESULTS
+                                type="button" data-bs-toggle="dropdown" data-bs-display="static">
+                            <i class="bi bi-shield-lock-fill me-2"></i> ACCESS MEDICAL RECORDS
                         </button>
                         
-                        <ul class="dropdown-menu bg-black border-neon w-100 dropdown-menu-scrollable shadow-lg">
-                            <li class="px-3 py-2 border-bottom border-secondary border-opacity-25 mb-2 bg-dark">
-                                <small class="text-white fw-bold uppercase" style="font-size: 1rem;">Available Documents:</small>
+                        <ul class="dropdown-menu bg-black border-neon w-100 dropdown-menu-scrollable shadow-lg p-0">
+                            <li class="px-3 py-2 border-bottom border-secondary border-opacity-25 bg-dark">
+                                <small class="text-neon fw-bold uppercase" style="font-size: 0.6rem; letter-spacing: 1px;">Clinical Documents Available</small>
                             </li>
 
+                            {{-- 1. LOOP THROUGH ENCODED REPORTS --}}
                             @foreach(($first->result->included_reports ?? []) as $report)
-                                <li>
-                                    <a class="dropdown-item text-white py-2 d-flex align-items-center" href="{{ route('appointments.download', [$first->id, $report]) }}">
-                                        <i class="bi bi-file-earmark-pdf-fill me-2 text-neon"></i> 
-                                        <span class="small fw-bold">DOWNLOAD {{ strtoupper(str_replace('_', ' ', $report)) }}</span>
-                                    </a>
+                                <li class="border-bottom border-secondary border-opacity-10">
+                                    <div class="d-flex justify-content-between align-items-center px-3 py-3">
+                                        <div class="text-start">
+                                            <span class="text-white fw-bold small uppercase">
+                                                {{ $reportNames[$report] ?? strtoupper($report) }}
+                                            </span>
+                                        </div>
+
+                                        <div class="d-flex gap-2">
+                                            {{-- LOGIC: If owner, show direct links. If staff, show modal triggers. --}}
+                                            @if(Auth::id() == $first->user_id)
+                                                <a href="{{ route('appointments.result.access', [$first->id, $report, 'preview']) }}" target="_blank" class="btn-custom btn-outline-neon py-1 px-3 fw-bold small">PREVIEW</a>
+                                                <a href="{{ route('appointments.result.access', [$first->id, $report, 'download']) }}" class="btn-custom btn-neon py-1 px-3 fw-bold small">DOWNLOAD</a>
+                                            @else
+                                                <button type="button" class="btn-custom btn-outline-neon py-1 px-3 fw-bold small" onclick="promptAccess('{{$first->id}}', '{{$report}}', 'preview')">PREVIEW</button>
+                                                <button type="button" class="btn-custom btn-neon py-1 px-3 fw-bold small" onclick="promptAccess('{{$first->id}}', '{{$report}}', 'download')">DOWNLOAD</button>
+                                            @endif
+                                        </div>
+                                    </div>
                                 </li>
                             @endforeach
-                            
+
+                            {{-- 2. X-RAY SCAN (IF EXISTS) --}}
                             @if($first->result->xray_image)
                                 <li>
-                                    <a class="dropdown-item text-white py-2 d-flex align-items-center" href="{{ route('appointments.download', [$first->id, 'xray']) }}">
-                                        <i class="bi bi-image-fill me-2 text-neon"></i> 
-                                        <span class="small fw-bold">DOWNLOAD X-RAY SCAN</span>
-                                    </a>
+                                    <div class="d-flex justify-content-between align-items-center px-3 py-3">
+                                        <div class="text-start text-white fw-bold small uppercase">X-RAY SCAN</div>
+                                        <div class="d-flex gap-2">
+                                            @if(Auth::id() == $first->user_id)
+                                                <a href="{{ route('appointments.result.access', [$first->id, 'xray', 'preview']) }}" target="_blank" class="btn-custom btn-outline-neon py-1 px-3 fw-bold small">PREVIEW</a>
+                                                <a href="{{ route('appointments.result.access', [$first->id, 'xray', 'download']) }}" class="btn-custom btn-neon py-1 px-3 fw-bold small">DOWNLOAD</a>
+                                            @else
+                                                <button type="button" class="btn-custom btn-outline-neon py-1 px-3 fw-bold small" onclick="promptAccess('{{$first->id}}', 'xray', 'preview')">PREVIEW</button>
+                                                <button type="button" class="btn-custom btn-neon py-1 px-3 fw-bold small" onclick="promptAccess('{{$first->id}}', 'xray', 'download')">DOWNLOAD</button>
+                                            @endif
+                                        </div>
+                                    </div>
                                 </li>
                             @endif
                         </ul>

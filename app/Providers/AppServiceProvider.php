@@ -30,6 +30,14 @@ class AppServiceProvider extends ServiceProvider
             return in_array($user->role, ['staff', 'admin']);
         });
 
+        Gate::define('access-clinical-data', function ($user) {
+            return $user->role === 'staff';
+        });
+
+        Gate::define('manage-accounts', function ($user) {
+            return $user->role === 'admin';
+        });
+
         if (config('app.env') === 'production') {
             URL::forceScheme('https');
         }

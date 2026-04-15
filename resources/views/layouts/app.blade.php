@@ -228,6 +228,29 @@
             z-index: 1;
         }
 
+        #rowContainer tr {
+            transition: border-color 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+
+        /* FORCE HIDE the default Bootstrap accordion arrow */
+        .accordion-button::after {
+            display: none !important;
+            content: none !important;
+            background-image: none !important;
+        }
+
+        /* Optional: Rotate your manual icon when expanded */
+        .accordion-button:not(.collapsed) i.bi-chevron-down {
+            transform: rotate(180deg);
+            transition: 0.3s;
+            color: var(--black) !important;
+        }
+
+        .accordion-button i.bi-chevron-down {
+            transition: 0.3s;
+        }
+
         /* --- THEME TOGGLE & BACK TO TOP STYLING --- */
         .floating-controls {
             position: fixed;
@@ -289,12 +312,14 @@
         [data-bs-theme="light"] .text-info { color: #17a2b8 !important; }
         [data-bs-theme="light"] .border-info { border-color: #17a2b8 !important; }
         [data-bs-theme="light"] .border-neon { border-color: #1d7835 !important; }
+        [data-bs-theme="light"] .shadow-neon { box-shadow: 0 0 10px #1d7835 !important;;}
         [data-bs-theme="light"] .table { color: #000; }
         [data-bs-theme="light"] .form-control { background-color: #fff; border-color: #ccc; color: #000;}
         [data-bs-theme="light"] .form-select { background-color: #fff; border-color: #ccc; color: #000;}
         [data-bs-theme="light"] .accordion-button { background-color: #fff; color: #000; }
         [data-bs-theme="light"] .accordion-item { background-color: #fff; border-color: #ddd; }
-        [data-bs-theme="light"] .card-body { background-color: #ffffff; }
+        [data-bs-theme="light"] .card-body { background-color: #f1f1f1; }
+        [data-bs-theme="light"] .card-footer { background-color: #f1f1f1; }
         [data-bs-theme="light"] .dropdown-menu { background-color: #fff; border-color: #ddd; }
         [data-bs-theme="light"] .dropdown-menu-scrollable { scrollbar-color: #1d7835 #fff; }
 
@@ -315,6 +340,7 @@
         }
 
         [data-bs-theme="light"] .table td, [data-bs-theme="light"] .table th {
+            color: #1a1a1a !important;
             border-color: #dee2e6 !important;
         }
 
@@ -424,13 +450,21 @@
                             </a></li>
                             <li><a class="dropdown-item text-white" href="{{ route('profile.edit') }}"><i class="bi bi-gear-fill me-2"></i> ACCOUNT SETTINGS</a></li>
                             
-                            @can('isAdmin')
-                                <li><a class="dropdown-item text-neon" href="{{ url('/admin/users') }}"><i class="bi bi-people-fill me-2"></i> MANAGE USERS</a></li>
-                            @endcan
+                            @if(Auth::user()->role !== 'user')
+                                <li><a class="dropdown-item text-neon" href="{{ route('admin.users.index') }}">
+                                    <i class="bi bi-people-fill me-2"></i> MANAGE USERS
+                                </a></li>
+                            @endif
 
                             @can('isStaff')
                                 <li><a class="dropdown-item text-neon" href="{{ route('admin.appointment-settings') }}">
                                     <i class="bi bi-calendar-range me-2"></i> APPOINTMENT SETTINGS
+                                </a></li>
+                            @endcan
+
+                            @can('isAdmin')
+                                <li><a class="dropdown-item text-danger" href="{{ route('admin.logs') }}">
+                                    <i class="bi bi-shield-lock-fill me-2"></i> SYSTEM LOGS
                                 </a></li>
                             @endcan
 
@@ -538,9 +572,7 @@
         backToTopBtn.addEventListener("click", () => {
             window.scrollTo({ top: 0, behavior: 'smooth' });
         });
-    </script>
-
-    <script>
+        
         // Password Eye Logic
         function setupPasswordToggle(inputId, toggleId) {
             const toggle = document.querySelector(toggleId);
@@ -554,6 +586,39 @@
                 });
             }
         }
+
+        // Function to convert UTC timestamps to local device time
+        function convertTimestamps() {
+            document.querySelectorAll('.local-time-trigger').forEach(el => {
+                const utcStr = el.dataset.utc;
+                if (!utcStr) return;
+
+                const dateObj = new Date(utcStr);
+                
+                // Format the Date (e.g., Apr 15, 2026)
+                const localDate = dateObj.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: '2-digit',
+                    year: 'numeric'
+                });
+
+                // Format the Time (e.g., 04:49 PM)
+                const localTime = dateObj.toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                });
+
+                // Inject the converted time back into the HTML
+                el.innerHTML = `
+                    <div class="text-white small fw-bold">${localDate}</div>
+                    <div class="text-white" style="font-size: 0.8rem;">${localTime}</div>
+                `;
+            });
+        }
+
+        // Run the conversion when the page loads
+        document.addEventListener('DOMContentLoaded', convertTimestamps);
     </script>
     @stack('scripts')
 </body>

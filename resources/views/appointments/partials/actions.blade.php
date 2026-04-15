@@ -49,8 +49,8 @@
             </div>
         @endif
 
-        {{-- STEP D: RELEASED -> VIEW/RE-EDIT --}}
-        @if($app->status == 'released')
+        {{-- STEP D: RELEASED -> VIEW/RE-EDIT | FOR STAFF ONLY --}}
+        @if($app->status == 'released' && Auth::user()->isStaff())
             <div class="d-flex gap-2">
                 <a href="#" class="btn-custom btn-outline-neon flex-grow-1 py-2 text-center text-decoration-none small fw-bold">
                     <i class="bi bi-file-earmark-pdf me-1"></i> VIEW REPORT

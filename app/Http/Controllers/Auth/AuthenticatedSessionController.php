@@ -26,9 +26,13 @@ class AuthenticatedSessionController extends Controller
     {
         $request->authenticate();
 
-        $request->session()->regenerate();
+        if (!Auth::user()->is_active) {
+            Auth::logout();
+            return back()->withErrors(['email' => 'This account has been disabled by the administrator.']);
+        }
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        $request->session()->regenerate();
+        return redirect()->intended(route('dashboard'));
     }
 
     /**

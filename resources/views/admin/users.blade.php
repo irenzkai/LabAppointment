@@ -1,60 +1,66 @@
 @extends('layouts.app')
 
 @section('content')
-<h3 class="text-neon fw-bold mb-4 uppercase" style="letter-spacing: 2px;">USER MANAGEMENT</h3>
+<h2 class="text-neon fw-bold mb-4 uppercase">USER MANAGEMENT</h2>
 
-<div class="card p-0 border-0 shadow-lg overflow-hidden">
+<div class="card p-0 border-secondary overflow-hidden shadow-lg">
     <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="bg-black text-secondary smaller fw-bold">
+        <table class="table table-dark table-hover align-middle mb-0">
+            <thead class="bg-black text-secondary small uppercase">
                 <tr>
-                    <th class="px-4 py-3">NAME & CONTACT</th>
-                    <th class="px-4 py-3">ROLE</th>
-                    <th class="px-4 py-3">ACCOUNT DETAILS</th>
-                    <th class="px-4 py-3 text-center">ACTION</th>
+                    <th class="ps-4">USER PROFILE</th>
+                    <th>ROLE</th>
+                    <th>ACCOUNT STATUS</th>
+                    <th class="text-end pe-4">ACTIONS</th>
                 </tr>
             </thead>
-            <tbody class="text-white">
+            <tbody>
                 @foreach($users as $user)
-                <tr style="border-bottom: 1px solid var(--border-color); background-color: var(--card);">
-                    <td class="px-4 py-3">
-                        <div class="fw-bold text-white small">{{ strtoupper($user->name) }}</div>
-                        <div class="text-secondary smaller fw-bold">{{ $user->email }}</div>
-                        <div class="text-neon smaller fw-bold">{{ $user->phone }}</div>
+                <tr class="border-secondary">
+                    <td class="ps-4">
+                        <div class="text-white fw-bold">{{ strtoupper($user->name) }}</div>
+                        <div class="text-secondary small">{{ $user->email }}</div>
                     </td>
                     <td>
-                        <span class="badge border py-2 px-3 {{ $user->role == 'admin' ? 'text-danger border-danger' : ($user->role == 'staff' ? 'text-info border-info' : 'text-secondary border-secondary') }}">
+                        <span class="badge border {{ $user->role == 'staff' || $user->role == 'admin' ? 'border-info text-info' : 'border-neon text-neon' }} fw-bold small uppercase px-2 py-1">
                             {{ strtoupper($user->role) }}
                         </span>
                     </td>
                     <td>
-                        <div class="smaller text-white">
-                            {{ $user->sex }} | 
-                            {{ $user->birthdate ? \Carbon\Carbon::parse($user->birthdate)->age : 'N/A' }} yrs old<br>
-                            <span class="text-secondary">{{ $user->address }}</span>
-                        </div>
+                        <span class="text-{{ $user->is_active ? 'neon' : 'danger' }} fw-bold small">
+                            ● {{ $user->is_active ? 'ACTIVE' : 'DISABLED' }}
+                        </span>
                     </td>
-                    <td class="text-center px-4">
-                        @if($user->id !== Auth::id())
-                            <div class="d-flex justify-content-center gap-2">
-                                @if($user->role == 'user')
-                                    <form action="{{ url('admin/users/'.$user->id.'/staff') }}" method="POST">
-                                        @csrf @method('PATCH')
-                                        <button type="submit" class="btn-custom btn-outline-neon text-neon py-1 px-3" style="font-size: 0.65rem;">PROMOTE</button>
-                                    </form>
-                                @elseif($user->role == 'staff')
-                                    <form action="{{ url('admin/users/'.$user->id.'/user') }}" method="POST">
-                                        @csrf @method('PATCH')
-                                        <button type="submit" class="btn-custom btn-outline-neon text-neon py-1 px-3" style="font-size: 0.65rem;">DEMOTE</button>
-                                    </form>
+                    <td class="text-end pe-4">
+                        {{-- STAFF ACTION --}}
+                        @if(Auth::user()->role === 'staff')
+                            <a href="{{ route('admin.patient-history', $user->id) }}" class="btn-custom btn-neon btn-sm px-3">VIEW RECORDS</a>
+                        @endif
+
+                        {{-- ADMIN ACTIONS --}}
+                        @if(Auth::user()->role === 'admin')
+                            <div class="btn-group">
+                                {{-- Promote/Demote --}}
+                                <form action="{{ url('admin/users/'.$user->id.'/'.($user->role == 'user' ? 'staff' : 'user')) }}" method="POST">
+                                    @csrf @method('PATCH')
+                                    <button type="submit" class="btn btn-sm btn-outline-info text-info small px-2 fw-bold">CHANGE ROLE</button>
+                                </form>
+
+                                {{-- Disable/Enable --}}
+                                <form action="{{ route('admin.users.toggle', $user->id) }}" method="POST" class="ms-1">
+                                    @csrf @method('PATCH')
+                                    <button type="submit" class="btn btn-sm {{ $user->is_active ? 'btn-outline-danger' : 'btn-outline-success' }} px-2 fw-bold">
+                                        {{ $user->is_active ? 'DISABLE' : 'ENABLE' }}
+                                    </button>
+                                </form>
+
+                                {{-- Permanent Delete (Only if disabled) --}}
+                                @if(!$user->is_active)
+                                    <button class="btn btn-sm btn-danger-custom ms-1" data-bs-toggle="modal" data-bs-target="#delModal{{$user->id}}">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
                                 @endif
-                                
-                                <button class="btn-custom btn-danger-custom py-1 px-2" data-bs-toggle="modal" data-bs-target="#delUser{{$user->id}}">
-                                    <i class="bi bi-trash"></i>
-                                </button>
                             </div>
-                        @else
-                            <span class="text-secondary smaller italic">CURRENT ADMIN</span>
                         @endif
                     </td>
                 </tr>
@@ -64,23 +70,23 @@
     </div>
 </div>
 
-{{-- MODALS SECTION --}}
+{{-- DELETE MODALS --}}
 @foreach($users as $user)
-    @if($user->id !== Auth::id())
-    <div class="modal fade" id="delUser{{$user->id}}" aria-hidden="true">
-        <div class="modal-dialog modal-sm modal-dialog-centered">
-            <div class="modal-content border-danger bg-black p-4 text-center shadow-lg">
-                <i class="bi bi-person-x text-danger fs-1 mb-2"></i>
-                <h6 class="text-white fw-bold uppercase">Delete Account?</h6>
-                <p class="text-secondary smaller">This will permanently remove <strong>{{ $user->name }}</strong> and all their appointments.</p>
-                <div class="d-flex gap-2 mt-3">
-                    <button class="btn-custom btn-outline-neon flex-grow-1" data-bs-dismiss="modal">CANCEL</button>
-                    <form action="{{ url('admin/users/'.$user->id) }}" method="POST" class="flex-grow-1">
-                        @csrf @method('DELETE')
-                        <button type="submit" class="btn-custom btn-danger-custom w-100">DELETE</button>
-                    </form>
+    @if(!$user->is_active)
+    <div class="modal fade" id="delModal{{$user->id}}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <form action="{{ route('admin.users.destroy', $user->id) }}" method="POST" class="modal-content border-danger bg-black">
+                @csrf @method('DELETE')
+                <div class="modal-header border-danger bg-dark"><h6 class="modal-title text-danger fw-bold">PERMANENT DELETION</h6></div>
+                <div class="modal-body p-4 text-start">
+                    <p class="text-white small">Deleting <strong>{{ $user->name }}</strong> is permanent. Please provide a reason for the audit log.</p>
+                    <label class="text-secondary smaller fw-bold uppercase">Reason for deletion</label>
+                    <textarea name="reason" class="form-control" rows="3" required></textarea>
                 </div>
-            </div>
+                <div class="modal-footer border-danger bg-dark">
+                    <button type="submit" class="btn-danger-custom w-100 py-2">PURGE ACCOUNT</button>
+                </div>
+            </form>
         </div>
     </div>
     @endif

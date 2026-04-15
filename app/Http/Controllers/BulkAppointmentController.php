@@ -23,9 +23,16 @@ class BulkAppointmentController extends Controller
 
     public function storeManual(Request $request) {
         $request->validate([
-            'organization_name' => 'required|string',
+            'organization_name' => 'required|string|max:255',
             'appointment_date' => 'required|date',
-            'patients' => 'required|array',
+            'patients' => 'required|array|min:1',
+            'patients.*.name' => 'required|string',
+            'patients.*.time_slot' => 'required',
+            // Every patient must have a non-empty array of service IDs
+            'patients.*.service_ids' => 'required|array|min:1',
+        ], [
+            // Custom error message for the user
+            'patients.*.service_ids.required' => 'One or more patients are missing test selections.',
         ]);
 
         $dayNum = date('w', strtotime($request->appointment_date));

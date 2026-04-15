@@ -564,11 +564,34 @@ document.getElementById('master_date').addEventListener('change', async function
 });
 
 document.getElementById('bulkForm').addEventListener('submit', function(e) {
-    performGlobalSync();
+    const org = document.getElementById('master_org').value;
+    const date = document.getElementById('master_date').value;
+    const rows = document.querySelectorAll('#rowContainer tr');
+    let missingTests = false;
 
-    if (!masterDate.value) {
+    // 1. Check Master Fields
+    if(!org || !date) {
         e.preventDefault();
-        showAlert("Please select an Appointment Date at the top first.");
+        showAlert("Organization name and Start Date are required.");
+        return;
+    }
+
+    // 2. Check Every Patient Row for Tests
+    rows.forEach((tr, index) => {
+        const testInputs = tr.querySelectorAll('input[name*="[service_ids]"]');
+        const patientName = tr.querySelector('input[name*="[name]"]').value || `Patient in Row ${index + 1}`;
+        
+        if (testInputs.length === 0) {
+            missingTests = true;
+            tr.style.borderColor = "#ff4d4d"; // Highlight the problematic row
+        } else {
+            tr.style.borderColor = "var(--border-color)";
+        }
+    });
+
+    if (missingTests) {
+        e.preventDefault();
+        showAlert("Every patient in the list must have at least one test selected.");
     }
 });
 

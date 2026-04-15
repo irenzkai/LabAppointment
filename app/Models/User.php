@@ -42,7 +42,7 @@ class User extends Authenticatable
 
     public function isStaff()
     {
-        return in_array($this->role, ['staff', 'admin']);
+        return in_array($this->role, ['staff']);
     }
 
     public function dependents() {

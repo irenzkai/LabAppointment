@@ -74,7 +74,7 @@
                         </div>
                     </div>
 
-                    <div class="card-footer bg-transparent border-0 pb-4 px-3">
+                    <div class="card-footer border-0 pb-4 px-3">
                         @auth
                             @if(Auth::user()->role == 'user')
                                 @php 

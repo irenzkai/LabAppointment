@@ -137,7 +137,7 @@
         <!-- Popular Tests Row -->
         @if($popularServices->count() > 0)
         <div class="col-12 mt-4">
-            <h6 class="text-secondary fw-bold uppercase mb-3 small" style="letter-spacing: 1px;">Recommended For You</h6>
+            <h6 class="text-secondary fw-bold uppercase mb-3" style="letter-spacing: 1px;">Recommended For You</h6>
             <div class="row g-3">
                 @foreach($popularServices as $popular)
                     <div class="col-md-4">
