@@ -322,6 +322,7 @@
         [data-bs-theme="light"] .card-footer { background-color: #f1f1f1; }
         [data-bs-theme="light"] .dropdown-menu { background-color: #fff; border-color: #ddd; }
         [data-bs-theme="light"] .dropdown-menu-scrollable { scrollbar-color: #1d7835 #fff; }
+        [data-bs-theme="light"] .dropdown-item:hover { color: #000 !important; }
 
         [data-bs-theme="light"] .table-dark {
             --bs-table-color: #1a1a1a;
