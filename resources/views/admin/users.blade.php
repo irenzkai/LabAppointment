@@ -22,7 +22,7 @@
                         <div class="text-secondary small">{{ $user->email }}</div>
                     </td>
                     <td>
-                        <span class="badge border {{ $user->role == 'staff' || $user->role == 'admin' ? 'border-info text-info' : 'border-neon text-neon' }} fw-bold small uppercase px-2 py-1">
+                        <span class="badge border {{ $user->role == 'staff' ? 'border-info text-info' : 'border-neon text-neon' }} fw-bold small uppercase px-2 py-1">
                             {{ strtoupper($user->role) }}
                         </span>
                     </td>
@@ -32,9 +32,12 @@
                         </span>
                     </td>
                     <td class="text-end pe-4">
-                        {{-- STAFF ACTION --}}
-                        @if(Auth::user()->role === 'staff')
-                            <a href="{{ route('admin.patient-history', $user->id) }}" class="btn-custom btn-neon btn-sm px-3">VIEW RECORDS</a>
+                        {{-- EMPLOYEE ACTION --}}
+                        @if(Auth::user()->isEmployee()) 
+                            <button type="button" class="btn-custom btn-neon btn-sm px-3" 
+                                    onclick="promptAccess('{{$user->id}}', 'all', 'history', true)">
+                                VIEW RECORDS
+                            </button>
                         @endif
 
                         {{-- ADMIN ACTIONS --}}

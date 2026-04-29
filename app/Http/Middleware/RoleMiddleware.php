@@ -10,9 +10,9 @@ class RoleMiddleware
 {
     public function handle(Request $request, Closure $next, ...$roles)
     {
-        // If not logged in or role is not in the allowed list
+        // If user is not logged in OR their role is NOT in the list provided in web.php
         if (!Auth::check() || !in_array(Auth::user()->role, $roles)) {
-            abort(403, 'Unauthorized action.');
+            abort(403, 'Access Denied: Your role does not have permission for this area.');
         }
 
         return $next($request);

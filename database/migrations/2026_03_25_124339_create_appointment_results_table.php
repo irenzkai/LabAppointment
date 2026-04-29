@@ -26,6 +26,21 @@ return new class extends Migration
             $table->string('drug_test_scan')->nullable();
             $table->string('radio_scan')->nullable();
             $table->string('xray_image')->nullable();
+            // Lab requires double verification
+            $table->foreignId('lab_v1_by')->nullable()->constrained('users');
+            $table->timestamp('lab_v1_at')->nullable();
+            $table->foreignId('lab_v2_by')->nullable()->constrained('users');
+            $table->timestamp('lab_v2_at')->nullable();
+
+            // Others require single verification
+            $table->foreignId('med_verified_by')->nullable()->constrained('users');
+            $table->timestamp('med_verified_at')->nullable();
+            
+            $table->foreignId('drug_verified_by')->nullable()->constrained('users');
+            $table->timestamp('drug_verified_at')->nullable();
+            
+            $table->foreignId('radio_verified_by')->nullable()->constrained('users');
+            $table->timestamp('radio_verified_at')->nullable();
             $table->timestamps();
         });
     }

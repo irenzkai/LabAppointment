@@ -529,6 +529,32 @@
         </button>
     </div>
 
+    <!-- GLOBAL ACCESS REASON MODAL -->
+    <div class="modal fade" id="accessReasonModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form id="accessReasonForm" method="POST" class="modal-content border-neon bg-black shadow-lg">
+                @csrf
+                <input type="hidden" name="type" id="access_type">
+                <input type="hidden" name="mode" id="access_mode">
+                <input type="hidden" name="target_user_id" id="target_user_id">
+                
+                <div class="modal-header border-neon bg-dark py-3">
+                    <h6 class="modal-title text-neon fw-bold uppercase">
+                        <i class="bi bi-shield-lock-fill me-2"></i> Clinical Access Authorization
+                    </h6>
+                </div>
+                <div class="modal-body p-4 text-start">
+                    <p class="text-white small mb-3">All access to patient records is logged. Please provide your reason for accessing this data.</p>
+                    <label class="text-secondary smaller fw-bold mb-2 uppercase">Reason for access</label>
+                    <textarea name="access_reason" class="form-control bg-dark border-secondary text-white shadow-none" rows="3" required placeholder="e.g., Clinical audit, results verification..."></textarea>
+                </div>
+                <div class="modal-footer border-neon bg-dark p-0">
+                    <button type="submit" class="btn-custom btn-neon w-100 py-3 fw-bold">AUTHORIZE & PROCEED</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
@@ -617,6 +643,29 @@
                 `;
             });
         }
+
+    function promptAccess(id, type, mode, isHistory = false) {
+        const form = document.getElementById('accessReasonForm');
+        
+        // THE URLS BELOW MUST MATCH YOUR web.php STRINGS EXACTLY
+        if (isHistory) {
+            // Points to: Route::post('/internal/archive-log-access', ...)
+            form.action = '/internal/archive-log-access'; 
+            document.getElementById('target_user_id').value = id;
+        } else {
+            // Points to: Route::post('/internal/appointment-log-access/{appointment}', ...)
+            form.action = '/internal/appointment-log-access/' + id;
+            document.getElementById('target_user_id').value = '';
+        }
+        
+        document.getElementById('access_type').value = type;
+        document.getElementById('access_mode').value = mode;
+        
+        // Clear old text and show modal
+        form.querySelector('textarea').value = '';
+        const accessModal = new bootstrap.Modal(document.getElementById('accessReasonModal'));
+        accessModal.show();
+    }
 
         // Run the conversion when the page loads
         document.addEventListener('DOMContentLoaded', convertTimestamps);

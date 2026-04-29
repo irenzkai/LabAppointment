@@ -46,7 +46,7 @@ class RegisteredUserController extends Controller
         event(new Registered($user));
         Auth::login($user);
 
-        ActivityLog::record('ACCOUNT REGISTERED', 'New user joined the system', $user->name);
+        ActivityLog::record('USER REGISTERED', 'New user registration', $user->name);
 
         return redirect(route('dashboard', absolute: false));
     }

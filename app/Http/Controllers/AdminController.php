@@ -81,23 +81,38 @@ class AdminController extends Controller
     }
 
     /**
-     * STAFF ONLY: View Patient Medical History
+     * View Patient Medical History
      */
     public function patientHistory(User $user) {
-        // HIPAA Check: Only staff (not admin) can see this content
-        if (Auth::user()->role !== 'staff') {
-            abort(403, 'Administrators are restricted from viewing clinical patient history.');
+        // 1. Personnel Check
+        if (!Auth::user()->isEmployee()) {
+            abort(403);
         }
+
+        // 2. REASON-GATE Check
+        if (!session()->has("access_granted_{$user->id}_history")) {
+            return redirect()->route('admin.users.index')
+                ->with('error', 'Clinical authorization required to view patient records.');
+        }
+
+        // Forget after one use
+        session()->forget("access_granted_{$user->id}_history");
+
+        // 3. Define variables to match what the 'patient-history' view expects
+        $targetUser = $user; 
         
-        // Fetch all individual and bulk appointments for this user
+        // We also need the lab history record for the dynamic table to work
+        $labHistory = \App\Models\LaboratoryHistory::firstOrCreate(['user_id' => $targetUser->id]);
+
         $appointments = Appointment::with(['services', 'result'])
-            ->where('user_id', $user->id)
+            ->where('user_id', $targetUser->id)
             ->latest()
             ->get();
 
-        ActivityLog::record('VIEWED HISTORY', 'Staff accessed medical history list', $user->name);
+        ActivityLog::record('VIEWED HISTORY', 'Accessed clinical archive', $targetUser->name);
 
-        return view('admin.patient-history', compact('user', 'appointments'));
+        // FIX: Change 'user' to 'targetUser' and add 'labHistory'
+        return view('patient-history', compact('targetUser', 'appointments', 'labHistory'));
     }
 
     public function viewLogs(Request $request) 

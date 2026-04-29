@@ -40,6 +40,32 @@ class AdminSeeder extends Seeder
         );
 
         User::updateOrCreate(
+            ['email' => 'labtech1@gmail.com'],
+            [
+                'name' => 'LabTech1',
+                'password' => bcrypt('password123'), 
+                'role' => 'lab_tech',
+                'phone' => '09112224334',
+                'birthdate' => '1994-05-15',
+                'sex' => 'Male',
+                'address' => 'Dadiangas West, Gensan'
+            ]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'labtech2@gmail.com'],
+            [
+                'name' => 'LabTech2',
+                'password' => bcrypt('password123'), 
+                'role' => 'lab_tech',
+                'phone' => '09113223334',
+                'birthdate' => '2001-05-15',
+                'sex' => 'Female',
+                'address' => 'San Isidro, Gensan'
+            ]
+        );
+
+        User::updateOrCreate(
             ['email' => 'patient@gmail.com'],
             [
                 'name' => 'Juan Dela Cruz',
@@ -62,7 +88,7 @@ class AdminSeeder extends Seeder
                     'opening_time' => '08:00:00',
                     'closing_time' => '17:00:00',
                     'slot_duration' => 60,
-                    'max_patients_per_slot' => 1,
+                    'max_patients_per_slot' => 2,
                     'has_lunch_break' => true,
                     'lunch_start' => '12:00:00',
                     'lunch_end' => '13:00:00'

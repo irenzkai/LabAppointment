@@ -83,4 +83,28 @@ class Appointment extends Model
     public function isStaff() {
         return in_array($this->role, ['staff', 'admin']);
     }
+
+    /**
+     * Check if the appointment has all required clinical verifications.
+     */
+    public function isFullyVerified(): bool
+    {
+        $res = $this->result; // Access the relationship
+        if (!$res) return false;
+        
+        $reports = $res->included_reports ?? [];
+        if (empty($reports)) return false;
+
+        // Laboratory: Must have TWO timestamps (v1 AND v2)
+        if (in_array('lab', $reports)) {
+            if (!$res->lab_v1_at || !$res->lab_v2_at) return false;
+        }
+
+        // Others: Must have ONE timestamp
+        if (in_array('med_cert', $reports) && !$res->med_verified_at) return false;
+        if (in_array('drug', $reports) && !$res->drug_verified_at) return false;
+        if (in_array('radio', $reports) && !$res->radio_verified_at) return false;
+
+        return true;
+    }
 }

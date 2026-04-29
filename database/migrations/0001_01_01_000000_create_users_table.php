@@ -19,7 +19,7 @@ return new class extends Migration
             $table->date('birthdate'); // Added
             $table->string('sex'); // Added
             $table->text('address'); // Added
-            $table->string('role')->default('user'); // Added (admin, staff, user)
+            $table->string('role')->default('user'); 
             $table->boolean('is_active')->default(true); // Added for soft deactivation
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');

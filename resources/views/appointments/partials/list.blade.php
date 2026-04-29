@@ -55,6 +55,7 @@
                                 'pending' => 'text-warning border-warning',
                                 'approved' => 'text-success border-success',
                                 'tested' => 'text-info border-info',
+                                'encoded'   => 'text-info border-info shadow-info', 
                                 'released' => 'text-neon border-success',
                                 'returned' => 'text-danger border-danger',
                                 default => 'text-secondary border-secondary'
