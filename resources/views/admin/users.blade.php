@@ -34,7 +34,7 @@
                     <td class="text-end pe-4">
                         {{-- EMPLOYEE ACTION --}}
                         @if(Auth::user()->isEmployee()) 
-                            <button type="button" class="btn-custom btn-neon btn-sm px-3" 
+                            <button type="button" class="btn btn-sm btn-neon px-2 fw-bold small" 
                                     onclick="promptAccess('{{$user->id}}', 'all', 'history', true)">
                                 VIEW RECORDS
                             </button>
@@ -44,10 +44,33 @@
                         @if(Auth::user()->role === 'admin')
                             <div class="btn-group">
                                 {{-- Promote/Demote --}}
-                                <form action="{{ url('admin/users/'.$user->id.'/'.($user->role == 'user' ? 'staff' : 'user')) }}" method="POST">
-                                    @csrf @method('PATCH')
-                                    <button type="submit" class="btn btn-sm btn-outline-info text-info small px-2 fw-bold">CHANGE ROLE</button>
-                                </form>
+                                <div class="dropdown d-inline">
+                                    <button class="btn btn-sm btn-outline-info dropdown-toggle fw-bold small text-info" type="button" id="roleDropdown-{{ $user->id }}" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Change Role
+                                    </button>
+                                    <ul class="dropdown-menu" aria-labelledby="roleDropdown-{{ $user->id }}">
+                                        <form action="{{ route('admin.users.updateRole', $user->id) }}" method="POST">
+                                            @csrf
+                                            @method('PATCH')
+                                            
+                                            <li>
+                                                <button type="submit" name="role" value="user" class="dropdown-item small" {{ $user->role == 'user' ? 'disabled' : '' }}>
+                                                    Make Patient
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button type="submit" name="role" value="staff" class="dropdown-item small" {{ $user->role == 'staff' ? 'disabled' : '' }}>
+                                                    Make Staff
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button type="submit" name="role" value="lab_tech" class="dropdown-item small" {{ $user->role == 'lab_tech' ? 'disabled' : '' }}>
+                                                    Make Lab Tech
+                                                </button>
+                                            </li>
+                                        </form>
+                                    </ul>
+                                </div>
 
                                 {{-- Disable/Enable --}}
                                 <form action="{{ route('admin.users.toggle', $user->id) }}" method="POST" class="ms-1">

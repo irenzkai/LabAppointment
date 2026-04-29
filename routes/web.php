@@ -149,7 +149,7 @@ Route::middleware('auth')->group(function () {
     */
     Route::middleware('role:admin')->group(function () {
         Route::patch('/admin/users/{user}/toggle', [AdminController::class, 'toggleStatus'])->name('admin.users.toggle');
-        Route::patch('/admin/users/{id}/{role}', [AdminController::class, 'changeRole'])->name('admin.users.changeRole');
+        Route::patch('/admin/users/{user}/role', [AdminController::class, 'changeRole'])->name('admin.users.updateRole');
         Route::delete('/admin/users/{user}', [AdminController::class, 'destroy'])->name('admin.users.destroy');
         Route::get('/admin/audit-logs', [AdminController::class, 'viewLogs'])->name('admin.logs');
     });

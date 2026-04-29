@@ -45,15 +45,21 @@ class AdminController extends Controller
     /**
      * ADMIN ONLY: Promote/Demote Roles
      */
-    public function changeRole($id, $role) {
+    public function changeRole(Request $request, User $user) {
+        // 1. Authorization Check
         if (Auth::user()->role !== 'admin') abort(403);
-        
-        $user = User::findOrFail($id);
-        $user->update(['role' => $role]);
-        
-        ActivityLog::record('ROLE CHANGE', "Changed to $role", $user->name);
 
-        return back()->with('success', "User {$user->name} is now a " . strtoupper($role));
+        // 2. Validate the input (Explicitly exclude 'admin')
+        $request->validate([
+            'role' => 'required|in:user,staff,lab_tech'
+        ]);
+
+        // 3. Update and Log
+        $user->update(['role' => $request->role]);
+        
+        ActivityLog::record('ROLE CHANGE', "Changed to " . strtoupper($request->role), $user->name);
+
+        return back()->with('success', "User {$user->name} role updated to " . strtoupper($request->role));
     }
 
     /**
