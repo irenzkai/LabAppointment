@@ -43,7 +43,7 @@ Route::middleware('auth')->group(function () {
 
     // Shared Archive Access (Used by Patients for self, and Employees for any patient)
     Route::get('/history/{user?}', [HistoryController::class, 'index'])->name('patient.history');
-    Route::post('/history/{user?}/accept', [HistoryController::class, 'acceptRequest'])->name('history.accept');
+    Route::post('/history/accept/{user?}', [HistoryController::class, 'acceptRequest'])->name('history.accept');
 
     /*
     |--------------------------------------------------------------------------

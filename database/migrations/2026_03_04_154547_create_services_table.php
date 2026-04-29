@@ -14,6 +14,8 @@ return new class extends Migration
             $table->decimal('price', 8, 2); // service price
             $table->text('description'); // service description
             $table->text('preparation'); // preparation requirement
+            $table->string('sample_required')->nullable();
+            $table->unsignedInteger('estimated_time')->nullable();
             $table->string('category')->default('individual'); // individual, package
             $table->string('gender_restriction')->default('both'); // male, female, both
             $table->boolean('is_available')->default(true); // availability toggle

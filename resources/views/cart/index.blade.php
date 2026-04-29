@@ -76,7 +76,17 @@
                         <h3 class="text-neon fw-bold mb-0">₱{{ number_format($totalPrice, 2) }}</h3>
                     </div>
 
-                    <p class="smaller text-white mb-4 italic">Next step: Choose your appointment date and available time block.</p>
+                    <div class="d-flex justify-content-between align-items-center border-top border-secondary pt-2 mt-2">
+                        <div class="text-start">
+                            <span class="text-info uppercase fw-bold d-block">Estimated Total Duration</span>
+                            <small class="text-white" style="font-size: 0.7rem;">* Combined for same-sample collections</small>
+                        </div>
+                        <span class="text-info fw-bold fs-5">
+                            <i class="bi bi-clock-history me-1"></i> {{ $totalMinutes }} mins
+                        </span>
+                    </div>
+
+                    <p class="smaller text-white mb-4 italic pt-2 mt-2 border-top">Next step: Choose your appointment date and available time block.</p>
                     
                     <button class="btn-custom btn-neon w-100 py-3 fw-bold fs-6 mb-2" data-bs-toggle="modal" data-bs-target="#finalCheckoutModal">
                         PICK SCHEDULE

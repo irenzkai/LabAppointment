@@ -75,17 +75,24 @@ class HistoryController extends Controller
 
     public function acceptRequest(User $user = null)
     {
-        // if $user is null, a patient is accepting a staff request
-        // if $user exists, a staff is accepting a patient request
-        $targetId = $user ? $user->id : Auth::id();
-        $history = LaboratoryHistory::where('user_id', $targetId)->first();
+        // 1. Determine whose history we are updating
+        // If $user is provided, a staff member is accepting a patient's request.
+        // If $user is null, a patient is accepting a staff member's request for themselves.
+        $targetUser = $user ?: Auth::user();
+
+        $history = LaboratoryHistory::where('user_id', $targetUser->id)->first();
+
+        if (!$history) {
+            return back()->with('error', 'History record not found.');
+        }
 
         $history->update(['permission_status' => 'granted']);
 
-        $logMsg = Auth::user()->isEmployee() ? "Staff accepted patient request" : "Patient granted permission to staff";
-        ActivityLog::record('HISTORY GRANTED', $logMsg, User::find($targetId)->name);
+        // 2. Log the action
+        $roleName = Auth::user()->role;
+        ActivityLog::record('HISTORY GRANTED', "Handshake accepted by {$roleName}", $targetUser->name);
 
-        return back()->with('success', 'Permission granted. You can now manage historical records.');
+        return back()->with('success', 'Permission granted. Access is now open.');
     }
 
     public function saveManualData(Request $request, User $user)

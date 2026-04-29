@@ -66,11 +66,33 @@
                             @endif
                         </div>
                         
-                        <p class="smaller text-white mb-4" style="min-height: 40px;">{{ $service->description }}</p>
+                        <p class="smaller text-white mb-4" style="min-height: 70px;">{{ $service->description }}</p>
                         
-                        <div class="p-2 bg-black rounded border border-secondary mb-2">
+                        <div class="p-2 bg-black rounded border border-secondary mb-2" style="min-height: 90px;">
                             <label class="text-neon fw-bold mb-1" style="font-size: 0.6rem; letter-spacing: 1px;">PREPARATION REQUIRED:</label>
-                            <p class="text-secondary smaller mb-0">{{ $service->preparation }}</p>
+                            <p class="text-white smaller mb-0">{{ $service->preparation }}</p>
+                        </div>
+
+                        <div class="row g-0 py-2 border-top border-bottom border-secondary border-opacity-10">
+                            <!-- Left Section: Sample Required -->
+                            <div class="col-6 border-end border-secondary border-opacity-25 text-center">
+                                <div class="smaller text-white uppercase">
+                                    <i class="bi bi-droplet-fill text-danger me-1"></i> Sample Required:
+                                </div>
+                                <div class="text-white small fw-bold">
+                                    {{ $service->sample_required ?? 'N/A' }}
+                                </div>
+                            </div>
+
+                            <!-- Right Section: Procedure Time -->
+                            <div class="col-6 text-center">
+                                <div class="smaller text-white uppercase">
+                                    <i class="bi bi-clock-history text-info me-1"></i> Procedure Time:
+                                </div>
+                                <div class="text-white small fw-bold">
+                                    {{ $service->formatted_time }}
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -138,6 +160,51 @@
                 <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Gender Rule</label><select name="gender_restriction" class="form-select"><option value="both">Both (All)</option><option value="male">Male Only</option><option value="female">Female Only</option></select></div>
                 <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Description</label><textarea name="description" class="form-control" rows="2" required></textarea></div>
                 <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Prep Requirements</label><textarea name="preparation" class="form-control" rows="2" required></textarea></div>
+                <div class="col-12 mb-3">
+                    <label class="text-secondary small fw-bold uppercase d-block mb-2">Samples Required</label>
+                    
+                    <div class="p-3 form-control border border-secondary">
+                        {{-- Container for Checkboxes (Default & Saved ones) --}}
+                        <div id="sample-container-{{ $service->id ?? 'new' }}" class="d-flex flex-wrap gap-3 mb-3">
+                            @php 
+                                $defaults = ['Blood', 'Urine', 'Stool', 'Swab', 'N/A'];
+                                $currentSamples = isset($service) ? explode(',', $service->sample_required) : ['Blood'];
+                            @endphp
+
+                            {{-- 1. Render Defaults --}}
+                            @foreach($defaults as $sample)
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="samples[]" value="{{ $sample }}" 
+                                        id="check-{{ $sample }}-{{ $service->id ?? 'new' }}"
+                                        {{ in_array($sample, $currentSamples) ? 'checked' : '' }}>
+                                    <label class="form-check-label text-white" for="check-{{ $sample }}-{{ $service->id ?? 'new' }}">
+                                        {{ $sample }}
+                                    </label>
+                                </div>
+                            @endforeach
+
+                            {{-- 2. Render Custom Saved Samples (if they aren't in defaults) --}}
+                            @foreach($currentSamples as $current)
+                                @if(!in_array($current, $defaults) && !empty($current))
+                                    <div class="form-check d-flex align-items-center gap-2 custom-sample-item">
+                                        <input class="form-check-input" type="checkbox" name="samples[]" value="{{ $current }}" checked>
+                                        <span class="text-neon fw-bold">{{ $current }}</span>
+                                        <button type="button" class="btn btn-link text-danger p-0" onclick="this.parentElement.remove()"><i class="bi bi-x-circle"></i></button>
+                                    </div>
+                                @endif
+                            @endforeach
+                        </div>
+
+                        {{-- 3. Add Custom Sample Input --}}
+                        <div class="input-group input-group-sm" style="max-width: 300px;">
+                            <input type="text" id="custom-input-{{ $service->id ?? 'new' }}" class="form-control bg-black border-secondary text-white" placeholder="New sample type...">
+                            <button class="btn btn-outline-secondary" type="button" onclick="addCustomSample('{{ $service->id ?? 'new' }}')">
+                                <i class="bi bi-plus-lg"></i> ADD
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Estimated Procedure Time</label><input type="number" name="estimated_time" class="form-control" placeholder="e.g. 30, 60"></div>
             </div>
             <div class="modal-footer border-neon bg-dark"><button type="submit" class="btn-custom btn-neon w-100 py-3">SAVE SERVICE</button></div>
         </form>
@@ -162,6 +229,51 @@
                     <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Gender Rule</label><select name="gender_restriction" class="form-select"><option value="both" {{ $service->gender_restriction == 'both' ? 'selected' : '' }}>Both (All)</option><option value="male" {{ $service->gender_restriction == 'male' ? 'selected' : '' }}>Male Only</option><option value="female" {{ $service->gender_restriction == 'female' ? 'selected' : '' }}>Female Only</option></select></div>
                     <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Description</label><textarea name="description" class="form-control" rows="2" required>{{ $service->description }}</textarea></div>
                     <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Prep Requirements</label><textarea name="preparation" class="form-control" rows="2" required>{{ $service->preparation }}</textarea></div>
+                    <div class="col-12 mb-3">
+                        <label class="text-secondary small fw-bold uppercase d-block mb-2">Samples Required</label>
+                        
+                        <div class="p-3 form-control border border-secondary">
+                            {{-- Container for Checkboxes (Default & Saved ones) --}}
+                            <div id="sample-container-{{ $service->id ?? 'new' }}" class="d-flex flex-wrap gap-3 mb-3">
+                                @php 
+                                    $defaults = ['Blood', 'Urine', 'Stool', 'Swab', 'N/A'];
+                                    $currentSamples = isset($service) ? explode(',', $service->sample_required) : ['Blood'];
+                                @endphp
+
+                                {{-- 1. Render Defaults --}}
+                                @foreach($defaults as $sample)
+                                    <div class="form-check">
+                                        <input value="{{ $sample }}" class="form-check-input" type="checkbox" name="samples[]" 
+                                            id="check-{{ $sample }}-{{ $service->id ?? 'new' }}"
+                                            {{ in_array($sample, $currentSamples) ? 'checked' : '' }}>
+                                        <label class="form-check-label text-white" for="check-{{ $sample }}-{{ $service->id ?? 'new' }}">
+                                            {{ $sample }}
+                                        </label>
+                                    </div>
+                                @endforeach
+
+                                {{-- 2. Render Custom Saved Samples (if they aren't in defaults) --}}
+                                @foreach($currentSamples as $current)
+                                    @if(!in_array($current, $defaults) && !empty($current))
+                                        <div class="form-check d-flex align-items-center gap-2 custom-sample-item">
+                                            <input value="{{ $current }}" class="form-check-input" type="checkbox" name="samples[]" checked>
+                                            <span class="text-neon fw-bold">{{ $current }}</span>
+                                            <button type="button" class="btn btn-link text-danger p-0" onclick="this.parentElement.remove()"><i class="bi bi-x-circle"></i></button>
+                                        </div>
+                                    @endif
+                                @endforeach
+                            </div>
+
+                            {{-- 3. Add Custom Sample Input --}}
+                            <div class="input-group input-group-sm" style="max-width: 300px;">
+                                <input type="text" id="custom-input-{{ $service->id ?? 'new' }}" class="form-control bg-black border-secondary text-white" placeholder="New sample type...">
+                                <button class="btn btn-outline-secondary" type="button" onclick="addCustomSample('{{ $service->id ?? 'new' }}')">
+                                    <i class="bi bi-plus-lg"></i> ADD
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3"><label class="text-secondary small fw-bold uppercase">Estimated Procedure Time</label><input type="number" name="estimated_time" class="form-control" value="{{ $service->estimated_time }}" placeholder="e.g. 30, 60"></div>
                 </div>
                 <div class="modal-footer border-neon bg-dark"><button type="submit" class="btn-custom btn-neon w-100 py-3">UPDATE DETAILS</button></div>
             </form>
@@ -187,4 +299,27 @@
     </div>
     @endcan
 @endforeach
+<script>
+    function addCustomSample(id) {
+        const input = document.getElementById(`custom-input-${id}`);
+        const container = document.getElementById(`sample-container-${id}`);
+        const val = input.value.trim();
+
+        if (val === '') return;
+
+        // Create a new checkbox item on the fly
+        const div = document.createElement('div');
+        div.className = 'form-check d-flex align-items-center gap-2 custom-sample-item';
+        div.innerHTML = `
+            <input class="form-check-input" type="checkbox" name="samples[]" value="${val}" checked>
+            <span class="text-neon fw-bold">${val}</span>
+            <button type="button" class="btn btn-link text-danger p-0" onclick="this.parentElement.remove()">
+                <i class="bi bi-x-circle"></i>
+            </button>
+        `;
+
+        container.appendChild(div);
+        input.value = ''; // Clear input
+    }
+</script>
 @endsection

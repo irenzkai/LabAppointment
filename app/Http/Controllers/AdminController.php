@@ -117,24 +117,22 @@ class AdminController extends Controller
 
     public function viewLogs(Request $request) 
     {
-        // 1. Security Check
+        // Strictly for Admins
         if (Auth::user()->role !== 'admin') abort(403);
 
-        $roleFilter = $request->query('role'); // admin, staff, or user
-        
-        // 2. Build Query
-        $query = ActivityLog::with('user')->latest();
+        $roleFilter = $request->query('role'); // admin, lab_tech, staff, or user
 
-        // 3. APPLY FILTER
+        $query = \App\Models\ActivityLog::with('user')->latest();
+
         if ($roleFilter) {
-            // This tells Laravel to only find logs where the linked user has this role
             $query->whereHas('user', function($q) use ($roleFilter) {
                 $q->where('role', $roleFilter);
             });
         }
 
+        // Paginate results (20 per page)
         $logs = $query->paginate(20)->withQueryString();
-        
+
         return view('admin.logs', compact('logs'));
     }
 }

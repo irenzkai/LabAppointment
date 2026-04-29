@@ -10,12 +10,29 @@ class CartController extends Controller
 {
     public function index() {
         $cart = session()->get('cart', []);
-        // Get the actual service models based on IDs in the cart
-        $services = Service::whereIn('id', array_keys($cart))->get();
-        
+        $services = \App\Models\Service::whereIn('id', array_keys($cart))->get();
+
         $totalPrice = $services->sum('price');
+
+        // --- SMART TIME CALCULATION ---
         
-        return view('cart.index', compact('services', 'totalPrice'));
+        // 1. Filter out physical samples (Blood, Urine, etc.)
+        $physicalTests = $services->where('sample_required', '!=', 'N/A');
+        
+        // Group by sample type and take the maximum time for each group
+        // Example: If 3 tests need Blood (5m, 3m, 4m), it only adds 5m to the total.
+        $physicalTime = $physicalTests->groupBy('sample_required')
+            ->map(function ($group) {
+                return $group->max('estimated_time');
+            })->sum();
+
+        // 2. Filter out N/A (Procedures like X-Ray)
+        // These are summed individually because you can't do two X-rays at once.
+        $proceduralTime = $services->where('sample_required', '==', 'N/A')->sum('estimated_time');
+
+        $totalMinutes = $physicalTime + $proceduralTime;
+
+        return view('cart.index', compact('services', 'totalPrice', 'totalMinutes'));
     }
 
     public function add(Service $service) {

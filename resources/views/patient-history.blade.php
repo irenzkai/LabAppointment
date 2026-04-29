@@ -61,7 +61,7 @@
                         <i class="bi bi-person-check fs-1 text-info mb-3"></i>
                         <h4 class="text-info uppercase fw-bold">Import Request Received</h4>
                         <p class="text-secondary">The patient is requesting to have their physical records digitized.</p>
-                        <form action="{{ route('history.accept', $targetUser->id) }}" method="POST">@csrf
+                        <form action="{{ route('history.accept', ['user' => $targetUser->id]) }}" method="POST">@csrf
                             <button class="btn-custom btn-neon px-5 py-3 fw-bold">ACCEPT & OPEN IMPORT TOOL</button>
                         </form>
                     @else
