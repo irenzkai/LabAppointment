@@ -1,221 +1,308 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="text-neon fw-bold uppercase" style="letter-spacing: 2px;">LABORATORY APPOINTMENTS</h2>
-    @if(!$is_staff)
-    <a href="{{ route('patient.history') }}" class="btn-custom btn-outline-neon">
-        <i class="bi bi-clock-history me-2"></i> VIEW HISTORY
-    </a>
-    @endif
+<div class="container-fluid text-start animate-page">
+ 
+    {{-- Page Header --}}
+    <div class="d-flex justify-content-between align-items-center mb-5 border-bottom pb-3" style="border-color: var(--border-color) !important;">
+        <div>
+            <h2 class="text-accent fw-bold mb-0 uppercase tracking-tight" style="font-size: 1.85rem; letter-spacing: 1px;">
+                {{ $is_staff ? 'Master Clinical Queue' : 'My Appointments' }}
+            </h2>
+            <p class="text-muted mb-0 small">
+                {{ $is_staff ? 'Monitor, approve, and track real-time clinical workflows.' : 'Track your diagnostic bookings and access clinical results.' }}
+            </p>
+        </div>
+        @if(!$is_staff)
+            <a href="{{ route('patient.history') }}" class="btn-custom btn-outline-accent px-3 py-2">
+                <i class="bi bi-clock-history me-2"></i> VIEW ARCHIVED RECORDS
+            </a>
+        @endif
+    </div>
+
+    {{-- Split Pane Grid Layout --}}
+    <div class="row g-4">
+ 
+        {{-- LEFT PANEL: Card Lists & Filters --}}
+        <div class="col-lg-5 col-xl-4">
+ 
+            {{-- Navigation Tabs (Patient Only) --}}
+            @if(!$is_staff)
+                <ul class="nav nav-pills mb-3 gap-1 bg-secondary bg-opacity-10 p-1.5 rounded-3 border border-secondary border-opacity-25" id="appTabs" role="tablist">
+                    <li class="nav-item flex-grow-1">
+                        <button class="nav-link active w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-self" onclick="resetActiveDetail()">Myself</button>
+                    </li>
+                    <li class="nav-item flex-grow-1">
+                        <button class="nav-link w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-family" onclick="resetActiveDetail()">Family</button>
+                    </li>
+                    <li class="nav-item flex-grow-1">
+                        <button class="nav-link w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-bulk" onclick="resetActiveDetail()">Bulk</button>
+                    </li>
+                </ul>
+            @else
+                {{-- NEW: Clinical search input for staff and above to filter master queue records dynamically --}}
+                <div class="mb-3">
+                    <div class="input-group input-group-sm border border-secondary border-opacity-25 rounded-3 overflow-hidden">
+                        <span class="input-group-text border-0 text-secondary" style="background-color: var(--bg-card); border-right: none;">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" id="queueSearch" class="form-control border-0 shadow-none py-2" style="background-color: var(--bg-card); color: var(--text-main);" placeholder="Search patient name, ID, or batch...">
+                    </div>
+                </div>
+            @endif
+
+            {{-- Main List Wrapper --}}
+            <div class="tab-content" id="listContent">
+ 
+                {{-- STAFF MAIN QUEUE --}}
+                @if($is_staff)
+                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
+                        @forelse($staffQueue as $batchId => $group)
+                            @php 
+                            $isGroup = $group instanceof \Illuminate\Support\Collection;
+                            $first = $isGroup ? $group->first() : $group;
+                            @endphp
+                            @include('appointments.partials.list-card', ['app' => $first, 'groupCount' => $isGroup ? $group->count() : 1, 'batchId' => $batchId])
+                        @empty
+                            <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
+                                <i class="bi bi-folder-x text-accent fs-1 mb-3 opacity-75"></i>
+                                <p class="small mb-0">No appointments in queue.</p>
+                            </div>
+                        @endforelse
+                    </div>
+                @else
+                    {{-- PATIENT: MYSELF --}}
+                    <div class="tab-pane fade show active" id="pane-self">
+                        <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
+                            @forelse($self as $app)
+                                @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1])
+                            @empty
+                                <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
+                                    <i class="bi bi-calendar-x text-accent fs-1 mb-3 opacity-75"></i>
+                                    <p class="small mb-0">No personal bookings found.</p>
+                                </div>
+                            @endforelse
+                        </div>
+                    </div>
+
+                    {{-- PATIENT: FAMILY DEPENDENTS --}}
+                    <div class="tab-pane fade" id="pane-family">
+                        <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
+                            @forelse($dependents as $app)
+                                @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1])
+                            @empty
+                                <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
+                                    <i class="bi bi-people text-accent fs-1 mb-3 opacity-75"></i>
+                                    <p class="small mb-0">No dependent bookings found.</p>
+                                </div>
+                            @endforelse
+                        </div>
+                    </div>
+
+                    {{-- PATIENT: ORGANIZATIONAL BULK --}}
+                    <div class="tab-pane fade" id="pane-bulk">
+                        <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
+                            @forelse($bulkGroups as $batchId => $group)
+                                @php $first = $group->first(); @endphp
+                                @include('appointments.partials.list-card', ['app' => $first, 'groupCount' => $group->count(), 'batchId' => $batchId])
+                            @empty
+                                <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
+                                    <i class="bi bi-buildings text-accent fs-1 mb-3 opacity-75"></i>
+                                    <p class="small mb-0">No corporate groups found.</p>
+                                </div>
+                            @endforelse
+                        </div>
+                    </div>
+                @endif
+            </div>
+        </div>
+
+        {{-- RIGHT PANEL: Active Clinical Sheet Workspace --}}
+        <div class="col-lg-7 col-xl-8" style="{{ !$is_staff ? 'margin-top: 52px;' : '' }}">
+            <div id="workspace-container" class="h-100">
+ 
+                {{-- Default Empty State Placeholder --}}
+                <div id="details-placeholder" class="card p-5 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100" style="min-height: 420px; background-color: var(--bg-card);">
+                    <div class="bg-secondary bg-opacity-10 rounded-circle p-3 mb-4 text-accent d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+                        <i class="bi bi-clipboard2-pulse-fill fs-1 text-accent"></i>
+                    </div>
+                    <h4 class="text-main fw-bold mb-2 uppercase">Clinical Detail Workspace</h4>
+                    <p class="text-muted small mb-0" style="max-width: 380px;">Select any clinical entry from the left-hand panel to review its test breakdowns, billing summaries, and context actions.</p>
+                </div>
+
+                {{-- Render Hidden Detail Panels --}}
+                @php 
+                $allApps = $is_staff ? $staffQueue->flatten() : $self->concat($dependents)->concat($bulkGroups->flatten());
+                @endphp
+                @foreach($allApps as $app)
+                    @include('appointments.partials.detail-card', ['app' => $app])
+                @endforeach
+
+            </div>
+        </div>
+
+    </div>
 </div>
 
-@if($is_staff)
-    @include('appointments.partials.list', ['apps' => $staffQueue, 'type' => 'queue'])
-@else
-<ul class="nav nav-pills mb-5 border-bottom border-secondary pb-3 gap-2" id="appTabs" role="tablist">
-    <li class="nav-item">
-        <button class="nav-link active small fw-bold uppercase px-4 text-white" data-bs-toggle="pill" data-bs-target="#pane-self">
-            <i class="bi bi-person me-2"></i> My Appointments
-        </button>
-    </li>
-    <li class="nav-item">
-        <button class="nav-link small fw-bold uppercase px-4 text-white" data-bs-toggle="pill" data-bs-target="#pane-family">
-            <i class="bi bi-people me-2"></i> Family / Dependents
-        </button>
-    </li>
-    <li class="nav-item">
-        <button class="nav-link small fw-bold uppercase px-4 text-white" data-bs-toggle="pill" data-bs-target="#pane-bulk">
-            <i class="bi bi-buildings me-2"></i> Organization / Bulk
-        </button>
-    </li>
-</ul>
-
-<div class="tab-content">
-    {{-- 1. SELF SECTION --}}
-    <div class="tab-pane fade show active" id="pane-self">
-        @include('appointments.partials.list', ['apps' => $self, 'type' => 'self'])
-    </div>
-
-    {{-- 2. FAMILY SECTION --}}
-    <div class="tab-pane fade" id="pane-family">
-        @include('appointments.partials.list', ['apps' => $dependents, 'type' => 'family'])
-    </div>
-
-    {{-- 3. BULK SECTION --}}
-    <div class="tab-pane fade" id="pane-bulk">
-        {{-- Here we pass bulkGroups into a variable named 'groups' --}}
-        @include('appointments.partials.bulk_list', ['groups' => $bulkGroups])
+{{-- FULLSCREEN QR LIGHTBOX OVERLAY --}}
+<div id="qr_lightbox" class="d-none fixed inset-0 w-100 h-100 d-flex align-items-center justify-content-center" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 3000; background-color: rgba(0, 0, 0, 0.85); cursor: zoom-out;" onclick="closeQRLightbox()">
+    <div class="text-center p-3 animate-fade-in">
+        <img src="" id="lightbox_qr_img" alt="Zoomed QR" class="img-fluid rounded border border-secondary p-3 bg-white" style="max-height: 75vh; max-width: 90vw; object-fit: contain;">
+        <p class="text-white-50 mt-3 small mb-0"><i class="bi bi-x-circle me-1"></i> Click anywhere on the screen to close preview</p>
     </div>
 </div>
-@endif
 
-{{-- --- MODALS MASTER LOOP --- --}}
-@php $flatApps = $is_staff ? $staffQueue->flatten() : $self->concat($dependents)->concat($bulkGroups->flatten()); @endphp
-
-@foreach($flatApps as $app)
-    {{-- MODAL: Return (Staff) --}}
+{{-- 4. THEME-ADAPTIVE MODALS LOOP (No Static Grays/Blacks) --}}
+@foreach($allApps as $app)
+ 
+    {{-- Return to Patient Modal (Enhanced with dropdown + custom textarea toggle) --}}
     @can('isStaff')
-    <div class="modal fade" id="retModal{{$app->id}}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <form action="{{ route('appointments.status', $app->id) }}" method="POST" class="modal-content border-danger bg-black">
-                @csrf @method('PATCH')
-                <div class="modal-header border-danger bg-dark"><h5 class="modal-title text-danger fw-bold uppercase small">Return to Patient</h5></div>
-                <div class="modal-body p-4 text-start">
+        <div class="modal fade" id="retModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered">
+                <form action="{{ route('appointments.status', $app->id) }}" id="returnForm{{$app->id}}" method="POST" class="modal-content shadow-lg return-form-element" data-app-id="{{$app->id}}" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                    @csrf @method('PATCH')
                     <input type="hidden" name="status" value="returned">
-                    <label class="text-secondary smaller fw-bold mb-2 uppercase">Reason for return</label>
-                    <textarea name="return_reason" class="form-control" rows="4" required></textarea>
-                </div>
-                <div class="modal-footer border-danger bg-dark">
-                    <button type="button" class="btn-custom btn-outline-neon" data-bs-dismiss="modal">CANCEL</button>
-                    <button type="submit" class="btn-danger-custom px-4 py-2 border-0">SEND RETURN</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    {{-- MODAL: MARK AS TESTED --}}
-    <div class="modal fade" id="testModal{{$app->id}}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <form action="{{ route('appointments.tested', $app->id) }}" method="POST" class="modal-content border-neon bg-black shadow-lg">
-                @csrf @method('PATCH')
-                <div class="modal-header border-neon bg-dark py-3">
-                    <h6 class="modal-title text-neon fw-bold uppercase">Patient Sampling Completed</h6>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                
-                <div class="modal-body p-4 text-start">
-                    <p class="text-white small mb-4">Confirm that the patient has completed the testing process. Set how long until the results are ready.</p>
+                    <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
+                        <h5 class="modal-title text-danger fw-bold uppercase small m-0">Return to Patient</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
                     
-                    <label class="text-secondary small fw-bold mb-2 uppercase">ESTIMATED PROCESSING TIME</label>
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <div class="input-group">
-                                <input type="number" name="est_hours" class="form-control bg-dark border-secondary text-white fw-bold" placeholder="0" min="0">
-                                <span class="input-group-text bg-black border-secondary text-secondary small uppercase" style="font-size: 0.6rem;">Hrs</span>
-                            </div>
+                    <div class="modal-body p-4 text-start">
+                        {{-- Predefined Return Reasons Dropdown (Updated with payment options) --}}
+                        <div class="mb-3">
+                            <label for="return_reason_select_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Reason for Return</label>
+                            <select id="return_reason_select_{{$app->id}}" class="form-select shadow-none return-reason-select" data-app-id="{{$app->id}}" required>
+                                <option value="" disabled selected>-- Select a return reason --</option>
+                                <option value="Mismatched identification documents">Mismatched identification documents</option>
+                                <option value="Incorrect or incomplete personal details">Incorrect or incomplete personal details</option>
+                                <option value="No payment received / pending verification">No payment received / pending verification</option>
+                                <option value="Invalid test selection for patient demographics">Invalid test selection for patient demographics</option>
+                                <option value="Discrepancy in schedule / date selection">Discrepancy in schedule / date selection</option>
+                                <option value="Others">Others (Specify details below)</option>
+                            </select>
                         </div>
-                        <div class="col-6">
-                            <div class="input-group">
-                                <input type="number" name="est_minutes" class="form-control bg-dark border-secondary text-white fw-bold" placeholder="0" min="0" max="59">
-                                <span class="input-group-text bg-black border-secondary text-secondary small uppercase" style="font-size: 0.6rem;">Mins</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="text-secondary smaller mt-2 italic">
-                        <i class="bi bi-info-circle me-1"></i> Leave blank to use the default "Please wait" message.
-                    </div>
-                </div>
 
-                <div class="modal-footer border-neon bg-dark p-0">
-                    <button type="submit" class="btn-custom btn-neon w-100 py-3 fw-bold fs-6">CONFIRM & NOTIFY PATIENT</button>
-                </div>
-            </form>
+                        {{-- Hidden custom reason textbox, shown if "Others" is selected --}}
+                        <div id="custom_return_reason_wrapper_{{$app->id}}" class="mb-3 d-none">
+                            <label for="return_reason_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Specify Custom Reason</label>
+                            <textarea name="return_reason" id="return_reason_{{$app->id}}" class="form-control shadow-none return-reason-textarea" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" rows="4" placeholder="Identify the specific correction needed..."></textarea>
+                            <div class="mt-2">
+                                <small class="text-muted smaller italic">Minimum 5 characters required for validation.</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer p-0" style="background-color: var(--bg-card); border-top: 1px solid var(--border-color);">
+                        <div class="d-flex w-100">
+                            <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Send Return</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
         </div>
-    </div>
     @endcan
 
-    {{-- MODAL: Resubmit (User) --}}
-    @if($app->status == 'returned' && Auth::id() == $app->user_id)
-    <div class="modal fade resubmit-modal" id="resubmitModal{{$app->id}}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <form action="{{ route('appointments.update', $app->id) }}" method="POST" class="modal-content border-neon bg-black">
-                @csrf @method('PUT')
-                <div class="modal-header border-neon bg-dark"><h5 class="modal-title text-neon fw-bold uppercase small">Resubmit Appointment #{{ $app->id }}</h5></div>
-                
-                <div class="modal-body p-4 text-start text-white">
-                    
-                    {{-- SECTION A: IDENTITY EDITING (Only for Bulk) --}}
-                    @if($app->batch_id)
-                    <div class="mb-4 pb-4 border-bottom border-secondary">
-                        <h6 class="text-white fw-bold mb-3 small uppercase text-neon">Correct Patient Details</h6>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Full Name</label>
-                                <input type="text" name="patient_name" class="form-control" value="{{ $app->patient_name }}" required>
+    {{-- Mark as Tested Modal --}}
+    @can('isLabTech')
+        <div class="modal fade" id="testModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered">
+                <form action="{{ route('appointments.tested', $app->id) }}" method="POST" class="modal-content shadow-lg" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                    @csrf @method('PATCH')
+                    <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
+                        <h6 class="modal-title text-accent fw-bold uppercase m-0">Patient Sampling Completed</h6>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 text-start">
+                        <p class="small mb-4" style="color: var(--text-main) !important;">Confirm sampling process completion. Estimated processing time:</p>
+                        <label class="smaller fw-bold mb-2 uppercase" style="color: var(--text-muted);">Estimated Processing Time</label>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <div class="input-group input-group-sm">
+                                    <input type="number" name="est_hours" class="form-control shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" placeholder="0" min="0">
+                                    <span class="input-group-text border-0 text-secondary" style="background-color: var(--bg-card);">Hrs</span>
+                                </div>
                             </div>
-                            <div class="col-md-6">
-                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Email Address</label>
-                                <input type="email" name="patient_email" class="form-control" value="{{ $app->patient_email }}" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Phone Number</label>
-                                <input type="text" name="patient_phone" class="form-control" value="{{ $app->patient_phone }}" required>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Sex</label>
-                                <select name="patient_sex" class="form-select">
-                                    <option value="Male" {{ $app->patient_sex == 'Male' ? 'selected' : '' }}>Male</option>
-                                    <option value="Female" {{ $app->patient_sex == 'Female' ? 'selected' : '' }}>Female</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Birthdate</label>
-                                {{-- We add ?->format('Y-m-d') to ensure the browser can read it --}}
-                                <input type="date" name="patient_birthdate" class="form-control" 
-                                    value="{{ $app->patient_birthdate ? $app->patient_birthdate->format('Y-m-d') : '' }}" 
-                                    required>
-                            </div>
-                            <div class="col-12">
-                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Address</label>
-                                <textarea name="patient_address" class="form-control" rows="2" required>{{ $app->patient_address }}</textarea>
+                            <div class="col-6">
+                                <div class="input-group input-group-sm">
+                                    <input type="number" name="est_minutes" class="form-control shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" placeholder="0" min="0" max="59">
+                                    <span class="input-group-text border-0 text-secondary" style="background-color: var(--bg-card);">Mins</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    @endif
-
-                    {{-- SECTION B: NEW SCHEDULE (Strict) --}}
-                    <div class="row">
-                        <div class="col-md-5 mb-3 border-end border-secondary">
-                            <label class="text-secondary smaller fw-bold mb-2 uppercase">Date</label>
-                            {{-- Added class 'resubmit-date' and data-app-id --}}
-                            <input type="date" name="appointment_date" 
-                                class="form-control resubmit-date" 
-                                data-app-id="{{$app->id}}" 
-                                value="{{ $app->appointment_date->format('Y-m-d') }}" 
-                                required min="{{ date('Y-m-d') }}" 
-                                onchange="updateResubmitSlots(this)">
-                        </div>
-                        <div class="col-md-7">
-                            <label class="text-secondary smaller fw-bold mb-2 uppercase">Select New Time Slot</label>
-                            <select name="time_slot" id="ts-{{$app->id}}" class="form-select border-neon text-white fw-bold py-3" required>
-                                <option value="">Loading schedule...</option>
-                            </select>
-                            <small class="text-white mt-2 d-block" style="font-size: 0.6rem;">* Only available clinic hours are shown.</small>
+                    <div class="modal-footer p-0" style="background-color: var(--bg-card); border-top: 1px solid var(--border-color);">
+                        <div class="d-flex w-100">
+                            <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Confirm & Notify</button>
                         </div>
                     </div>
-                </div>
-                <div class="modal-footer border-neon bg-dark">
-                    <button type="submit" class="btn-custom btn-neon w-100 py-3 fw-bold">UPDATE AND RESUBMIT FOR APPROVAL</button>
-                </div>
-            </form>
+                </form>
+            </div>
         </div>
-    </div>
-    @endif
-@endforeach
+    @endcan
 
-<style>
-    .accordion-button::after { display: none; }
-    .accordion-button:not(.collapsed) { background-color: #050505; color: var(--neon); }
-    .nav-pills .nav-link.active { background-color: var(--neon) !important; color: #000 !important; }
-</style>
+    {{-- Resubmit Patient Modal --}}
+    @if($app->status == 'returned' && Auth::id() == $app->user_id)
+        @include('appointments.partials.resubmit-modal', ['app' => $app])
+    @endif
+
+@endforeach
 
 @push('scripts')
 <script>
-// --- AUTOMATIC TRIGGER WHEN MODAL OPENS ---
-document.addEventListener('show.bs.modal', function (event) {
-    // Check if the opened modal is a resubmit modal
-    const modal = event.target;
-    if (modal.classList.contains('resubmit-modal')) {
-        // Find the date input inside this specific modal
-        const dateInput = modal.querySelector('.resubmit-date');
-        if (dateInput) {
-            console.log("Modal opened, auto-loading slots for date:", dateInput.value);
-            updateResubmitSlots(dateInput);
-        }
+function showAppointmentDetails(appId) {
+    document.getElementById('details-placeholder').classList.add('d-none');
+    document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+
+    const detailPanel = document.getElementById(`details-${appId}`);
+    if(detailPanel) {
+        detailPanel.classList.remove('d-none');
     }
+    
+    const listCard = document.getElementById(`card-${appId}`);
+    if(listCard) {
+        listCard.classList.add('border-accent', 'shadow-neon');
+    }
+}
+
+function resetActiveDetail() {
+    document.getElementById('details-placeholder').classList.remove('d-none');
+    document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // FIXED: Live-search filtering scoped globally for the staff sidebar list
+    const queueSearch = document.getElementById('queueSearch');
+    if (queueSearch) {
+        queueSearch.addEventListener('input', function() {
+            const query = this.value.trim().toLowerCase();
+            const cards = document.querySelectorAll('.app-list-card');
+            
+            cards.forEach(card => {
+                const cardText = card.innerText.toLowerCase();
+                if (cardText.includes(query)) {
+                    card.classList.remove('d-none');
+                } else {
+                    card.classList.add('d-none');
+                }
+            });
+        });
+    }
+
+    document.addEventListener('show.bs.modal', function (event) {
+        const modal = event.target;
+        if (modal.classList.contains('resubmit-modal')) {
+            const dateInput = modal.querySelector('.resubmit-date');
+            if (dateInput) {
+                updateResubmitSlots(dateInput);
+            }
+        }
+    });
 });
 
-// --- THE CORE LOGIC ---
 async function updateResubmitSlots(input) {
     const date = input.value;
     const appId = input.dataset.appId;
@@ -230,9 +317,6 @@ async function updateResubmitSlots(input) {
         const res = await fetch(`/api/check-slots?date=${date}&exclude_id=${appId}`);
         const data = await res.json();
         
-        // Log to console so you can verify the array is no longer empty
-        console.log("Excluded slots for this date:", data.full_slots);
-
         if(data.is_closed) {
             select.innerHTML = '<option value="">CLINIC CLOSED</option>';
             return;
@@ -240,45 +324,117 @@ async function updateResubmitSlots(input) {
 
         const config = data.config;
         let html = '<option value="">Choose Available Time</option>';
-        
         let start = new Date(`2000-01-01 ${config.opening_time}`);
         let end = new Date(`2000-01-01 ${config.closing_time}`);
         let availableCount = 0;
 
         while(start < end) {
-            // Generate HH:MM:SS manually to match MySQL exactly
             let hours = start.getHours().toString().padStart(2, '0');
             let minutes = start.getMinutes().toString().padStart(2, '0');
             let tStr = `${hours}:${minutes}:00`; 
-            
-            // Generate comparison variables
+
             let isFull = data.full_slots.includes(tStr);
             let isLunch = (config.has_lunch_break && tStr >= config.lunch_start && tStr < config.lunch_end);
             let isPast = (date === new Date().toLocaleDateString('en-CA') && start.getHours() <= new Date().getHours());
 
-            // THE REMOVAL LOGIC:
-            // If any condition is met, skip this slot and go to the next increment
             if (isFull || isLunch || isPast) {
                 start.setMinutes(start.getMinutes() + parseInt(config.slot_duration));
                 continue; 
             }
 
-            // If we are here, the slot is truly available
             let disp = start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
             html += `<option value="${tStr}">${disp}</option>`;
             availableCount++;
             
             start.setMinutes(start.getMinutes() + parseInt(config.slot_duration));
-        }
-        
+        } 
+
         select.innerHTML = availableCount > 0 ? html : '<option value="">NO SLOTS AVAILABLE</option>';
-        select.disabled = availableCount === 0;
+        select.disabled = (availableCount === 0);
 
     } catch (e) {
         console.error("Fetch error:", e);
         select.innerHTML = '<option value="">Error syncing schedule</option>';
     }
 }
+
+// Dynamic dropdown + textarea transition logic for Return Modals
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.return-form-element').forEach(form => {
+        const appId = form.dataset.appId;
+        const selectEl = form.querySelector('.return-reason-select');
+        const textareaWrapper = form.querySelector(`#custom_return_reason_wrapper_${appId}`);
+        const textareaEl = form.querySelector(`#return_reason_${appId}`);
+
+        if (selectEl && textareaEl && textareaWrapper) {
+            selectEl.addEventListener('change', function() {
+                if (this.value === 'Others') {
+                    textareaWrapper.classList.remove('d-none');
+                    textareaEl.setAttribute('required', 'required');
+                    textareaEl.value = ''; // Reset Custom field
+                } else {
+                    textareaWrapper.classList.add('d-none');
+                    textareaEl.removeAttribute('required');
+                    textareaEl.value = this.value; // Store standard justification directly
+                }
+            });
+
+            form.addEventListener('submit', function(e) {
+                if (selectEl.value !== 'Others') {
+                    textareaEl.value = selectEl.value;
+                }
+                if (textareaEl.value.trim().length < 5) {
+                    e.preventDefault();
+                    alert('A valid return reason of at least 5 characters is required.');
+                }
+            });
+        }
+    });
+});
+
+// Fullscreen light-box zoom toggles for payment receipts
+function zoomQR(qrSrc) {
+    if (qrSrc) {
+        document.getElementById('lightbox_qr_img').src = qrSrc;
+        document.getElementById('qr_lightbox').classList.remove('d-none');
+        document.getElementById('qr_lightbox').classList.add('d-flex');
+    }
+}
+
+function closeQRLightbox() {
+    document.getElementById('qr_lightbox').classList.add('d-none');
+    document.getElementById('qr_lightbox').classList.remove('d-flex');
+}
 </script>
+
+<style>
+/* High-contrast overrides for Light Mode Compatibility */
+#appTabs .nav-link,
+.nav-pills .nav-link {
+    color: var(--text-muted) !important;
+    border: 1px solid var(--border-color) !important;
+    background-color: var(--bg-card) !important;
+    border-radius: 8px;
+    transition: 0.2s ease;
+}
+#appTabs .nav-link:hover,
+.nav-pills .nav-link:hover {
+    border-color: var(--brand-accent) !important;
+    color: var(--brand-accent) !important;
+}
+#appTabs .nav-link.active,
+.nav-pills .nav-link.active,
+button.nav-link.active {
+    background-color: var(--brand-accent) !important;
+    color: #1c232d !important;
+    border-color: var(--brand-accent) !important;
+}
+
+.border-dashed { border-style: dashed !important; }
+.shadow-neon { box-shadow: 0 0 10px rgba(25, 211, 140, 0.15) !important; }
+.min-vh-50 { min-height: 50vh; }
+.app-list-card { transition: all 0.2s ease; cursor: pointer; }
+.app-list-card:hover { border-color: var(--brand-accent) !important; transform: translateX(2px); }
+</style>
 @endpush
 @endsection

@@ -5,22 +5,25 @@ namespace App\Http\Controllers;
 use App\Models\Service;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\DB;
 
 class ServiceController extends Controller
 {
     /**
      * View all services (Common for all roles)
      */
-    public function index() {
+    public function index() 
+    {
         $services = Service::all();
         return view('services.index', compact('services'));
     }
 
     /**
      * Store new service (Staff/Admin only)
-     * Handles the conversion of sample arrays to strings
+     * Handles many-to-many relationship synchronization via pivot tables
      */
-    public function store(Request $request) {
+    public function store(Request $request) 
+    {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
@@ -32,20 +35,35 @@ class ServiceController extends Controller
             'gender_restriction' => 'required|in:male,female,both',
         ]);
 
-        // Logic to handle flexible sample inputs
-        // If no samples are selected, default to 'N/A'
-        $sampleString = 'N/A';
-        if ($request->has('samples') && !empty($request->samples)) {
-            // Remove any duplicates and empty values, then combine
-            $uniqueSamples = array_filter(array_unique($request->samples));
-            $sampleString = implode(',', $uniqueSamples);
-        }
-
-        // Create the record with merged sample data
-        Service::create(array_merge($validated, [
-            'sample_required' => $sampleString,
+        // Create the record excluding sample_required (since it's normalized out)
+        $service = Service::create(array_merge($validated, [
             'is_available' => true
         ]));
+
+        // Synchronize Many-to-Many Samples Pivot table
+        if ($request->has('samples') && is_array($request->samples)) {
+            $uniqueSamples = array_filter(array_unique($request->samples));
+            
+            // Map names to unique IDs from 'samples' table
+            $sampleIds = [];
+            foreach ($uniqueSamples as $name) {
+                $sampleId = DB::table('samples')->where('name', $name)->value('id');
+                if ($sampleId) {
+                    $sampleIds[] = $sampleId;
+                }
+            }
+
+            // Sync pivot table directly
+            DB::table('service_sample')->where('service_id', $service->id)->delete();
+            foreach ($sampleIds as $id) {
+                DB::table('service_sample')->insert([
+                    'service_id' => $service->id,
+                    'sample_id' => $id,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            }
+        }
 
         return back()->with('success', 'New service added successfully.');
     }
@@ -53,7 +71,8 @@ class ServiceController extends Controller
     /**
      * Update existing service
      */
-    public function update(Request $request, Service $service) {
+    public function update(Request $request, Service $service) 
+    {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
@@ -65,16 +84,33 @@ class ServiceController extends Controller
             'gender_restriction' => 'required|in:male,female,both',
         ]);
 
-        // Logic to handle flexible sample inputs
-        $sampleString = 'N/A';
-        if ($request->has('samples') && !empty($request->samples)) {
-            $uniqueSamples = array_filter(array_unique($request->samples));
-            $sampleString = implode(',', $uniqueSamples);
-        }
+        // Update the record excluding sample_required (since it's normalized out)
+        $service->update($validated);
 
-        $service->update(array_merge($validated, [
-            'sample_required' => $sampleString
-        ]));
+        // Synchronize Many-to-Many Samples Pivot table
+        if ($request->has('samples') && is_array($request->samples)) {
+            $uniqueSamples = array_filter(array_unique($request->samples));
+            
+            // Map names to unique IDs from 'samples' table
+            $sampleIds = [];
+            foreach ($uniqueSamples as $name) {
+                $sampleId = DB::table('samples')->where('name', $name)->value('id');
+                if ($sampleId) {
+                    $sampleIds[] = $sampleId;
+                }
+            }
+
+            // Sync pivot table directly
+            DB::table('service_sample')->where('service_id', $service->id)->delete();
+            foreach ($sampleIds as $id) {
+                DB::table('service_sample')->insert([
+                    'service_id' => $service->id,
+                    'sample_id' => $id,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            }
+        }
 
         return back()->with('success', 'Service updated successfully.');
     }
@@ -82,12 +118,13 @@ class ServiceController extends Controller
     /**
      * Toggle Availability
      */
-    public function toggle(Service $service) {
+    public function toggle(Service $service) 
+    {
         // Ensure only staff/admin can toggle
         if (Gate::denies('isStaff')) abort(403);
 
         $service->update(['is_available' => !$service->is_available]);
-        
+
         $status = $service->is_available ? 'enabled' : 'disabled';
         return back()->with('success', "Service has been {$status}.");
     }
@@ -95,9 +132,13 @@ class ServiceController extends Controller
     /**
      * Delete service
      */
-    public function destroy(Service $service) {
+    public function destroy(Service $service) 
+    {
         // Ensure only staff/admin can delete
         if (Gate::denies('isStaff')) abort(403);
+
+        // Delete pivot references first
+        DB::table('service_sample')->where('service_id', $service->id)->delete();
 
         $service->delete();
         return back()->with('success', 'Service deleted from catalog!');

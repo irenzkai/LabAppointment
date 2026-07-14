@@ -1,276 +1,362 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="container text-start">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+@php
+// SECURITY GUARD: Automatically fetch active services if a controller forgot to pass them
+if (!isset($availableServices)) {
+    $availableServices = \App\Models\Service::where('is_available', true)->orderBy('category')->orderBy('name')->get();
+}
+
+// Dynamically group legacy appointments by batch_id to consolidate multi-pax corporate bookings
+$groupedAppointments = $appointments->groupBy(fn($item) => $item->batch_id ?? 'single_' . $item->id);
+
+// FIXED: Protect controller-passed $existingRecords from being clobbered by empty dynamic_data array
+$existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? array_reverse($labHistory->dynamic_data) : []);
+@endphp
+
+<div class="container text-start animate-page" id="patient-archive-page">
+    
+    {{-- Page Header --}}
+    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
         <div>
-            <h2 class="text-neon fw-bold mb-0 uppercase">PATIENT ARCHIVE</h2>
-            <p class="text-white small mb-0">Records for: <span class="text-neon">{{ strtoupper($targetUser->name) }}</span></p>
+            <h2 class="text-accent fw-bold mb-0 uppercase tracking-tight" style="font-size: 1.85rem; letter-spacing: 1px;">PATIENT ARCHIVE</h2>
+            <p class="text-secondary mb-0 small">Records for: <span class="text-accent fw-bold uppercase">{{ $targetUser->name }}</span></p>
         </div>
-        <a href="{{ route('appointments.index') }}" class="btn-custom btn-neon">
+        <a href="{{ route('appointments.index') }}" class="btn btn-sm btn-outline-secondary px-4 py-2 fw-bold text-uppercase" style="color: var(--text-muted) !important; border-color: var(--border-color) !important; border-radius: 8px;">
             <i class="bi bi-arrow-left me-2"></i> BACK TO APPOINTMENTS
         </a>
     </div>
 
-    <!-- TABS -->
-    <ul class="nav nav-pills mb-4 border-bottom border-secondary pb-3 gap-2" id="historyTabs">
+    {{-- Nav Tabs --}}
+    <ul class="nav nav-pills mb-4 border-bottom pb-3 gap-2" id="historyTabs" role="tablist" style="border-color: var(--border-color) !important;">
         <li class="nav-item">
-            <button class="nav-link active fw-bold px-4 text-neon" data-bs-toggle="pill" data-bs-target="#app-history">APPOINTMENT HISTORY</button>
+            <button class="nav-link active fw-bold px-4" data-bs-toggle="pill" data-bs-target="#app-history" onclick="resetActiveDetail()">APPOINTMENT HISTORY</button>
         </li>
         <li class="nav-item">
-            <button class="nav-link fw-bold px-4 text-neon" data-bs-toggle="pill" data-bs-target="#lab-history">LABORATORY RECORDS</button>
+            <button class="nav-link fw-bold px-4" data-bs-toggle="pill" data-bs-target="#lab-history" onclick="resetActiveDetail()">LABORATORY RECORDS</button>
         </li>
     </ul>
 
     <div class="tab-content">
-        <!-- 1. APPOINTMENT HISTORY (REUSING YOUR LIST COMPONENT) -->
+        
+        {{-- TAB 1: APPOINTMENT HISTORY (Split-Pane Grid Layout) --}}
         <div class="tab-pane fade show active" id="app-history">
-            @include('appointments.partials.list', ['apps' => $appointments, 'type' => 'history', 'is_staff' => Auth::user()->isEmployee()])
+            <div class="row g-4">
+                
+                {{-- Left Side: Historical Appointment Deck --}}
+                <div class="col-lg-5 col-xl-4">
+                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
+                        @forelse($groupedAppointments as $item)
+                        @php
+                        $first = $item->first();
+                        $groupCount = $item->count();
+                        @endphp
+                        @include('appointments.partials.list-card', ['app' => $first, 'groupCount' => $groupCount])
+                        @empty
+                        <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
+                            <i class="bi bi-calendar-x text-accent fs-1 mb-3 opacity-75"></i>
+                            <p class="small mb-0">No past bookings found.</p>
+                        </div>
+                        @endforelse
+                    </div>
+                </div>
+
+                {{-- Right Side: Selected Archive Detail Workspace --}}
+                <div class="col-lg-7 col-xl-8">
+                    <div id="workspace-container" class="h-100">
+                        {{-- Default Empty State Placeholder --}}
+                        <div id="details-placeholder" class="card p-5 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100" style="min-height: 420px; background-color: var(--bg-card);">
+                            <div class="bg-secondary bg-opacity-10 rounded-circle p-3 mb-4 text-accent d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+                                <i class="bi bi-clipboard2-pulse-fill fs-1 text-accent"></i>
+                            </div>
+                            <h4 class="text-main fw-bold mb-2 uppercase">Archive Workspace</h4>
+                            <p class="text-muted small mb-0" style="max-width: 380px;">Select any clinical entry from the left-hand panel to review its test breakdowns, billing summaries, and context actions.</p>
+                        </div>
+
+                        {{-- Hidden Detail Panels --}}
+                        @foreach($groupedAppointments as $item)
+                        @php $first = $item->first(); @endphp
+                        @include('appointments.partials.detail-card', ['app' => $first])
+                        @endforeach
+                    </div>
+                </div>
+
+            </div>
         </div>
 
-        <!-- 2. LABORATORY HISTORY -->
+        {{-- TAB 2: LABORATORY RECORDS (Full-Width Workspace with Split-Pane Layout) --}}
         <div class="tab-pane fade" id="lab-history">
             @php $status = $labHistory->permission_status; @endphp
 
-            {{-- ==========================================
-                PHASE 1: PERMISSION HANDSHAKE
-                ========================================== --}}
-            
-            {{-- INITIAL STATE: No one has asked yet --}}
-            @if($status == 'none')
-                <div class="card p-5 text-center border-secondary bg-dark bg-opacity-25 shadow-lg">
-                    <i class="bi bi-shield-lock fs-1 text-secondary mb-3"></i>
-                    <h4 class="text-white uppercase fw-bold">Historical Data Connection</h4>
-                    @if(Auth::user()->isPatient())
-                        <p class="text-secondary">Your physical records are not digitized yet. Request staff to import them.</p>
-                        <form action="{{ route('history.request') }}" method="POST">@csrf
-                            <button class="btn-custom btn-neon px-5 py-2">REQUEST DATA IMPORT</button>
-                        </form>
-                    @else
-                        <p class="text-secondary">This patient has not requested a data import yet.</p>
-                        <form action="{{ route('history.staff-trigger', $targetUser->id) }}" method="POST">@csrf
-                            <button class="btn-custom btn-outline-neon px-5 py-2">ASK PATIENT FOR PERMISSION</button>
-                        </form>
-                    @endif
-                </div>
-
-            {{-- PENDING STAFF: Patient asked, Staff must accept --}}
-            @elseif($status == 'pending_staff')
-                <div class="card p-5 text-center border-info bg-dark bg-opacity-25 shadow-lg">
-                    @if(Auth::user()->isEmployee())
-                        <i class="bi bi-person-check fs-1 text-info mb-3"></i>
-                        <h4 class="text-info uppercase fw-bold">Import Request Received</h4>
-                        <p class="text-secondary">The patient is requesting to have their physical records digitized.</p>
-                        <form action="{{ route('history.accept', ['user' => $targetUser->id]) }}" method="POST">@csrf
-                            <button class="btn-custom btn-neon px-5 py-3 fw-bold">ACCEPT & OPEN IMPORT TOOL</button>
-                        </form>
-                    @else
-                        <i class="bi bi-hourglass-split fs-1 text-info mb-3"></i>
-                        <h4 class="text-info uppercase fw-bold">Waiting for Staff</h4>
-                        <p class="text-secondary">Your request has been sent. Waiting for a technician to begin the process.</p>
-                    @endif
-                </div>
-
-            {{-- PENDING PATIENT: Staff asked, Patient must allow --}}
-            @elseif($status == 'pending_patient')
-                <div class="card p-5 text-center border-warning bg-dark bg-opacity-25 shadow-lg">
-                    @if(Auth::user()->isPatient())
-                        <i class="bi bi-shield-exclamation fs-1 text-warning mb-3"></i>
-                        <h4 class="text-warning uppercase fw-bold">Permission Required</h4>
-                        <p class="text-secondary">The laboratory wants to digitize your previous physical records. Do you allow this?</p>
-                        <form action="{{ route('history.accept') }}" method="POST">@csrf
-                            <button class="btn-custom btn-neon px-5 py-3 fw-bold">ALLOW DIGITIZATION</button>
-                        </form>
-                    @else
-                        <i class="bi bi-hourglass-split fs-1 text-warning mb-3"></i>
-                        <h4 class="text-warning uppercase fw-bold">Awaiting Patient Approval</h4>
-                        <p class="text-secondary">We have sent a request to the patient to allow us to import their records.</p>
-                    @endif
-                </div>
-
-            {{-- ==========================================
-                PHASE 2: DATA MANAGEMENT (Status: Granted)
-                ========================================== --}}
-            @elseif($status == 'granted')
+            @if($status == 'granted')
+            <div class="row g-4">
                 
-                {{-- STAFF ONLY: THE IMPORT TOOL --}}
-                @if(Auth::user()->isEmployee())
-                    <div class="card p-4 border-neon bg-black mb-4 shadow-lg">
-                        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                            <h5 class="text-neon fw-bold mb-0">RECORD IMPORT TOOL</h5>
-                            <div class="btn-group shadow-sm">
-                                <button type="button" class="btn btn-sm btn-outline-neon px-3 border-neon" onclick="addColumn()"><i class="bi bi-plus-lg"></i> COL</button>
-                                <button type="button" class="btn btn-sm btn-outline-neon px-3 border-neon" onclick="addRow()"><i class="bi bi-plus-lg"></i> ROW</button>
-                                <label class="btn btn-sm btn-outline-neon px-3 border-neon mb-0 cursor-pointer">
-                                    <i class="bi bi-file-earmark-excel"></i> IMPORT EXCEL
-                                    <input type="file" id="excelInput" hidden accept=".xlsx, .xls, .csv" onchange="importFromExcel(this)">
-                                </label>
+                {{-- Left Side: Historical Records List --}}
+                <div class="col-lg-5 col-xl-4">
+                    @if(Auth::user()->isEmployee())
+                    <button type="button" class="btn-custom btn-accent w-100 py-2.5 mb-2 fw-bold uppercase shadow-sm" onclick="showAddRecordForm()">
+                        <i class="bi bi-plus-lg me-1"></i> ADD RECORD
+                    </button>
+                    @endif
+
+                    {{-- Added "Notify Patient" action button for staff inside the sidebar --}}
+                    @if(Auth::user()->isEmployee() && count($existingRecords) > 0)
+                    <form action="{{ route('history.notify-encoded', $targetUser->id) }}" method="POST" class="mb-3">
+                        @csrf
+                        <button type="submit" class="btn-custom btn-outline-accent w-100 py-2 fw-bold uppercase shadow-sm">
+                            <i class="bi bi-bell-fill me-1"></i> Notify Patient (Encoded)
+                        </button>
+                    </form>
+                    @endif
+
+                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 580px;">
+                        @forelse($existingRecords as $record)
+                        <div class="card app-list-card bg-card border-secondary p-3 text-start mb-2" id="record-card-{{ $record['id'] }}" onclick="showRecordDetails('{{ $record['id'] }}')">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <div class="fw-bold text-main fs-6 text-truncate" style="max-width: 180px; color: var(--text-main) !important;">
+                                    {{ $record['requested_by'] ?? 'INDIVIDUAL' }}
+                                </div>
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 uppercase px-2 py-1" style="font-size: 0.65rem;">
+                                    {{ count($record['scans'] ?? []) }} {{ count($record['scans'] ?? []) === 1 ? 'FILE' : 'FILES' }}
+                                </span>
+                            </div>
+                            <div class="text-secondary small mt-1">
+                                <i class="bi bi-calendar2 me-1"></i> {{ date('M d, Y', strtotime($record['date_of_record'])) }}
+                            </div>
+                            <div class="text-accent smaller fw-bold mt-1 text-truncate">
+                                <i class="bi bi-flask-fill me-1"></i> {{ Str::limit(implode(', ', $record['tests_requested'] ?? []), 30) }}
                             </div>
                         </div>
-
-                        <form action="{{ route('history.save-manual', $targetUser->id) }}" method="POST">
-                            @csrf
-                            <div class="table-responsive border border-secondary rounded mb-3">
-                                <table class="table table-dark mb-0 align-middle" id="manualTable">
-                                    <thead class="bg-dark"><tr id="manualHead"></tr></thead>
-                                    <tbody id="manualBody"></tbody>
-                                </table>
-                            </div>
-                            <div class="d-flex gap-2">
-                                <button type="submit" class="btn-custom btn-neon flex-grow-1 py-3 fw-bold">SAVE ALL ARCHIVED DATA</button>
-                                <button type="button" class="btn-custom btn-outline-neon px-4" onclick="resetTable()">RESET</button>
-                            </div>
-                        </form>
+                        @empty
+                        <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 350px; background-color: var(--bg-card);">
+                            <i class="bi bi-file-earmark-lock2 fs-2 mb-2 opacity-50"></i>
+                            <p class="small mb-0">No historical records digitized yet.</p>
+                        </div>
+                        @endforelse
                     </div>
-                @endif
+                </div>
 
-                {{-- SHOW DATA TABLE (Visible to both, but "No data" only for Patient) --}}
-                @if($labHistory->dynamic_data)
-                    <h5 class="text-neon mb-3 uppercase small fw-bold">Digitized Historical Records</h5>
-                    <div class="table-responsive border border-secondary rounded shadow-lg">
-                        <table class="table table-dark table-striped mb-0">
-                            <thead class="bg-black">
-                                <tr>
-                                    @foreach($labHistory->dynamic_data['headers'] as $h)
-                                        <th class="text-neon small uppercase">{{ $h }}</th>
-                                    @endforeach
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($labHistory->dynamic_data['rows'] as $row)
-                                    <tr>
-                                        @foreach($row as $cell)
-                                            <td class="text-white">{{ $cell }}</td>
+                {{-- Right Side: Active Workspace --}}
+                <div class="col-lg-7 col-xl-8">
+                    <div id="lab-workspace-container" class="h-100">
+                        
+                        {{-- Default Placeholder --}}
+                        <div id="record-placeholder" class="card p-5 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100" style="min-height: 420px; background-color: var(--bg-card);">
+                            <div class="bg-secondary bg-opacity-10 rounded-circle p-3 mb-4 text-accent d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+                                <i class="bi bi-file-earmark-medical fs-1 text-accent"></i>
+                            </div>
+                            <h4 class="text-main fw-bold mb-2 uppercase">Laboratory Records Workspace</h4>
+                            <p class="text-muted small mb-0" style="max-width: 380px;">Select a digitized laboratory record from the left-hand sidebar directory to review files and download reports.</p>
+                        </div>
+
+                        {{-- Digitize New Record Form Panel --}}
+                        @if(Auth::user()->isEmployee())
+                        <div id="add-record-panel" class="d-none animate-page">
+                            @include('appointments.partials.digitize-records')
+                        </div>
+                        @endif
+
+                        {{-- Records Detail Workspace --}}
+                        @foreach($existingRecords as $record)
+                        <div id="record-details-{{ $record['id'] }}" class="record-detail-pane card border-secondary bg-card p-4 d-none animate-page" style="background-color: var(--bg-card); color: var(--text-main);">
+                            
+                            {{-- Document Title --}}
+                            <div class="border-bottom border-secondary border-opacity-25 pb-3 mb-4 text-start">
+                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                    <div>
+                                        <h4 class="text-main fw-bold mb-1 uppercase tracking-tighter" style="font-size: 1.4rem; color: var(--text-main) !important;">
+                                            DIGITIZED REPORT
+                                        </h4>
+                                        <div class="text-secondary smaller fw-bold uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">
+                                            Date of Record: {{ date('M d, Y', strtotime($record['date_of_record'])) }} <span class="mx-2">|</span> 
+                                            Requested By: {{ $record['requested_by'] ?? 'INDIVIDUAL' }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Form Layout --}}
+                            <div class="row g-4 text-start">
+                                {{-- Profile --}}
+                                <div class="col-md-6 border-end border-secondary border-opacity-25">
+                                    <h6 class="text-accent small fw-bold uppercase mb-3"><i class="bi bi-person-bounding-box me-1"></i> Patient Demographics</h6>
+                                    <div class="mb-2"><strong>Patient Name:</strong> {{ $record['patient_name'] }}</div>
+                                    <div class="mb-2"><strong>Age / Sex:</strong> {{ $record['age'] }} Years Old / {{ $record['sex'] }}</div>
+                                    <div class="mb-3"><strong>Residential Address:</strong> {{ $record['address'] }}</div>
+
+                                    <h6 class="text-accent small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3 mb-3"><i class="bi bi-list-check me-1"></i> Requested Procedures</h6>
+                                    <div class="d-flex flex-wrap gap-1.5">
+                                        @foreach($record['tests_requested'] ?? [] as $test)
+                                        <span class="badge border border-secondary border-opacity-25 text-secondary uppercase px-2 py-1.5 rounded" style="background-color: rgba(0,0,0,0.02); font-size: 0.7rem;">{{ $test }}</span>
                                         @endforeach
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                @elseif(Auth::user()->isPatient())
-                    {{-- This empty state box is ONLY shown to the patient --}}
-                    <div class="card p-5 text-center border-secondary bg-dark bg-opacity-25">
-                        <p class="text-secondary mb-0 italic">No data has been entered yet.</p>
-                    </div>
-                @endif
+                                    </div>
+                                </div>
 
+                                {{-- Attached Files with Interactive Previews and Downloads --}}
+                                <div class="col-md-6">
+                                    <h6 class="text-accent small fw-bold uppercase mb-3"><i class="bi bi-file-earmark-pdf-fill me-1"></i> Attached Scanned Reports</h6>
+                                    <div class="d-flex flex-column gap-2 mb-3">
+                                        @foreach($record['scans'] ?? [] as $fileIdx => $scan)
+                                        {{-- FIXED: Changed file container styling to high-contrast green-translucent background with explicit theme boundaries --}}
+                                        <div class="d-flex justify-content-between align-items-center p-2.5 border rounded" style="background-color: rgba(25, 211, 140, 0.05); border-color: rgba(25, 211, 140, 0.15) !important;">
+                                            <span class="fw-bold small text-truncate pe-2" style="color: var(--text-main) !important; font-size: 0.85rem;">
+                                                <i class="bi bi-file-earmark-medical text-accent me-1"></i> {{ $scan['label'] }}
+                                            </span>
+                                            <div class="d-flex gap-2">
+                                                {{-- Preview Button --}}
+                                                <button type="button" class="btn btn-sm btn-outline-accent py-1 px-3 fw-bold" style="font-size: 0.75rem;" onclick="previewHistFile('{{ $record['id'] }}', '{{ Storage::url($scan['file_path']) }}', '{{ $scan['label'] }}')">
+                                                    PREVIEW
+                                                </button>
+                                                {{-- Download Button --}}
+                                                <a href="{{ Storage::url($scan['file_path']) }}" download class="btn btn-sm btn-accent py-1 px-3 fw-bold" style="font-size: 0.75rem;">
+                                                    DOWNLOAD
+                                                </a>
+                                            </div>
+                                        </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+
+                                {{-- Dynamic Embedded Scans Frame View --}}
+                                <div class="col-12 border-top border-secondary border-opacity-25 pt-4 d-none" id="preview-area-{{ $record['id'] }}">
+                                    <div class="bg-warning text-dark p-2 px-3 fw-bold small uppercase rounded-top">
+                                        <i class="bi bi-eye-fill me-2"></i>PREVIEWING ATTACHED FILE: <span id="preview-title-{{ $record['id'] }}"></span>
+                                    </div>
+                                    <iframe id="viewer-iframe-{{ $record['id'] }}" class="w-100 bg-dark" style="min-height: 480px; border: none; border-radius: 0 0 8px 8px;"></iframe>
+                                </div>
+                            </div>
+
+                        </div>
+                        @endforeach
+                    </div>
+                </div>
+
+            </div>
+            @else
+            {{-- Handshake alerts (Pending state actions) --}}
+            @include('appointments.partials.handshake-panel')
             @endif
         </div>
+
     </div>
 </div>
 
+<style>
+/* Scoped alignment styles */
+#historyTabs .nav-link {
+    color: var(--text-muted) !important;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-card) !important;
+    border-radius: 8px;
+    transition: 0.2s ease;
+}
+#historyTabs .nav-link:hover { 
+    border-color: var(--brand-accent) !important; 
+    color: var(--brand-accent) !important; 
+}
+#historyTabs .nav-link.active {
+    background-color: var(--brand-accent) !important;
+    color: #1c232d !important;
+    border-color: var(--brand-accent) !important;
+}
+.shadow-neon { box-shadow: 0 0 10px rgba(25, 211, 140, 0.15) !important; }
+.app-list-card { transition: all 0.2s ease; cursor: pointer; }
+.app-list-card:hover { border-color: var(--brand-accent) !important; transform: translateX(2px); }
+</style>
+@endsection
+
 @push('scripts')
-<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script>
-    // Initialize data from PHP/Database
-    let tableData = @json($labHistory->dynamic_data);
+// Toggle active panel details for Appointment History Tab
+function showAppointmentDetails(appId) {
+    document.getElementById('details-placeholder').classList.add('d-none');
+    document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
 
-    document.addEventListener('DOMContentLoaded', function() {
-        if (tableData && tableData.headers) {
-            renderTableFromData(tableData);
-        } else {
-            // Default starting table if empty
-            renderTableFromData({
-                headers: ['DATE', 'TEST NAME', 'RESULT', 'REFERENCE'],
-                rows: [['', '', '', '']]
-            });
-        }
-    });
-
-    function renderTableFromData(data) {
-        const head = document.getElementById('manualHead');
-        const body = document.getElementById('manualBody');
-        head.innerHTML = '';
-        body.innerHTML = '';
-
-        // Render Headers
-        data.headers.forEach((h, i) => {
-            let th = document.createElement('th');
-            th.className = "pb-4";
-            th.innerHTML = `
-                <div class="d-flex align-items-center">
-                    <input type="text" name="headers[]" value="${h}" class="form-control form-control-sm bg-transparent border-0 text-neon fw-bold flex-grow-1">
-                    <button type="button" class="btn btn-link text-danger p-0 ms-2" onclick="removeColumn(${i})"><i class="bi bi-trash3"></i></button>
-                </div>
-            `;
-            head.appendChild(th);
-        });
-        // Add empty th for the row action column
-        head.insertAdjacentHTML('beforeend', '<th style="width:50px"></th>');
-
-        // Render Rows
-        data.rows.forEach((row, rowIdx) => {
-            let tr = document.createElement('tr');
-            row.forEach((cell, colIdx) => {
-                let td = document.createElement('td');
-                td.innerHTML = `<input type="text" name="rows[${rowIdx}][]" value="${cell || ''}" class="form-control form-control-sm bg-black text-white border-0">`;
-                tr.appendChild(td);
-            });
-            // Add row delete button
-            tr.insertAdjacentHTML('beforeend', `<td><button type="button" class="btn btn-sm btn-outline-danger border-0" onclick="this.closest('tr').remove()"><i class="bi bi-trash3"></i></button></td>`);
-            body.appendChild(tr);
-        });
+    const detailPanel = document.getElementById(`details-${appId}`);
+    if(detailPanel) {
+        detailPanel.classList.remove('d-none');
     }
 
-    function addColumn() {
-        const head = document.getElementById('manualHead');
-        const th = document.createElement('th');
-        th.className = "position-relative pb-4";
-        const index = head.cells.length - 1;
-        th.innerHTML = `
-            <input type="text" name="headers[]" placeholder="NEW COL" class="form-control form-control-sm bg-transparent border-0 text-neon fw-bold p-0 mb-1">
-            <button type="button" class="btn btn-link text-danger p-0 position-absolute" style="bottom:5px; left:0; font-size: 0.7rem;" onclick="removeColumn(${index})">DELETE COL</button>
-        `;
-        head.insertBefore(th, head.lastElementChild);
+    const listCard = document.getElementById(`card-${appId}`);
+    if(listCard) {
+        listCard.classList.add('border-accent', 'shadow-neon');
+    }
+}
 
-        document.querySelectorAll('#manualBody tr').forEach((tr, rIdx) => {
-            let td = document.createElement('td');
-            td.innerHTML = `<input type="text" name="rows[${rIdx}][]" class="form-control form-control-sm bg-dark text-white border-0">`;
-            tr.insertBefore(td, tr.lastElementChild);
-        });
+// Reset placeholder when switching tabs with safe conditional null-checks
+function resetActiveDetail() {
+    const detailsPlaceholder = document.getElementById('details-placeholder');
+    if (detailsPlaceholder) {
+        detailsPlaceholder.classList.remove('d-none');
+    }
+    
+    const recordPlaceholder = document.getElementById('record-placeholder');
+    if (recordPlaceholder) {
+        recordPlaceholder.classList.remove('d-none');
+    }
+    
+    document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+    
+    const addRecordPanel = document.getElementById('add-record-panel');
+    if (addRecordPanel) {
+        addRecordPanel.classList.add('d-none');
+    }
+}
+
+// Show Digitize New Record Form Panel
+function showAddRecordForm() {
+    const recordPlaceholder = document.getElementById('record-placeholder');
+    if (recordPlaceholder) {
+        recordPlaceholder.classList.add('d-none');
+    }
+    document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+    
+    const addRecordPanel = document.getElementById('add-record-panel');
+    if (addRecordPanel) {
+        addRecordPanel.classList.remove('d-none');
+    }
+}
+
+// Show Specific Digitized Record Detailed Workspace
+function showRecordDetails(recordId) {
+    const recordPlaceholder = document.getElementById('record-placeholder');
+    if (recordPlaceholder) {
+        recordPlaceholder.classList.add('d-none');
+    }
+    document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+    
+    const addRecordPanel = document.getElementById('add-record-panel');
+    if (addRecordPanel) {
+        addRecordPanel.classList.add('d-none');
     }
 
-    function addRow() {
-        const body = document.getElementById('manualBody');
-        const headCount = document.getElementById('manualHead').cells.length - 1;
-        const tr = document.createElement('tr');
-        const rIdx = body.rows.length;
-
-        for(let i=0; i<headCount; i++) {
-            tr.innerHTML += `<td><input type="text" name="rows[${rIdx}][]" class="form-control form-control-sm bg-dark text-white border-0"></td>`;
-        }
-        tr.innerHTML += `<td><button type="button" class="btn btn-sm btn-outline-danger border-0" onclick="this.closest('tr').remove()"><i class="bi bi-trash3"></i></button></td>`;
-        body.appendChild(tr);
+    const detailPanel = document.getElementById(`record-details-${recordId}`);
+    if(detailPanel) {
+        detailPanel.classList.remove('d-none');
     }
 
-    function removeColumn(index) {
-        if(!confirm('Delete this entire column?')) return;
-        document.getElementById('manualHead').deleteCell(index);
-        document.querySelectorAll('#manualBody tr').forEach(tr => tr.deleteCell(index));
+    const listCard = document.getElementById(`record-card-${recordId}`);
+    if(listCard) {
+        listCard.classList.add('border-accent', 'shadow-neon');
     }
+}
 
-    function importFromExcel(input) {
-        const file = input.files[0];
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, {type: 'array'});
-            const firstSheet = workbook.SheetNames[0];
-            const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], {header: 1});
-
-            if (jsonData.length > 0) {
-                renderTableFromData({
-                    headers: jsonData[0], // First row as headers
-                    rows: jsonData.slice(1) // Rest as data
-                });
-            }
-        };
-        reader.readAsArrayBuffer(file);
+// Dynamically preview and render historical PDF inside the workspace frame
+function previewHistFile(recordId, fileUrl, labelName) {
+    const previewArea = document.getElementById(`preview-area-${recordId}`);
+    const iframe = document.getElementById(`viewer-iframe-${recordId}`);
+    const title = document.getElementById(`preview-title-${recordId}`);
+    
+    if (previewArea && iframe && title) {
+        title.innerText = labelName.toUpperCase();
+        iframe.src = fileUrl;
+        previewArea.classList.remove('d-none');
     }
-
-    function resetTable() {
-        if(confirm('Clear all unsaved changes?')) location.reload();
-    }
+}
 </script>
 @endpush
-@endsection

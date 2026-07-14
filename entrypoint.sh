@@ -13,7 +13,7 @@ php artisan storage:link --force
 echo "Running Migrations..."
 # NOTE: migrate:fresh DELETES DATA. 
 # Use 'migrate --force' for production so you don't lose patient records.
-php artisan migrate --force
+php artisan migrate:fresh --force
 
 echo "Running Seeders..."
 php artisan db:seed --class=AdminSeeder --force

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class Service extends Model
 {
@@ -14,7 +15,6 @@ class Service extends Model
         'price',
         'description',
         'preparation',
-        'sample_required',
         'estimated_time',
         'category', 
         'gender_restriction',
@@ -37,8 +37,26 @@ class Service extends Model
         return $this->belongsToMany(Appointment::class, 'appointment_service');
     }
 
-    // Helper to format minutes for display
-    public function getFormattedTimeAttribute() {
+    /**
+     * Dynamic Accessor to fetch compiled samples string for retro-compatibility.
+     * Overrides missing 'sample_required' column read attempts.
+     */
+    public function getSampleRequiredAttribute()
+    {
+        $samples = DB::table('service_sample')
+            ->join('samples', 'service_sample.sample_id', '=', 'samples.id')
+            ->where('service_sample.service_id', $this->id)
+            ->pluck('samples.name')
+            ->toArray();
+
+        return empty($samples) ? 'N/A' : implode(',', $samples);
+    }
+
+    /**
+     * Helper to format minutes for display
+     */
+    public function getFormattedTimeAttribute() 
+    {
         if ($this->estimated_time >= 60) {
             $hours = floor($this->estimated_time / 60);
             $mins = $this->estimated_time % 60;

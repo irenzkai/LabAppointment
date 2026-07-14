@@ -1,0 +1,220 @@
+/* 
+|--------------------------------------------------------------------------
+| 1. THEME TOKENS (Oxford Blue & Shamrock Green)
+|--------------------------------------------------------------------------
+*/
+:root {
+    /* Brand Colors */
+    --brand-dark: #1c232d;      /* Oxford Blue */
+    --brand-accent: #19d38c;    /* Shamrock Green */
+    --brand-accent-hover: #15b376;
+    
+    /* Light Mode Surface (Clinical & Professional) */
+    --bg-main: #f4f7f9;         /* Very soft gray-blue */
+    --bg-card: #ffffff;
+    --text-main: #1c232d;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+
+    /* Navigation */
+    --nav-bg: #1c232d;
+    --nav-link: rgba(255, 255, 255, 0.85);
+}
+
+/* Dark Mode Overrides */
+[data-bs-theme="dark"] {
+    --bg-main: #0a1016;         /* Midnight Gray-Black */
+    --bg-card: #1c232d;         /* Cards use the Brand Dark */
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    --border-color: #2d3748;
+    --nav-bg: #070b13;
+}
+
+/* 
+|--------------------------------------------------------------------------
+| 2. GLOBAL RESETS & TYPOGRAPHY
+|--------------------------------------------------------------------------
+*/
+body {
+    padding-top: 72px;          /* Prevent fixed header from overlapping the content */
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    transition: background-color 0.3s ease;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Force Remove Underlines from everything */
+a, .btn, .nav-link, .dropdown-item, .accordion-button {
+    text-decoration: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+/* 
+|--------------------------------------------------------------------------
+| 3. NAVIGATION (Visibility Fix)
+|--------------------------------------------------------------------------
+*/
+.navbar {
+    position: fixed !important; /* Pin navbar to the absolute top of the viewport */
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1050 !important;   /* Force above all animation stacking contexts */
+    background-color: var(--nav-bg) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    min-height: 72px;
+}
+
+.navbar .nav-link {
+    color: var(--nav-link) !important;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.5rem 1.2rem !important;
+}
+
+.navbar .nav-link:hover, 
+.navbar .nav-link.active {
+    color: var(--brand-accent) !important;
+}
+
+.nav-logo {
+    height: 40px;
+    width: 40px;
+    border-radius: 50%;
+    border: 2px solid var(--brand-accent);
+    object-fit: cover;
+}
+
+/* 
+|--------------------------------------------------------------------------
+| 4. UNIFIED BUTTON SYSTEM
+|--------------------------------------------------------------------------
+*/
+.btn-custom {
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.btn-accent {
+    background-color: var(--brand-accent);
+    color: #1c232d !important;
+    border: 2px solid var(--brand-accent);
+}
+
+.btn-accent:hover {
+    background-color: var(--brand-accent-hover);
+    border-color: var(--brand-accent-hover);
+    transform: translateY(-1px);
+}
+
+.btn-outline-accent {
+    background: transparent;
+    border: 2px solid var(--brand-accent);
+    color: var(--brand-accent) !important;
+}
+
+.btn-outline-accent:hover {
+    background-color: var(--brand-accent);
+    color: #1c232d !important;
+}
+
+/* 
+|--------------------------------------------------------------------------
+| 5. CLINICAL COMPONENTS (Cards, Tables, Forms)
+|--------------------------------------------------------------------------
+*/
+.card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+/* Medical Data Tables */
+.table thead th {
+    background-color: var(--brand-dark);
+    color: #ffffff;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 1rem;
+    border: none;
+}
+
+[data-bs-theme="dark"] .table thead th {
+    background-color: #070b13;
+}
+
+/* Form Styling */
+.form-control, .form-select {
+    background-color: var(--bg-card);
+    border: 1.5px solid var(--border-color);
+    padding: 12px;
+    border-radius: 10px;
+    color: var(--text-main);
+}
+
+.form-control:focus {
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 4px rgba(25, 211, 140, 0.1) !important;
+}
+
+/* 
+|--------------------------------------------------------------------------
+| 6. UTILITY LIBRARY (Minimal Blade Styling)
+|--------------------------------------------------------------------------
+*/
+.text-accent { color: var(--brand-accent) !important; }
+.bg-brand-dark { background-color: var(--brand-dark) !important; }
+.fw-800 { font-weight: 800 !important; }
+.fs-x-small { font-size: 0.7rem !important; }
+
+/* Clinical Alert Style */
+.alert-clinical {
+    border: none;
+    border-left: 4px solid var(--brand-accent);
+    background-color: rgba(25, 211, 140, 0.05);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+/* 
+|--------------------------------------------------------------------------
+| 7. ANIMATIONS
+|--------------------------------------------------------------------------
+*/
+.animate-page {
+    animation: slideUpFade 0.4s ease-out;
+}
+
+@keyframes slideUpFade {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-main); }
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--brand-accent); }
