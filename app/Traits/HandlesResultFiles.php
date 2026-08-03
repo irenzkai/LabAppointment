@@ -14,11 +14,12 @@ trait HandlesResultFiles
         if ($request->hasFile($fieldName)) {
             $res = $appointment->result;
             
-            // Delete old file if it exists to save storage
+            // Delete old file from storage if it exists to save space
             if ($res->$fieldName) {
                 Storage::disk('public')->delete($res->$fieldName);
             }
 
+            // Stores directly to 'results/' directory in your Supabase Bucket
             $path = $request->file($fieldName)->store('results', 'public');
             $res->update([$fieldName => $path]);
         }

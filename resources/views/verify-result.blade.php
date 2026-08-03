@@ -1,12 +1,14 @@
 @extends('layouts.app')
 
+@section('title', 'Verified Result')
+
 @section('content')
 <div class="row justify-content-center align-items-center min-vh-75 animate-page">
     <div class="col-md-10 col-lg-7 text-center">
-        
+
         {{-- Central Clinical Verification Card --}}
         <div class="card p-5 border-secondary bg-card shadow-lg mx-auto" style="max-width: 620px; background-color: var(--bg-card); color: var(--text-main);">
-            
+
             {{-- Security Verification Header --}}
             <div class="mb-4">
                 <div class="display-3 text-accent mb-2">
@@ -58,41 +60,42 @@
             {{-- Certified Workstation Verification Steps --}}
             <div class="text-start">
                 <h6 class="text-accent smaller fw-bold uppercase tracking-wider mb-3">Workstation Verification States</h6>
-                
+
                 @php
-                    $components = $res->included_reports ?? ['lab'];
+                $components = $res->included_reports ?? ['lab'];
                 @endphp
 
                 <div class="d-flex flex-column gap-2.5">
                     @foreach($components as $type)
-                        @php
-                            $prefix = ($type == 'med_cert') ? 'med' : $type;
-                            $statusField = $prefix . '_status';
-                            $currentStatus = $res->$statusField ?? 'pending';
+                    @php
+                    $prefix = ($type == 'med_cert') ? 'med' : $type;
+                    
+                    $statusField = $prefix . '_status';
+                    $currentStatus = $res->$statusField ?? 'pending';
 
-                            $isVerifiedComponent = ($currentStatus === 'verified');
-                            $badgeClass = $isVerifiedComponent 
-                                ? 'bg-success bg-opacity-10 text-success border-success' 
-                                : 'bg-warning bg-opacity-10 text-warning border-warning';
+                    $isVerifiedComponent = ($currentStatus === 'verified');
+                    $badgeClass = $isVerifiedComponent 
+                        ? 'bg-success bg-opacity-10 text-success border-success' 
+                        : 'bg-warning bg-opacity-10 text-warning border-warning';
 
-                            $labelName = match($type) {
-                                'lab' => 'Laboratory Result Findings',
-                                'med_cert' => 'Medical Certificate Clearance',
-                                'radio' => 'Radiologic Report Findings',
-                                'drug' => 'Drug Test Screening Result',
-                                default => strtoupper($type) . ' Worksheet'
-                            };
-                        @endphp
+                    $labelName = match($type) {
+                        'lab' => 'Laboratory Result Findings',
+                        'med_cert' => 'Medical Certificate Clearance',
+                        'radio' => 'Radiologic Report Findings',
+                        'drug' => 'Drug Test Screening Result',
+                        default => strtoupper($type) . ' Worksheet'
+                    };
+                    @endphp
 
-                        <div class="d-flex justify-content-between align-items-center p-3 border border-secondary border-opacity-10 rounded" style="background-color: rgba(0,0,0,0.015);">
-                            <div class="d-flex align-items-center gap-2">
-                                <i class="bi {{ $isVerifiedComponent ? 'bi-check-circle-fill text-success' : 'bi-hourglass-split text-warning' }} fs-5"></i>
-                                <span class="fw-bold text-main small">{{ $labelName }}</span>
-                            </div>
-                            <span class="badge border {{ $badgeClass }} uppercase font-monospace" style="font-size: 0.65rem;">
-                                {{ $isVerifiedComponent ? 'Verified' : strtoupper($currentStatus) }}
-                            </span>
+                    <div class="d-flex justify-content-between align-items-center p-3 border border-secondary border-opacity-10 rounded" style="background-color: rgba(0,0,0,0.015);">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi {{ $isVerifiedComponent ? 'bi-check-circle-fill text-success' : 'bi-hourglass-split text-warning' }} fs-5"></i>
+                            <span class="fw-bold text-main small">{{ $labelName }}</span>
                         </div>
+                        <span class="badge border {{ $badgeClass }} uppercase font-monospace" style="font-size: 0.65rem;">
+                            {{ $isVerifiedComponent ? 'Verified' : strtoupper($currentStatus) }}
+                        </span>
+                    </div>
                     @endforeach
                 </div>
             </div>
@@ -113,21 +116,21 @@
 </div>
 
 <style>
-/* Verification indicator glowing effects */
-.shadow-neon {
-    box-shadow: 0 0 15px var(--brand-accent);
-}
+    /* Verification indicator glowing effects */
+    .shadow-neon {
+        box-shadow: 0 0 15px var(--brand-accent);
+    }
 
-.min-vh-75 {
-    min-height: 75vh;
-}
+    .min-vh-75 {
+        min-height: 75vh;
+    }
 
-/* Metadata snap details adjustments */
-.table th, .table td {
-    border-color: rgba(255, 255, 255, 0.05) !important;
-}
-[data-bs-theme="light"] .table th, [data-bs-theme="light"] .table td {
-    border-color: rgba(0, 0, 0, 0.05) !important;
-}
+    /* Metadata snap details adjustments */
+    .table th, .table td {
+        border-color: rgba(255, 255, 255, 0.05) !important;
+    }
+    [data-bs-theme="light"] .table th, [data-bs-theme="light"] .table td {
+        border-color: rgba(0, 0, 0, 0.05) !important;
+    }
 </style>
 @endsection

@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'Landing Page')
+
 @section('content')
 <div class="animate-page pb-5">
  

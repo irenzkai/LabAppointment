@@ -14,7 +14,7 @@ class AppointmentConfigController extends Controller
     public function index(Request $request)
     {
         $selectedDate = $request->get('date', date('Y-m-d'));
-        
+
         // 1. Get Effective Configuration (Override takes priority)
         $config = AppointmentConfig::where('specific_date', $selectedDate)->first()
             ?? AppointmentConfig::where('day_of_week', date('w', strtotime($selectedDate)))->first();
@@ -33,7 +33,7 @@ class AppointmentConfigController extends Controller
             while ($current < $end) {
                 $time = date('H:i:00', $current);
                 $isLunch = ($config->has_lunch_break && $time >= $config->lunch_start && $time < $config->lunch_end);
-                
+
                 if (!$isLunch) {
                     // Fetch real appointments for this specific slot to show names/status
                     $appointments = Appointment::where('appointment_date', $selectedDate)
@@ -77,7 +77,7 @@ class AppointmentConfigController extends Controller
             'opening_time', 'closing_time', 'slot_duration', 
             'lunch_start', 'lunch_end', 'max_patients_per_slot', 'lead_time_hours'
         ]);
-        
+
         $data['is_open'] = $request->has('is_open');
         $data['has_lunch_break'] = $request->has('has_lunch_break');
 
@@ -106,7 +106,7 @@ class AppointmentConfigController extends Controller
     {
         $date = $request->query('date');
         $depId = $request->query('dependent_id');
-        
+
         if (!$date) return response()->json(['error' => 'Date required'], 400);
 
         try {
@@ -125,27 +125,28 @@ class AppointmentConfigController extends Controller
 
             // 3. Identify Full Slots via DB
             $fullSlots = Appointment::where('appointment_date', $date)
-                ->whereIn('status', ['pending', 'approved'])
+                ->whereIn('status', ['pending', 'approved', 'tested', 'encoded', 'released'])
                 ->select('time_slot', DB::raw('count(*) as patient_count'))
                 ->groupBy('time_slot')
                 ->having('patient_count', '>=', $config->max_patients_per_slot ?? 1)
                 ->pluck('time_slot')
                 ->toArray();
 
-            // 4. Lead Time Check: Generate list of "too late" slots if booking for today
-            $tooLateSlots = [];
-            if ($date === date('Y-m-d') && $config) {
-                $leadTimeMs = ($config->lead_time_hours ?? 0) * 3600;
-                $cutoffTime = time() + $leadTimeMs;
-                
-                // We'll calculate specific slots locally or pass the lead time back
-            }
+            // NEW: Fetch all occupied slots and their exact counts to support live on-screen capacity validation [126]
+            $occupiedSlots = Appointment::where('appointment_date', $date)
+                ->whereIn('status', ['pending', 'approved', 'tested', 'encoded', 'released'])
+                ->select('time_slot', DB::raw('count(*) as patient_count'))
+                ->groupBy('time_slot')
+                ->get()
+                ->pluck('patient_count', 'time_slot')
+                ->toArray();
 
             return response()->json([
                 'patient_gender' => strtolower($gender),
                 'is_closed' => !($config->is_open ?? false),
                 'config' => $config,
                 'full_slots' => $fullSlots,
+                'occupied_slots' => $occupiedSlots,
                 'server_time' => date('H:i:s'),
                 'server_date' => date('Y-m-d')
             ]);

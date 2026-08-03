@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'Notifications')
+
 @section('content')
 <div class="row justify-content-center text-start animate-page">
     <div class="col-md-10 col-lg-8">

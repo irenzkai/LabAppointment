@@ -8,37 +8,30 @@ class AppointmentResult extends Model
 {
     /**
      * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
+     * 
+     * FIXED: Added workstation properties back to $fillable to allow controllers 
+     * to trigger mutators during Eloquent mass-assignment ($model->update() / ::create()).
      */
     protected $fillable = [
         'appointment_id',
         'included_reports',
-        'lab_status',
-        'med_status',
-        'radio_status',
-        'drug_status',
-        'lab_data',
-        'med_cert_data',
-        'radio_data',
-        'drug_test_data',
-        'lab_scan',
-        'med_cert_scan',
-        'radio_scan',
-        'drug_test_scan',
-        'xray_image',
-        'lab_return_reason',
-        'med_return_reason',
-        'radio_return_reason',
-        'drug_return_reason',
         
-        // Workstation Audit Fields for Mass Assignment / Mutator Interception
+        // Workstation Fallbacks for Mass-Assignment Interception
+        'lab_status', 'med_status', 'radio_status', 'drug_status',
+        'lab_scan', 'med_cert_scan', 'radio_scan', 'drug_test_scan', 'xray_image',
+        'lab_data', 'med_cert_data', 'radio_data', 'drug_test_data',
+        'lab_return_reason', 'med_return_reason', 'radio_return_reason', 'drug_return_reason',
+        
+        // Workstation Audit Fields for Mass Assignment / Interception
         'lab_v1_by_name', 'lab_v1_by', 'lab_v1_at', 'lab_v2_by_name', 'lab_v2_by', 'lab_v2_at',
         'med_v1_by_name', 'med_v1_by', 'med_v1_at', 'med_v2_by_name', 'med_v2_by', 'med_v2_at',
         'radio_v1_by_name', 'radio_v1_by', 'radio_v1_at', 'radio_v2_by_name', 'radio_v2_by', 'radio_v2_at',
         'drug_v1_by_name', 'drug_v1_by', 'drug_v1_at', 'drug_v2_by_name', 'drug_v2_by', 'drug_v2_at'
     ];
 
+    /**
+     * Cast attributes to native types.
+     */
     protected $casts = [
         'included_reports' => 'array',
     ];
@@ -83,6 +76,98 @@ class AppointmentResult extends Model
         return $this->hasOne(AppointmentRadiologyReport::class, 'appointment_result_id');
     }
 
+    public function drugTest()
+    {
+        return $this->hasOne(AppointmentDrugTest::class, 'appointment_result_id');
+    }
+
+    public function customWorkstationResults()
+    {
+        return $this->hasMany(CustomWorkstationResult::class, 'appointment_result_id');
+    }
+
+    // =========================================================================
+    // CENTRALIZED RELATION HANDSHAKE (Prevents Duplicate SQL Insert Race Conditions)
+    // =========================================================================
+
+    /**
+     * Safely fetches or creates a worksheet and caches it inside Eloquent's relation cache
+     * so subsequent mutators in the same request process the exact same model instance.
+     */
+    private function getOrCreateWorksheet(string $relation, string $modelClass)
+    {
+        // 1. Return immediately if the relation is already loaded and cached
+        if ($this->relationLoaded($relation) && $this->getRelation($relation) !== null) {
+            return $this->getRelation($relation);
+        }
+
+        // 2. Otherwise, fetch from the database
+        $record = $this->$relation()->first();
+
+        // 3. Create, save, and manually cache the relation if it doesn't exist yet
+        if (!$record) {
+            $record = $this->$relation()->create([]);
+        }
+
+        $this->setRelation($relation, $record);
+
+        return $record;
+    }
+
+    // Helper wrappers to fetch worksheets cleanly
+    public function getLabDetailsRecord() { return $this->getOrCreateWorksheet('labDetails', AppointmentLabDetail::class); }
+    public function getMedCertRecord() { return $this->getOrCreateWorksheet('medCert', AppointmentMedCert::class); }
+    public function getRadiologyReportRecord() { return $this->getOrCreateWorksheet('radiologyReport', AppointmentRadiologyReport::class); }
+    public function getDrugTestRecord() { return $this->getOrCreateWorksheet('drugTest', AppointmentDrugTest::class); }
+
+    // =========================================================================
+    // TRANSPARENT DYNAMIC ACCESSORS (Maintains 100% Backwards Compatibility)
+    // =========================================================================
+
+    // --- Laboratory Workstation fallbacks ---
+    public function getLabStatusAttribute() { return $this->getLabDetailsRecord()->status; }
+    public function setLabStatusAttribute($value) { $record = $this->getLabDetailsRecord(); $record->status = $value; $record->save(); }
+
+    public function getLabScanAttribute() { return $this->getLabDetailsRecord()->scan_path; }
+    public function setLabScanAttribute($value) { $record = $this->getLabDetailsRecord(); $record->scan_path = $value; $record->save(); }
+
+    public function getLabReturnReasonAttribute() { return $this->getLabDetailsRecord()->return_reason; }
+    public function setLabReturnReasonAttribute($value) { $record = $this->getLabDetailsRecord(); $record->return_reason = $value; $record->save(); }
+
+    // --- Medical Certificate Workstation fallbacks ---
+    public function getMedStatusAttribute() { return $this->getMedCertRecord()->status; }
+    public function setMedStatusAttribute($value) { $record = $this->getMedCertRecord(); $record->status = $value; $record->save(); }
+
+    public function getMedCertScanAttribute() { return $this->getMedCertRecord()->scan_path; }
+    public function setMedCertScanAttribute($value) { $record = $this->getMedCertRecord(); $record->scan_path = $value; $record->save(); }
+
+    public function getMedReturnReasonAttribute() { return $this->getMedCertRecord()->return_reason; }
+    public function setMedReturnReasonAttribute($value) { $record = $this->getMedCertRecord(); $record->return_reason = $value; $record->save(); }
+
+    // --- Radiology Workstation fallbacks ---
+    public function getRadioStatusAttribute() { return $this->getRadiologyReportRecord()->status; }
+    public function setRadioStatusAttribute($value) { $record = $this->getRadiologyReportRecord(); $record->status = $value; $record->save(); }
+
+    public function getRadioScanAttribute() { return $this->getRadiologyReportRecord()->scan_path; }
+    public function setRadioScanAttribute($value) { $record = $this->getRadiologyReportRecord(); $record->scan_path = $value; $record->save(); }
+
+    // FIXED: Mapped xray_image accessor/mutator straight to the normalized sub-table
+    public function getXrayImageAttribute() { return $this->getRadiologyReportRecord()->xray_image; }
+    public function setXrayImageAttribute($value) { $record = $this->getRadiologyReportRecord(); $record->xray_image = $value; $record->save(); }
+
+    public function getRadioReturnReasonAttribute() { return $this->getRadiologyReportRecord()->return_reason; }
+    public function setRadioReturnReasonAttribute($value) { $record = $this->getRadiologyReportRecord(); $record->return_reason = $value; $record->save(); }
+
+    // --- Drug Test Workstation fallbacks ---
+    public function getDrugStatusAttribute() { return $this->getDrugTestRecord()->status; }
+    public function setDrugStatusAttribute($value) { $record = $this->getDrugTestRecord(); $record->status = $value; $record->save(); }
+
+    public function getDrugTestScanAttribute() { return $this->getDrugTestRecord()->scan_path; }
+    public function setDrugTestScanAttribute($value) { $record = $this->getDrugTestRecord(); $record->scan_path = $value; $record->save(); }
+
+    public function getDrugReturnReasonAttribute() { return $this->getDrugTestRecord()->return_reason; }
+    public function setDrugReturnReasonAttribute($value) { $record = $this->getDrugTestRecord(); $record->return_reason = $value; $record->save(); }
+
     // =========================================================================
     // TRANSPARENT RETROACTIVE ACCESSORS WITH JSON FALLBACKS
     // =========================================================================
@@ -93,7 +178,7 @@ class AppointmentResult extends Model
     public function getLabDataAttribute()
     {
         $results = $this->labResults;
-        
+
         // Relational fallback to raw JSON column if normalized database tables contain no rows
         if ($results->isEmpty() && !empty($this->attributes['lab_data'])) {
             $decoded = json_decode($this->attributes['lab_data'], true);
@@ -102,7 +187,7 @@ class AppointmentResult extends Model
             }
         }
 
-        $details = $this->labDetails;
+        $details = $this->getLabDetailsRecord();
         $resultsArray = $results->map(fn($r) => [
             'name' => $r->parameter_name,
             'value' => $r->observed_value,
@@ -110,10 +195,7 @@ class AppointmentResult extends Model
         ])->toArray();
 
         // Categorize results dynamically for standard display blocks in PDF reports
-        $hem = [];
-        $uri = [];
-        $fec = [];
-        $ser = [];
+        $hem = []; $uri = []; $fec = []; $ser = [];
 
         foreach ($results as $r) {
             $name = trim($r->parameter_name);
@@ -190,8 +272,8 @@ class AppointmentResult extends Model
      */
     public function getMedCertDataAttribute()
     {
-        $cert = $this->medCert;
-        
+        $cert = $this->getMedCertRecord();
+
         // Fallback to raw JSON column if relational medCert record is missing
         if (!$cert && !empty($this->attributes['med_cert_data'])) {
             $decoded = json_decode($this->attributes['med_cert_data'], true);
@@ -220,8 +302,8 @@ class AppointmentResult extends Model
      */
     public function getRadioDataAttribute()
     {
-        $report = $this->radiologyReport;
-        
+        $report = $this->getRadiologyReportRecord();
+
         // Fallback to raw JSON column if relational radiologyReport record is missing
         if (!$report && !empty($this->attributes['radio_data'])) {
             $decoded = json_decode($this->attributes['radio_data'], true);
@@ -245,6 +327,21 @@ class AppointmentResult extends Model
         ];
     }
 
+    /**
+     * FIXED: Reconstructs the drug_test_data JSON structure dynamically from the normalized table.
+     */
+    public function getDrugTestDataAttribute()
+    {
+        $record = $this->getDrugTestRecord();
+
+        return [
+            'metadata' => [
+                'cert_no' => $record->cert_no,
+                'date' => $record->updated_at ? $record->updated_at->format('Y-m-d') : now()->format('Y-m-d'),
+            ]
+        ];
+    }
+
     // =========================================================================
     // TRANSPARENT MUTATORS (Writes incoming JSON arrays into relational tables)
     // =========================================================================
@@ -258,20 +355,20 @@ class AppointmentResult extends Model
         // Detects if key matches audit fields (e.g., lab_v1_by_name, med_verified_at, etc.)
         if (preg_match('/^(lab|med|radio|drug)_(v1|v2|verified)_(by|by_name|at)$/', $key, $matches)) {
             $workstation = $matches[1]; // 'lab', 'med', 'radio', 'drug'
-            $version = $matches[2];     // 'v1', 'v2', 'verified'
-            $field = $matches[3];       // 'by', 'by_name', 'at'
-            
+            $version = $matches[2]; // 'v1', 'v2', 'verified'
+            $field = $matches[3]; // 'by', 'by_name', 'at'
+
             // Map legacy 'verified' key to standard 'v2' verifier database column
             $versionKey = ($version === 'verified') ? 'v2' : $version;
             $dbField = "{$versionKey}_{$field}";
-            
+
             $this->updateAudit($workstation, [
                 $dbField => $value
             ]);
-            
+
             return $this;
         }
-        
+
         return parent::setAttribute($key, $value);
     }
 
@@ -282,7 +379,8 @@ class AppointmentResult extends Model
     {
         if (is_array($value)) {
             // 1. Sync Lab details & signatories
-            $this->labDetails()->updateOrCreate([], [
+            $record = $this->getLabDetailsRecord();
+            $record->fill([
                 'case_no' => $value['metadata']['case_no'] ?? null,
                 'released_by_name' => $value['sig']['rel_name'] ?? null,
                 'released_by_license' => $value['sig']['rel_lic'] ?? null,
@@ -290,7 +388,7 @@ class AppointmentResult extends Model
                 'validated_by_license' => $value['sig']['val1_lic'] ?? null,
                 'validated_by_name_2' => $value['sig']['val2_name'] ?? null,
                 'validated_by_license_2' => $value['sig']['val2_lic'] ?? null,
-            ]);
+            ])->save();
 
             // 2. Sync Lab parameters
             if (isset($value['results']) && is_array($value['results'])) {
@@ -314,7 +412,8 @@ class AppointmentResult extends Model
     public function setMedCertDataAttribute($value)
     {
         if (is_array($value)) {
-            $this->medCert()->updateOrCreate([], [
+            $record = $this->getMedCertRecord();
+            $record->fill([
                 'cert_no' => $value['metadata']['cert_no'] ?? ($value['cert_no'] ?? null),
                 'date_of_issue' => $value['metadata']['date'] ?? ($value['date'] ?? null),
                 'findings' => $value['findings'] ?? null,
@@ -322,7 +421,7 @@ class AppointmentResult extends Model
                 'issued_to' => $value['issued_to'] ?? ($value['metadata']['name'] ?? null),
                 'physician_name' => $value['sig']['name'] ?? ($value['sig_name'] ?? null),
                 'physician_license' => $value['sig']['lic'] ?? ($value['sig_info'] ?? null),
-            ]);
+            ])->save();
         }
     }
 
@@ -332,7 +431,8 @@ class AppointmentResult extends Model
     public function setRadioDataAttribute($value)
     {
         if (is_array($value)) {
-            $this->radiologyReport()->updateOrCreate([], [
+            $record = $this->getRadiologyReportRecord();
+            $record->fill([
                 'case_no' => $value['metadata']['case_no'] ?? ($value['case_no'] ?? null),
                 'date_of_exam' => $value['metadata']['date'] ?? ($value['date'] ?? null),
                 'technique' => $value['technique'] ?? null,
@@ -340,7 +440,20 @@ class AppointmentResult extends Model
                 'impression' => $value['impression'] ?? null,
                 'radiologist_name' => $value['sig']['name'] ?? ($value['sig_name'] ?? null),
                 'radiologist_license' => $value['sig']['lic'] ?? ($value['sig_info'] ?? null),
-            ]);
+            ])->save();
+        }
+    }
+
+    /**
+     * FIXED: Intercepts updates to 'drug_test_data' and maps the nested cert_no cleanly to the 3NF table.
+     */
+    public function setDrugTestDataAttribute($value)
+    {
+        if (is_array($value)) {
+            $record = $this->getDrugTestRecord();
+            $record->fill([
+                'cert_no' => $value['metadata']['cert_no'] ?? ($value['cert_no'] ?? null),
+            ])->save();
         }
     }
 

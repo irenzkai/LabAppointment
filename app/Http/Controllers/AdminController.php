@@ -2,15 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
-use App\Models\Appointment;
-use App\Models\ActivityLog;
-use App\Models\LaboratoryHistory;
-use App\Models\LaboratoryHistoryRecord;
-use App\Models\Service;
+use App\Models\{User, Appointment, ActivityLog, LaboratoryHistory, LaboratoryHistoryRecord, Service};
+use App\Events\QueueUpdated; // Broadcasts status/badge refreshes to the Hub and master queue [53]
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\{Auth, DB, Hash};
+use Illuminate\Support\Facades\Password as PasswordFacade;
 
 class AdminController extends Controller
 {
@@ -19,8 +15,8 @@ class AdminController extends Controller
      */
     public function index() 
     {
-        // Fetch all users except the currently logged-in person
-        $query = User::where('id', '!=', Auth::id());
+        // Fetch all users (including soft-deleted/deactivated accounts) except the logged-in admin [15, 102]
+        $query = User::withTrashed()->where('id', '!=', Auth::id());
 
         // If the logged-in user is 'staff', hide 'admin' accounts from the list
         if (Auth::user()->role === 'staff') {
@@ -33,108 +29,104 @@ class AdminController extends Controller
     }
 
     /**
-     * ADMIN ONLY: Toggle Account Status (Disable/Enable)
+     * ADMIN ONLY: Unified User Profile Editor & Deactivation Engine [15, 102].
+     * Handles role changes, email re-verifications, password overrides, and soft-deletes.
      */
-    public function toggleStatus(User $user) 
+    public function updateUser(Request $request, $id)
     {
-        if (Auth::user()->role !== 'admin') abort(403);
-
-        // Toggle boolean
-        $user->update(['is_active' => !$user->is_active]);
-
-        $status = $user->is_active ? 'ENABLED' : 'DISABLED';
-
-        // Audit Log
-        ActivityLog::record(
-            'ACCOUNT STATUS CHANGE', 
-            "Admin toggled account to $status", 
-            $user->name
-        );
-
-        return back()->with('success', "Account for {$user->name} has been $status.");
-    }
-
-    /**
-     * ADMIN ONLY: Promote/Demote Roles
-     */
-    public function changeRole(Request $request, User $user) 
-    {
-        // 1. Authorization Check
-        if (Auth::user()->role !== 'admin') abort(403);
-
-        // 2. Validate the input (Explicitly exclude 'admin' to prevent rogue admins)
-        $request->validate([
-            'role' => 'required|in:user,staff,lab_tech'
-        ]);
-
-        // 3. Update and Log
-        $user->update(['role' => $request->role]);
-
-        ActivityLog::record(
-            'ROLE CHANGE', 
-            "Account promoted/demoted to " . strtoupper($request->role), 
-            $user->name
-        );
-
-        return back()->with('success', "User {$user->name} role updated to " . strtoupper($request->role));
-    }
-
-    /**
-     * ADMIN ONLY: Permanent Delete with Audit Reason
-     * FIXED: Changed dissociation to deletion for activity logs to resolve NOT NULL constraints.
-     */
-    public function destroy(Request $request, $id) 
-    {
-        if (Auth::user()->role !== 'admin') abort(403);
-
-        $user = User::findOrFail($id);
-
-        $request->validate([
-            'reason' => 'required|string|min:5'
-        ]);
-
-        DB::beginTransaction();
-
-        try {
-            // 1. Create a snapshot log of the deletion event performed by the current Admin
-            ActivityLog::create([
-                'user_id' => Auth::id(),
-                'patient_name' => $user->name,
-                'action' => 'PERMANENT ACCOUNT DELETION',
-                'reason' => $request->reason,
-            ]);
-
-            // 2. FIXED: Delete activity logs performed by this user
-            // We delete these to respect the NOT NULL database constraint while purging the account.
-            ActivityLog::where('user_id', $id)->delete();
-
-            // 3. Cleanup relational data
-            $user->dependents()->delete();
-            
-            foreach($user->appointments as $app) {
-                $app->services()->detach();
-                if($app->result) {
-                    // Clean up normalized workstation sub-tables first
-                    $app->result->labResults()->delete();
-                    $app->result->labDetails()->delete();
-                    $app->result->medCert()->delete();
-                    $app->result->radiologyReport()->delete();
-                    $app->result->delete();
-                }
-                $app->delete();
-            }
-
-            // 4. Delete the user profile
-            $user->delete();
-
-            DB::commit();
-            return redirect()->route('admin.users.index')->with('success', 'User account successfully purged from system.');
-
-        } catch (\Exception $e) {
-            DB::rollback();
-            // Capture the specific SQL error for the session feedback
-            return back()->with('error', 'Purge failed: ' . $e->getMessage());
+        if (Auth::user()->role !== 'admin') {
+            abort(403);
         }
+
+        // Fetch user supporting both active and soft-deleted/deactivated profiles [15, 102]
+        $user = User::withTrashed()->findOrFail($id);
+
+        $request->validate([
+            'reason' => 'required|string|min:5',
+            'first_name' => 'required|string|max:255',
+            'middle_name' => 'nullable|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'phone' => 'required|string|max:20',
+            'birthdate' => 'required|date|before_or_equal:today',
+            'sex' => 'required|string|in:Male,Female',
+            'street' => 'required|string|max:255',
+            'barangay' => 'required|string|max:255',
+            'city' => 'required|string|max:255',
+            'province' => 'required|string|max:255',
+            'role' => 'required|in:user,staff,lab_tech',
+            'email' => 'required|email|unique:users,email,' . $user->id,
+            'password_option' => 'nullable|in:send_link,manual',
+            'password' => 'required_if:password_option,manual|nullable|string|min:8|confirmed',
+            'deactivate' => 'nullable|boolean'
+        ]);
+
+        $reason = $request->input('reason');
+
+        $fName = strtoupper(trim($request->first_name));
+        $mName = ($request->middle_name && strtoupper($request->middle_name) !== 'N/A') ? strtoupper(trim($request->middle_name)) : 'N/A';
+        $lName = strtoupper(trim($request->last_name));
+        $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
+
+        // 1. Bind basic demographics
+        $user->fill([
+            'first_name' => $fName,
+            'middle_name' => $mName,
+            'last_name' => $lName,
+            'name' => $displayName,
+            'phone' => $request->phone,
+            'birthdate' => $request->birthdate,
+            'sex' => $request->sex,
+            'street' => strtoupper(trim($request->street)),
+            'barangay' => strtoupper(trim($request->barangay)),
+            'city' => strtoupper(trim($request->city)),
+            'province' => strtoupper(trim($request->province)),
+            'role' => $request->role,
+        ]);
+
+        // 2. Email Change -> Prompts re-verification for patients [50]
+        if ($user->isDirty('email')) {
+            $user->email = $request->email;
+            if ($user->isPatient()) {
+                $user->email_verified_at = null;
+                $user->sendEmailVerificationNotification();
+            }
+        }
+
+        // 3. Password Overrides
+        if ($request->input('password_option') === 'send_link') {
+            // Option 1: Send a reset link to their email
+            PasswordFacade::sendResetLink(['email' => $user->email]);
+        } elseif ($request->input('password_option') === 'manual') {
+            // Option 2: Manually set password & flag to force update on next login [102]
+            $user->password = Hash::make($request->password);
+            $user->password_change_required = true; 
+        }
+
+        // 4. Soft-delete / Deactivation Toggles [102]
+        if ($request->has('deactivate') && $request->deactivate == '1') {
+            if (!$user->trashed()) {
+                $user->delete(); // Triggers soft-delete (deactivation) [102]
+            }
+        } else {
+            if ($user->trashed()) {
+                $user->restore(); // Restores/reactivates the account [102]
+            }
+        }
+
+        $user->save();
+
+        // Record audit log for HIPAA and compliance auditing [73]
+        ActivityLog::record(
+            'ADMIN USER EDIT', 
+            "Admin updated user {$user->name}. Reason: {$reason}", 
+            $user->name, 
+            $user->id
+        );
+
+        // Dispatch live update for queue views in case role or details changed
+        event(new QueueUpdated());
+
+        return back()->with('success', "Account details for {$user->name} have been successfully updated.");
     }
 
     /**

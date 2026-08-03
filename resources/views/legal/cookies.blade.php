@@ -1,5 +1,7 @@
 @extends('legal.layout')
 
+@section('title', 'Cookie Preferences')
+
 @section('legal-content')
     <h2 class="fw-800 text-main mb-4 tracking-tight">Cookie Preferences</h2>
     <p class="text-muted small">Manage technical and analytical browser storage.</p>

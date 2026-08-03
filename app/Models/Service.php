@@ -4,12 +4,17 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes; // 1. Import SoftDeletes trait [100]
 use Illuminate\Support\Facades\DB;
 
 class Service extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes; // 2. Use SoftDeletes trait [100]
 
+    /**
+     * The attributes that are mass assignable.
+     * [100]
+     */
     protected $fillable = [
         'name',
         'price',
@@ -22,15 +27,16 @@ class Service extends Model
     ];
 
     /**
-     * Cast is_available to boolean and price to decimal
+     * Cast is_available to boolean and price to decimal [100]
      */
     protected $casts = [
         'is_available' => 'boolean',
         'price' => 'decimal:2',
+        'deleted_at' => 'datetime' // Cast soft delete timestamp [100]
     ];
 
     /**
-     * A service can be linked to many appointments.
+     * A service can be linked to many appointments. [100]
      */
     public function appointments()
     {
@@ -39,7 +45,7 @@ class Service extends Model
 
     /**
      * Dynamic Accessor to fetch compiled samples string for retro-compatibility.
-     * Overrides missing 'sample_required' column read attempts.
+     * Overrides missing 'sample_required' column read attempts. [100]
      */
     public function getSampleRequiredAttribute()
     {
@@ -53,7 +59,7 @@ class Service extends Model
     }
 
     /**
-     * Helper to format minutes for display
+     * Helper to format minutes for display [101]
      */
     public function getFormattedTimeAttribute() 
     {

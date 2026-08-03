@@ -1,5 +1,7 @@
 @extends('legal.layout')
 
+@section('title', 'Terms of Service')
+
 @section('legal-content')
     <h2 class="fw-800 text-main mb-4 tracking-tight">Terms of Service</h2>
     <p class="text-muted small">Last updated: {{ now()->format('F d, Y') }}</p>

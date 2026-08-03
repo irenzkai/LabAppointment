@@ -1,5 +1,7 @@
 @extends('legal.layout')
 
+@section('title', 'Data Privacy Act Compliance')
+
 @section('legal-content')
     <h2 class="fw-800 text-main mb-4 tracking-tight">Data Privacy Act Compliance</h2>
     <p class="text-muted small">Philippine Republic Act No. 10173</p>

@@ -14,31 +14,35 @@ return new class extends Migration
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             
-            // 1. Split Name Fields (1NF Atomic)
+            // 1. Split Name Fields (1NF Atomic) [154]
             $table->string('first_name');
             $table->string('middle_name')->nullable();
             $table->string('last_name');
 
-            // 2. Profile Details
+            // 2. Profile Details [154]
             $table->date('birthdate');
             $table->string('sex'); // Male/Female
 
-            // 3. Split Address Fields (3NF Atomic - PSGC API Compatible)
+            // 3. Split Address Fields (3NF Atomic - PSGC API Compatible) [154]
             $table->string('street');
             $table->string('barangay');
             $table->string('city');
             $table->string('province');
 
-            // 4. Contact & Security
+            // 4. Contact & Security [154]
             $table->string('email')->unique();
             $table->string('phone');
             $table->string('password');
 
-            // 5. System Flags
+            // 5. System Flags [154]
             $table->string('role')->default('user'); // user, staff, lab_tech, admin
             $table->boolean('is_active')->default(true);
             $table->timestamp('email_verified_at')->nullable();
             
+            // 6. AUDIT & DATA RETENTION COMPLIANCE [102]
+            $table->boolean('password_change_required')->default(false); // Flag to force password reset on next login
+            $table->softDeletes(); // Adds 'deleted_at' column for 10-year compliant deactivations
+
             $table->rememberToken();
             $table->timestamps();
         });

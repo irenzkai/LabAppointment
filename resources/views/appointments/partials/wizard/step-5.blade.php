@@ -38,17 +38,17 @@
             <div class="row g-3">
                 @if(isset($paymentProviders) && $paymentProviders->count() > 0)
                     @foreach($paymentProviders as $index => $provider)
-                    <div class="col-md-4 col-6">
-                        <input type="radio" class="btn-check provider-radio" name="payment_provider_id" id="provider_{{ $provider->id }}" value="{{ $provider->id }}" data-qr="{{ Storage::url($provider->qr_code) }}" data-name="{{ $provider->name }}">
-                        <label class="btn btn-outline-secondary w-100 p-3 text-center h-100 d-flex flex-column align-items-center justify-content-center" for="provider_{{ $provider->id }}">
-                            @if($provider->logo)
-                                <img src="{{ Storage::url($provider->logo) }}" alt="{{ $provider->name }}" class="mb-2" style="height: 32px; object-fit: contain;">
-                            @else
-                                <i class="bi bi-wallet2 fs-3 mb-2 text-secondary"></i>
-                            @endif
-                            <div class="small fw-bold uppercase" style="color: var(--text-main) !important;">{{ $provider->name }}</div>
-                        </label>
-                    </div>
+                        <div class="col-md-4 col-6">
+                            <input type="radio" class="btn-check provider-radio" name="payment_provider_id" id="provider_{{ $provider->id }}" value="{{ $provider->id }}" data-qr="{{ Storage::url($provider->qr_code) }}" data-name="{{ $provider->name }}">
+                            <label class="btn btn-outline-secondary w-100 p-3 text-center h-100 d-flex flex-column align-items-center justify-content-center" for="provider_{{ $provider->id }}">
+                                @if($provider->logo)
+                                    <img src="{{ Storage::url($provider->logo) }}" alt="{{ $provider->name }}" class="mb-2" style="height: 32px; object-fit: contain;">
+                                @else
+                                    <i class="bi bi-wallet2 fs-3 mb-2 text-secondary"></i>
+                                @endif
+                                <div class="small fw-bold uppercase" style="color: var(--text-main) !important;">{{ $provider->name }}</div>
+                            </label>
+                        </div>
                     @endforeach
                 @else
                     <div class="col-12">
@@ -61,12 +61,12 @@
             </div>
         </div>
 
-        {{-- QR Code Display Container (With zoom trigger on click) --}}
+        {{-- QR Code Display Box (With zoom trigger on click) --}}
         <div id="qr_section" class="col-12 d-none animate-fade-in mt-4">
             <div class="p-4 border border-secondary border-opacity-25 rounded text-center" style="background-color: rgba(108, 117, 125, 0.05) !important;">
                 <h6 class="text-main fw-bold mb-3 uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">Scan to Pay (<span id="selected_provider_name" class="text-accent"></span>)</h6>
                 <div class="d-flex justify-content-center">
-                    <div class="bg-white p-2 rounded shadow-sm border border-secondary border-opacity-10" style="cursor: zoom-in;" onclick="zoomQR()" title="Click to zoom in">
+                    <div class="bg-white p-2 rounded shadow-sm border border-secondary border-opacity-10" style="cursor: zoom-in;" onclick="zoomQR()">
                         <img src="" id="selected_provider_qr" alt="Scan QR" style="width: 180px; height: 180px; object-fit: contain;">
                     </div>
                 </div>
@@ -95,7 +95,7 @@
                     </label>
                 </div>
                 <div class="mt-3 p-3 rounded border border-secondary border-opacity-10 text-start" style="background-color: rgba(108, 117, 125, 0.05) !important;">
-                    <h6 class="text-warning fw-bold mb-1 smaller uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">
+                    <h6 class="text-warning fw-bold mb-1 uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">
                         <i class="bi bi-exclamation-triangle-fill me-2"></i>Important Reminder:
                     </h6>
                     <p class="text-muted smaller mb-0" style="font-size: 0.75rem; line-height: 1.4;">
@@ -104,16 +104,16 @@
                 </div>
             </div>
         </div>
-    </div>
 
-    {{-- Navigation --}}
-    <div class="d-flex gap-2 mt-5">
-        <button type="button" class="btn-custom btn-outline-secondary w-50 py-3" onclick="goToPage(4)">
-            <i class="bi bi-arrow-left me-2"></i> BACK
-        </button>
-        <button type="submit" class="btn-custom btn-accent w-50 py-3 fw-bold uppercase shadow-sm" id="final_submit_btn">
-            CONFIRM & REGISTER <i class="bi bi-check2-circle ms-2"></i>
-        </button>
+        {{-- Navigation --}}
+        <div class="d-flex gap-2 mt-5">
+            <button type="button" class="btn-custom btn-outline-secondary w-50 py-3" onclick="goToPage(4)">
+                <i class="bi bi-arrow-left me-2"></i> BACK
+            </button>
+            <button type="submit" class="btn-custom btn-accent w-50 py-3 fw-bold uppercase shadow-sm" id="final_submit_btn">
+                CONFIRM & REGISTER <i class="bi bi-check2-circle ms-2"></i>
+            </button>
+        </div>
     </div>
 </div>
 
@@ -184,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Scoped form validation to prevent submissions without selecting a cashless provider
+    // Scoped form validation & double-submission gateway prevention
     const wizardForm = document.getElementById('appointmentWizard');
     if (wizardForm) {
         wizardForm.addEventListener('submit', function(e) {
@@ -193,7 +193,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!selectedProvider) {
                     e.preventDefault();
                     showWizardAlert("Please select an E-Wallet provider (e.g. GCash, Maya) to scan the payment QR code before submitting.");
+                    return;
                 }
+
+                if (receiptInput && !receiptInput.files[0]) {
+                    e.preventDefault();
+                    showWizardAlert("Please upload an image or PDF copy of your GCash/Maya transaction receipt to finalize.");
+                    return;
+                }
+            }
+
+            // FIXED: Disable submit button instantly to protect database against double-submission locks during latency
+            const finalSubmitBtn = document.getElementById('final_submit_btn');
+            if (finalSubmitBtn) {
+                setTimeout(() => {
+                    finalSubmitBtn.disabled = true;
+                    finalSubmitBtn.innerHTML = 'SUBMITTING... <span class="spinner-border spinner-border-sm ms-2"></span>';
+                }, 0);
             }
         });
     }

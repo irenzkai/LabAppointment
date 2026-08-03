@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'Forgot Password')
+
 @section('content')
 <div class="row justify-content-center align-items-center min-vh-80 animate-page">
     <div class="col-12 col-lg-11 col-xl-10">
@@ -44,30 +46,30 @@
 
                         {{-- Session Status Alert (Dynamic success box) --}}
                         @if (session('status'))
-                        <div class="alert alert-clinical border-success bg-success bg-opacity-10 d-flex align-items-center mb-4 shadow-sm" role="alert">
-                            <i class="bi bi-check-circle-fill me-3 fs-4 text-success"></i>
-                            <div>
-                                <div class="fw-800 uppercase fs-x-small text-success">Success</div>
-                                <div class="small text-main">{{ session('status') }}</div>
+                            <div class="alert alert-clinical border-success bg-success bg-opacity-10 d-flex align-items-center mb-4 shadow-sm" role="alert">
+                                <i class="bi bi-check-circle-fill me-3 fs-4 text-success"></i>
+                                <div class="text-start">
+                                    <div class="fw-800 uppercase fs-x-small text-success" style="font-size: 0.75rem;">Success</div>
+                                    <div class="small text-main">{{ session('status') }}</div>
+                                </div>
                             </div>
-                        </div>
                         @endif
 
                         {{-- Validation Errors --}}
                         @if ($errors->any())
-                        <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 d-flex align-items-center mb-4 shadow-sm" role="alert">
-                            <i class="bi bi-exclamation-triangle-fill me-3 fs-4 text-danger"></i>
-                            <div>
-                                <div class="fw-800 uppercase fs-x-small text-danger">Action Required</div>
-                                <div class="small text-main">We couldn't locate an account with that email address.</div>
+                            <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 d-flex align-items-center mb-4 shadow-sm" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill me-3 fs-4 text-danger"></i>
+                                <div class="text-start">
+                                    <div class="fw-800 uppercase fs-x-small text-danger">Action Required</div>
+                                    <div class="small text-main">We couldn't locate an account with that email address.</div>
+                                </div>
                             </div>
-                        </div>
                         @endif
 
                         {{-- Reset Link Form --}}
-                        <form method="POST" action="{{ route('password.email') }}">
+                        <form id="forgot-password-form" method="POST" action="{{ route('password.email') }}">
                             @csrf
-                            
+
                             {{-- Email Input --}}
                             <div class="mb-4 text-start">
                                 <label class="small text-muted mb-1 fw-bold">EMAIL ADDRESS</label>
@@ -75,7 +77,7 @@
                             </div>
 
                             {{-- Submit --}}
-                            <button type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm mb-4" style="font-size: 0.9rem; letter-spacing: 0.5px;">
+                            <button id="reset-link-btn" type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm mb-4" style="font-size: 0.9rem; letter-spacing: 0.5px;">
                                 SEND RESET LINK
                             </button>
 
@@ -95,3 +97,49 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const forgotForm = document.getElementById('forgot-password-form');
+        const resetBtn = document.getElementById('reset-link-btn');
+        const cooldownTime = 60; // Cooldown duration in seconds
+
+        function startCooldown(remainingSeconds) {
+            resetBtn.disabled = true;
+            resetBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            
+            const timer = setInterval(() => {
+                remainingSeconds--;
+                if (remainingSeconds <= 0) {
+                    clearInterval(timer);
+                    resetBtn.disabled = false;
+                    resetBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    resetBtn.innerHTML = 'SEND RESET LINK';
+                    localStorage.removeItem('forgot_cooldown_timestamp');
+                } else {
+                    resetBtn.innerHTML = `SEND LINK IN ${remainingSeconds}S`;
+                }
+            }, 1000);
+        }
+
+        // Check if there is an active cooldown saved on page load
+        const savedTimestamp = localStorage.getItem('forgot_cooldown_timestamp');
+        if (savedTimestamp) {
+            const secondsPassed = Math.floor((Date.now() - parseInt(savedTimestamp)) / 1000);
+            if (secondsPassed < cooldownTime) {
+                startCooldown(cooldownTime - secondsPassed);
+            } else {
+                localStorage.removeItem('forgot_cooldown_timestamp');
+            }
+        }
+
+        // On form submit, capture timestamp and begin cooldown
+        if (forgotForm) {
+            forgotForm.addEventListener('submit', () => {
+                localStorage.setItem('forgot_cooldown_timestamp', Date.now());
+            });
+        }
+    });
+</script>
+@endpush

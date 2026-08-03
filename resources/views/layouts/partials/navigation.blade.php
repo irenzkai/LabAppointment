@@ -41,11 +41,9 @@
                     @php $notifCount = auth()->user()->unreadNotifications->count(); @endphp
                     <button class="btn btn-link text-white position-relative p-2 border-0" data-bs-toggle="dropdown">
                         <i class="bi bi-bell-fill fs-5"></i>
-                        @if($notifCount > 0)
-                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-dark" style="font-size: 0.6rem; margin-top: 8px; margin-left: -8px;">
+                        <span id="notif-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-dark" style="font-size: 0.6rem; margin-top: 8px; margin-left: -8px; {{ $notifCount > 0 ? '' : 'display: none !important;' }}">
                             {{ $notifCount }}
                         </span>
-                        @endif
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark shadow-lg border-secondary mt-2 py-0 overflow-hidden" style="width: 320px;">
                         <li class="bg-brand-dark p-3 border-bottom border-secondary">
@@ -54,7 +52,7 @@
                                 <a href="{{ route('notifications.index') }}" class="text-accent fs-x-small fw-bold">VIEW ALL</a>
                             </div>
                         </li>
-                        <div class="overflow-auto" style="max-height: 350px;">
+                        <div class="overflow-auto" id="notif-list-container" style="max-height: 350px;">
                             @forelse(auth()->user()->notifications->take(5) as $notification)
                             <li>
                                 <a class="dropdown-item p-3 border-bottom border-secondary border-opacity-25 {{ $notification->read_at ? 'opacity-50' : 'bg-dark border-start border-accent' }}" href="{{ route('notifications.markAsRead', $notification->id) }}">
@@ -64,7 +62,7 @@
                                 </a>
                             </li>
                             @empty
-                            <li class="text-center py-5 text-secondary opacity-50 small">
+                            <li class="text-center py-5 text-secondary opacity-50 small" id="no-notifs-placeholder">
                                 <i class="bi bi-bell-slash d-block fs-3 mb-2"></i>
                                 No new notifications
                             </li>

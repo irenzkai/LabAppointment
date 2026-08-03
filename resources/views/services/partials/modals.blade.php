@@ -4,7 +4,6 @@
         <form action="{{ route('services.update', $service->id) }}" method="POST" class="modal-content border-secondary bg-card shadow-lg">
             @csrf
             @method('PUT')
-            
             <div class="modal-header border-secondary bg-secondary bg-opacity-10 py-3">
                 <h5 class="modal-title text-main fw-bold uppercase small">
                     <i class="bi bi-pencil-square me-2"></i>Edit Service: {{ $service->name }}
@@ -65,7 +64,7 @@
                     <div class="col-12">
                         <label class="small text-secondary fw-bold mb-2 uppercase d-block">Samples Required</label>
                         <div class="p-3 border border-secondary border-opacity-25 rounded" style="background-color: rgba(108, 117, 125, 0.05) !important;">
-                            <div id="sample-container-{{ $service->id }}" class="d-flex flex-wrap gap-3 mb-3">
+                            <div class="d-flex flex-wrap gap-3 mb-3" id="sample-container-{{ $service->id }}">
                                 @php 
                                     $defaults = ['Blood', 'Urine', 'Stool', 'Swab', 'N/A'];
                                     $currentSamples = explode(',', $service->sample_required);
@@ -73,21 +72,21 @@
 
                                 {{-- Render Default Options --}}
                                 @foreach($defaults as $sample)
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="samples[]" value="{{ $sample }}" id="check-{{ $sample }}-{{ $service->id }}" {{ in_array($sample, $currentSamples) ? 'checked' : '' }}>
-                                        <label class="form-check-label text-main smaller" for="check-{{ $sample }}-{{ $service->id }}">{{ $sample }}</label>
-                                    </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="samples[]" value="{{ $sample }}" id="check-{{ $sample }}-{{ $service->id }}" {{ in_array($sample, $currentSamples) ? 'checked' : '' }}>
+                                    <label class="form-check-label text-main smaller" for="check-{{ $sample }}-{{ $service->id }}">{{ $sample }}</label>
+                                </div>
                                 @endforeach
 
                                 {{-- Render Custom Existing Options --}}
                                 @foreach($currentSamples as $current)
-                                    @if(!in_array($current, $defaults) && !empty($current))
-                                        <div class="form-check d-flex align-items-center gap-2 custom-sample-item">
-                                            <input class="form-check-input" type="checkbox" name="samples[]" value="{{ $current }}" checked>
-                                            <span class="text-neon fw-bold smaller">{{ $current }}</span>
-                                            <button type="button" class="btn btn-link text-danger p-0" onclick="this.parentElement.remove()"><i class="bi bi-x-circle"></i></button>
-                                        </div>
-                                    @endif
+                                @if(!in_array($current, $defaults) && !empty($current))
+                                <div class="form-check d-flex align-items-center gap-2 custom-sample-item">
+                                    <input class="form-check-input" type="checkbox" name="samples[]" value="{{ $current }}" checked>
+                                    <span class="text-neon fw-bold smaller">{{ $current }}</span>
+                                    <button type="button" class="btn btn-link text-danger p-0" onclick="this.parentElement.remove()"><i class="bi bi-x-circle"></i></button>
+                                </div>
+                                @endif
                                 @endforeach
                             </div>
 
@@ -101,7 +100,6 @@
                 </div>
             </div>
 
-            {{-- FIXED: Changed bg-secondary bg-opacity-5 to bg-transparent --}}
             <div class="modal-footer border-secondary border-top border-secondary border-opacity-10 bg-transparent p-3">
                 <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">CANCEL</button>
                 <button type="submit" class="btn-custom btn-accent py-2 px-4 fw-bold uppercase">UPDATE SERVICE</button>
@@ -113,17 +111,17 @@
 {{-- 2. DELETE SERVICE MODAL (Symmetric Contrast Fix) --}}
 <div class="modal fade" id="delModal{{$service->id}}" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-sm modal-dialog-centered">
-        <div class="modal-content border-danger bg-card shadow-lg text-center p-4">
+        <div class="modal-content border-warning bg-card shadow-lg text-center p-4">
             <div class="mb-3">
-                <i class="bi bi-exclamation-triangle text-danger display-4"></i>
+                <i class="bi bi-archive text-warning display-4"></i>
             </div>
-            <h5 class="text-main fw-bold mb-1 uppercase">Remove Service?</h5>
-            <p class="text-secondary small mb-4">You are about to delete <strong>{{ $service->name }}</strong>. This action cannot be undone.</p>
-            
+            <h5 class="text-main fw-bold mb-1 uppercase">Archive Service?</h5>
+            <p class="text-secondary small mb-4">You are about to archive <strong>{{ $service->name }}</strong>. This service will be hidden from patients but can be reactivated at any time from the archived services directory on this page.</p>
             <div class="d-grid gap-2">
-                <form action="{{ route('services.destroy', $service->id) }}" method="POST">
-                    @csrf @method('DELETE')
-                    <button type="submit" class="btn-custom btn-danger-custom w-100 py-2 fw-bold uppercase">PERMANENTLY DELETE</button>
+                <form action="{{ route('services.destroy', $service->id) }}" method="POST" class="m-0">
+                    @csrf 
+                    @method('DELETE')
+                    <button type="submit" class="btn btn-warning w-100 py-2 fw-bold uppercase text-dark">ARCHIVE SERVICE</button>
                 </form>
                 <button type="button" class="btn btn-link text-secondary text-decoration-none smaller" data-bs-dismiss="modal">Cancel</button>
             </div>

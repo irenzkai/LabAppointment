@@ -10,9 +10,11 @@ use App\Models\PaymentProvider;
 use App\Notifications\AppointmentNotification; 
 use App\Imports\BulkAppointmentImport;
 use App\Exports\BulkTemplateExport;
+use App\Events\QueueUpdated; // Import our real-time broadcasting event
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB; 
+use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 
 class BulkAppointmentController extends Controller
@@ -34,7 +36,7 @@ class BulkAppointmentController extends Controller
      */
     public function storeManual(Request $request) 
     {
-        // FIXED: Added bulk receipt file validation rules
+        // Added bulk receipt file validation rules
         $request->validate([
             'organization_name' => 'required|string|max:255',
             'appointment_date' => 'required|date',
@@ -44,6 +46,10 @@ class BulkAppointmentController extends Controller
             'patients.*.name' => 'required|string',
             'patients.*.time_slot' => 'required',
             'patients.*.service_ids' => 'required|array|min:1',
+            'patients.*.street' => 'required|string|max:255',
+            'patients.*.barangay' => 'required|string|max:255',
+            'patients.*.city' => 'required|string|max:255',
+            'patients.*.province' => 'required|string|max:255',
         ], [
             'patients.*.service_ids.required' => 'One or more patients are missing test selections.',
         ]);
@@ -57,7 +63,7 @@ class BulkAppointmentController extends Controller
         foreach ($submittedCounts as $slot => $count) {
             $existingCount = Appointment::where('appointment_date', $request->appointment_date)
                 ->where('time_slot', $slot)
-                ->whereIn('status', ['pending', 'approved'])
+                ->whereIn('status', ['pending', 'approved', 'tested', 'encoded', 'released'])
                 ->count();
 
             if (($existingCount + $count) > $limit) {
@@ -68,7 +74,7 @@ class BulkAppointmentController extends Controller
 
         $batchId = Str::random(10);
 
-        // FIXED: Handle and cache uploaded bulk payment receipt path
+        // Handle and cache uploaded bulk payment receipt path
         $receiptPath = null;
         if ($request->hasFile('payment_receipt') && $request->file('payment_receipt')->isValid()) {
             $receiptPath = $request->file('payment_receipt')->store('receipts', 'public');
@@ -94,14 +100,14 @@ class BulkAppointmentController extends Controller
                     'patient_middle_name' => strtoupper($middleName),
                     'patient_last_name' => strtoupper($lastName),
                     'patient_name' => strtoupper($p['name']),
-                    'patient_email' => $p['email'],
-                    'patient_phone' => $p['phone'], 
+                    'patient_email' => $p['email'] ?? null,
+                    'patient_phone' => $p['phone'] ?? null, 
                     'patient_sex' => $p['sex'],
                     'patient_birthdate' => $p['birthdate'],
-                    'patient_street' => strtoupper($p['address']),
-                    'patient_barangay' => 'N/A',
-                    'patient_city' => 'N/A',
-                    'patient_province' => 'N/A',
+                    'patient_street' => strtoupper($p['street']),
+                    'patient_barangay' => strtoupper($p['barangay']),
+                    'patient_city' => strtoupper($p['city']),
+                    'patient_province' => strtoupper($p['province']),
                     'payment_method' => $request->payment_method,
                     'payment_receipt' => $receiptPath, // Linked receipt path across all batch records
                     'payment_status' => 'unpaid',
@@ -125,6 +131,10 @@ class BulkAppointmentController extends Controller
             }
 
             DB::commit();
+
+            // Dispatch live update for the staff/admin queue
+            event(new QueueUpdated());
+
             return redirect()->route('appointments.index')->with('success', 'Bulk appointments recorded successfully.');
 
         } catch (\Exception $e) {
@@ -132,7 +142,7 @@ class BulkAppointmentController extends Controller
             if ($receiptPath) {
                 Storage::disk('public')->delete($receiptPath);
             }
-            dd("DATABASE ERROR: " . $e->getMessage(), "LINE: " . $e->getLine()); 
+            return back()->withInput()->withErrors(['error' => 'Database error occurred: ' . $e->getMessage()]);
         }
     }
 
@@ -148,6 +158,9 @@ class BulkAppointmentController extends Controller
         ]);
 
         Excel::import(new BulkAppointmentImport($request->all()), $request->file('excel_file'));
+
+        // Dispatch live update for the staff/admin queue
+        event(new QueueUpdated());
 
         return redirect()->route('appointments.index')->with('success', 'Excel data imported successfully!');
     }
@@ -180,9 +193,9 @@ class BulkAppointmentController extends Controller
      */
     public function downloadTemplate($type = 'csv') 
     {
-        $columns = ['name', 'birthdate', 'sex', 'phone', 'email', 'address'];
+        $columns = ['name', 'birthdate', 'sex', 'phone', 'email', 'street', 'barangay', 'city', 'province'];
         $filename = "medscreen_template." . $type;
-        $sample = ['Juan Dela Cruz', '1990-01-01', 'Male', '09123456789', 'juan@gmail.com', 'Gensan City'];
+        $sample = ['Juan Dela Cruz', '1990-01-01', 'Male', '09123456789', 'juan@gmail.com', 'Atis St', 'Dadiangas West', 'City of General Santos', 'South Cotabato'];
 
         if ($type == 'xlsx') {
             return Excel::download(new BulkTemplateExport($columns, $sample), $filename);
@@ -190,7 +203,7 @@ class BulkAppointmentController extends Controller
 
         $callback = function() use($columns, $sample) {
             $file = fopen('php://output', 'w');
-            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF)); 
             fputcsv($file, $columns);
             fputcsv($file, $sample);
             fclose($file);

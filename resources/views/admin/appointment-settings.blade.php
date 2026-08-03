@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'Appointment Settings')
+
 @section('content')
 <div id="schedule-manager-page" class="row g-4 text-start animate-page">
     

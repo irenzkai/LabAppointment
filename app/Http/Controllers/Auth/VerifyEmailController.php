@@ -6,30 +6,28 @@ use App\Http\Controllers\Controller;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Auth; 
 
 class VerifyEmailController extends Controller
 {
     /**
      * Mark the authenticated user's email address as verified.
-     * 
-     * This is triggered when the user clicks the link in the verification email.
-     * Even without an active Email API, this logic handles the database update
-     * for the 'email_verified_at' column.
      */
     public function __invoke(EmailVerificationRequest $request): RedirectResponse
     {
-        // 1. If already verified, just send to dashboard
+        // 1. If already verified, log out and send to login
         if ($request->user()->hasVerifiedEmail()) {
-            return redirect()->intended(route('dashboard', absolute: false).'?verified=1');
+            Auth::logout();
+            return redirect()->route('login')->with('status', 'Your email is already verified. Please log in.');
         }
 
         // 2. Mark user as verified in the database
         if ($request->user()->markEmailAsVerified()) {
-            // Trigger the Verified event (useful for notifications/logs)
             event(new Verified($request->user()));
         }
 
-        // 3. Redirect to dashboard with a success flag
-        return redirect()->intended(route('dashboard', absolute: false).'?verified=1');
+        // 3. Log the user out and redirect to login with a success prompt
+        Auth::logout();
+        return redirect()->route('login')->with('status', 'Your email has been successfully verified! Please log in to continue.');
     }
 }

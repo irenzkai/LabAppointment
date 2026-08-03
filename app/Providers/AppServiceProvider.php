@@ -5,8 +5,17 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Pagination\Paginator;
 use App\Models\User;
+use Illuminate\Auth\Notifications\VerifyEmail;
+use Illuminate\Auth\Notifications\ResetPassword; // Imported for Forgot Password custom notification [12.2]
+use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Validation\Rules\Password;
+
+// Symfony Mailer & Brevo Transport factories
+use Symfony\Component\Mailer\Bridge\Brevo\Transport\BrevoTransportFactory;
+use Symfony\Component\Mailer\Transport\Dsn;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -23,6 +32,32 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        /**
+         * REGISTER CUSTOM BREVO MAIL TRANSPORT
+         * Tells Laravel's MailManager how to build the Brevo HTTP API transport over port 443
+         */
+        Mail::extend('brevo', function () {
+            return (new BrevoTransportFactory)->create(
+                new Dsn(
+                    'brevo+api',
+                    'default',
+                    config('services.brevo.key')
+                )
+            );
+        });
+
+        /**
+         * REGISTER SECURE PASSWORD VALIDATION RULES (GLOBAL)
+         * Enforces strict password requirements (min 8 chars, mixed case, numbers, symbols)
+         */
+        Password::defaults(function () {
+            return Password::min(8)
+                ->letters()
+                ->mixedCase()
+                ->numbers()
+                ->symbols();
+        });
+
         /**
          * 1. ADMIN GATE
          * Strictly for the System Administrator.
@@ -66,6 +101,41 @@ class AppServiceProvider extends ServiceProvider
          */
         Gate::define('manage-accounts', function (User $user) {
             return $user->role === 'admin';
+        });
+
+        /**
+         * 6. CUSTOM EMAIL VERIFICATION DESIGN
+         * Dynamically translates generic system alerts into branded laboratory notifications.
+         */
+        VerifyEmail::toMailUsing(function ($notifiable, $url) {
+            return (new MailMessage)
+                ->subject('Verify Email Address - Medscreen')
+                ->greeting('Hello, ' . $notifiable->first_name . '!')
+                ->line('Thank you for creating an account with Medscreen Diagnostic Laboratory.')
+                ->line('Please click the button below to verify your email address and activate your clinical portal access.')
+                ->action('Verify Email Address', $url)
+                ->line('If you did not register for this account, no further action is required.')
+                ->salutation("Regards,\nMedscreen Support Team");
+        });
+
+        /**
+         * 7. CUSTOM PASSWORD RESET EMAIL DESIGN
+         * Translates the default Laravel password reset notification into a branded Medscreen clinical template.
+         */
+        ResetPassword::toMailUsing(function ($notifiable, $token) {
+            $url = url(route('password.reset', [
+                'token' => $token,
+                'email' => $notifiable->getEmailForPasswordReset(),
+            ], false));
+
+            return (new MailMessage)
+                ->subject('Reset Password - Medscreen')
+                ->greeting('Hello, ' . $notifiable->first_name . '!')
+                ->line('You are receiving this email because we received a password reset request for your Medscreen account.')
+                ->action('Reset Password', $url)
+                ->line('This password reset link will expire in 30 minutes.') 
+                ->line('If you did not request a password reset, no further action is required.')
+                ->salutation("Regards,\nMedscreen Support Team");
         });
 
         /*

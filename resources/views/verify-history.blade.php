@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'Verified Historical Archive')
+
 @section('content')
 <div class="row justify-content-center align-items-center min-vh-75 animate-page">
     <div class="col-md-10 col-lg-8 text-center">

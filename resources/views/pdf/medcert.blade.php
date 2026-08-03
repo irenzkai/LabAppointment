@@ -247,122 +247,121 @@
 </head>
 <body>
 
-    @php
-        // FIXED: Safe nested key fallback mappings resolve un-fetched cert and signature values cleanly
-        $medCert = $res->medCert;
-        
-        $certNo = $medCert->cert_no ?? ($res->med_cert_data['metadata']['cert_no'] ?? ($res->med_cert_data['cert_no'] ?? '---'));
-        $dateOfIssue = $medCert->date_of_issue ?? ($res->med_cert_data['metadata']['date'] ?? ($res->med_cert_data['date'] ?? now()));
-        $physicianName = $medCert->physician_name ?? ($res->med_cert_data['sig']['name'] ?? ($res->med_cert_data['sig_name'] ?? 'Dr. Clarisse Faye Armada'));
-        $physicianLicense = $medCert->physician_license ?? ($res->med_cert_data['sig']['lic'] ?? ($res->med_cert_data['sig_info'] ?? 'License No.: 0171334'));
-        
-        $issuedTo = $medCert->issued_to ?? ($res->med_cert_data['issued_to'] ?? ($res->med_cert_data['metadata']['name'] ?? $app->patient_name));
-        $findings = $medCert->findings ?? ($res->med_cert_data['findings'] ?? 'ESSENTIALLY NORMAL FINDINGS');
-        $remarks = $medCert->remarks ?? ($res->med_cert_data['remarks'] ?? 'CLASS (A) - PHYSICALLY FIT');
-    @endphp
+@php
+    $medCert = $res->medCert;
+    
+    // FIXED: Embedded null-safe operators (?->) to prevent 500 compilation locks during manual-mode previews
+    $certNo = $medCert?->cert_no ?? ($res->med_cert_data['metadata']['cert_no'] ?? ($res->med_cert_data['cert_no'] ?? '---'));
+    $dateOfIssue = $medCert?->date_of_issue ?? ($res->med_cert_data['metadata']['date'] ?? ($res->med_cert_data['date'] ?? now()));
+    $physicianName = $medCert?->physician_name ?? ($res->med_cert_data['sig']['name'] ?? ($res->med_cert_data['sig_name'] ?? 'Dr. Clarisse Faye Armada'));
+    $physicianLicense = $medCert?->physician_license ?? ($res->med_cert_data['sig']['lic'] ?? ($res->med_cert_data['sig_info'] ?? 'License No.: 0171334'));
+    
+    $issuedTo = $medCert?->issued_to ?? ($res->med_cert_data['issued_to'] ?? ($res->med_cert_data['metadata']['name'] ?? $app->patient_name));
+    $findings = $medCert?->findings ?? ($res->med_cert_data['findings'] ?? 'ESSENTIALLY NORMAL FINDINGS');
+    $remarks = $medCert?->remarks ?? ($res->med_cert_data['remarks'] ?? 'CLASS (A) - PHYSICALLY FIT');
+@endphp
 
-    {{-- CLINICAL HEADER --}}
-    <table class="clinic-header-table">
-        <tr>
-            <td class="clinic-logo-left">
-                <div class="doh-text">D<span>O</span>H</div>
-                <div class="doh-sub">Accredited</div>
-            </td>
-            <td class="clinic-info-center">
-                <div class="clinic-name"><span>MED</span>SCREEN</div>
-                <div class="clinic-tagline">Diagnostic Laboratory</div>
-                <div class="clinic-details">Banisil Street (Formerly Atis St.), Brgy. Dadiangas West, General Santos City</div>
-                <div class="clinic-details">DOH ACCREDITED | Tel. No.: (083) 823 8754 | Email: medscreen.lab@gmail.com</div>
-            </td>
-            <td class="clinic-qr-right">
-                {{-- FIXED: Integrated live scannable verification QR code generator --}}
-                <div class="qr-placeholder">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{ urlencode(route('result.verify-public', $app->id)) }}" alt="Verification QR">
-                </div>
-                <div style="font-size: 5px; text-transform: uppercase; color: #475569; margin-top: 2px; text-align: center; font-weight: bold; width: 45px;">Scan to Verify</div>
-            </td>
-        </tr>
-    </table>
+{{-- CLINICAL HEADER --}}
+<table class="clinic-header-table">
+    <tr>
+        <td class="clinic-logo-left">
+            <div class="doh-text">D<span>O</span>H</div>
+            <div class="doh-sub">Accredited</div>
+        </td>
+        <td class="clinic-info-center">
+            <div class="clinic-name"><span>MED</span>SCREEN</div>
+            <div class="clinic-tagline">Diagnostic Laboratory</div>
+            <div class="clinic-details">Banisil Street (Formerly Atis St.), Brgy. Dadiangas West, General Santos City</div>
+            <div class="clinic-details">DOH ACCREDITED | Tel. No.: (083) 823 8754 | Email: medscreen.lab@gmail.com</div>
+        </td>
+        <td class="clinic-qr-right">
+            <div class="qr-placeholder">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{ urlencode(route('result.verify-public', $app->id)) }}" alt="Verification QR">
+            </div>
+            <div style="font-size: 5px; text-transform: uppercase; color: #475569; margin-top: 2px; text-align: center; font-weight: bold; width: 45px;">Scan to Verify</div>
+        </td>
+    </tr>
+</table>
 
-    {{-- CERTIFICATE METADATA --}}
-    <table class="meta-table">
-        <tr>
-            <td style="text-align: left; width: 50%;">
-                <strong>Cert. No.:</strong> 
-                <span class="underline-value">{{ $certNo }}</span>
-            </td>
-            <td style="text-align: right; width: 50%;">
-                <strong>Date:</strong> 
-                <span class="underline-value">{{ \Carbon\Carbon::parse($dateOfIssue)->format('d F Y') }}</span>
-            </td>
-        </tr>
-    </table>
+{{-- CERTIFICATE METADATA --}}
+<table class="meta-table">
+    <tr>
+        <td style="text-align: left; width: 50%;">
+            <strong>Cert. No.:</strong> 
+            <span class="underline-value">{{ $certNo }}</span>
+        </td>
+        <td style="text-align: right; width: 50%;">
+            <strong>Date:</strong> 
+            <span class="underline-value">{{ \Carbon\Carbon::parse($dateOfIssue)->format('d F Y') }}</span>
+        </td>
+    </tr>
+</table>
 
-    {{-- DOCUMENT TITLE --}}
-    <div class="document-title">
-        <h1>MEDICAL CERTIFICATE</h1>
-    </div>
+{{-- DOCUMENT TITLE --}}
+<div class="document-title">
+    <h1>MEDICAL CERTIFICATE</h1>
+</div>
 
-    {{-- SALUTATION --}}
-    <div class="salutation">TO WHOM IT MAY CONCERN:</div>
+{{-- SALUTATION --}}
+<div class="salutation">TO WHOM IT MAY CONCERN:</div>
 
-    {{-- BODY TEXT --}}
-    <div class="cert-body-text">
-        This is to certify that 
-        <span class="fill-line" style="min-width: 260px;">&nbsp;{{ strtoupper($res->med_cert_data['metadata']['name'] ?? ($res->med_cert_data['name'] ?? $app->patient_name)) }}&nbsp;</span>, 
-        <span class="fill-line" style="min-width: 50px;">&nbsp;{{ $res->med_cert_data['metadata']['age'] ?? ($res->med_cert_data['age'] ?? $app->patient_age) }}&nbsp;</span> years old, 
-        <span class="fill-line" style="min-width: 80px;">&nbsp;{{ strtoupper($res->med_cert_data['metadata']['sex'] ?? ($res->med_cert_data['sex'] ?? $app->patient_sex)) }}&nbsp;</span> 
-        residing at 
-        <span class="fill-line" style="min-width: 320px;">&nbsp;{{ strtoupper($res->med_cert_data['metadata']['address'] ?? ($res->med_cert_data['address'] ?? $app->patient_address)) }}&nbsp;</span> 
-        has been examined on 
-        <span class="fill-line" style="min-width: 150px;">&nbsp;{{ \Carbon\Carbon::parse($res->med_cert_data['metadata']['tested_date'] ?? ($res->med_cert_data['exam_date'] ?? $app->tested_at))->format('d F Y') }}&nbsp;</span> 
-        with the following findings and/or diagnosis:
-    </div>
+{{-- BODY TEXT --}}
+<div class="cert-body-text">
+    This is to certify that 
+    <span class="fill-line" style="min-width: 260px;">&nbsp;{{ strtoupper($res->med_cert_data['metadata']['name'] ?? ($res->med_cert_data['name'] ?? $app->patient_name)) }}&nbsp;</span>, 
+    <span class="fill-line" style="min-width: 50px;">&nbsp;{{ $res->med_cert_data['metadata']['age'] ?? ($res->med_cert_data['age'] ?? $app->patient_age) }}&nbsp;</span> years old, 
+    <span class="fill-line" style="min-width: 80px;">&nbsp;{{ strtoupper($res->med_cert_data['metadata']['sex'] ?? ($res->med_cert_data['sex'] ?? $app->patient_sex)) }}&nbsp;</span> 
+    residing at 
+    <span class="fill-line" style="min-width: 320px;">&nbsp;{{ strtoupper($res->med_cert_data['metadata']['address'] ?? ($res->med_cert_data['address'] ?? $app->patient_address)) }}&nbsp;</span> 
+    has been examined on 
+    <span class="fill-line" style="min-width: 150px;">&nbsp;{{ \Carbon\Carbon::parse($res->med_cert_data['metadata']['tested_date'] ?? ($res->med_cert_data['exam_date'] ?? $app->tested_at))->format('d F Y') }}&nbsp;</span> 
+    with the following findings and/or diagnosis:
+</div>
 
-    {{-- FINDINGS BOX --}}
-    <div class="findings-box">
-        {!! nl2br(e($findings)) !!}
-    </div>
+{{-- FINDINGS BOX --}}
+<div class="findings-box">
+    {!! nl2br(e($findings)) !!}
+</div>
 
-    {{-- REMARKS --}}
-    <table class="remarks-table">
-        <tr>
-            <td class="remarks-label">REMARKS:</td>
-            <td class="remarks-value">
-                {{ strtoupper($remarks) }}
-            </td>
-        </tr>
-    </table>
+{{-- REMARKS --}}
+<table class="remarks-table">
+    <tr>
+        <td class="remarks-label">REMARKS:</td>
+        <td class="remarks-value">
+            {{ strtoupper($remarks) }}
+        </td>
+    </tr>
+</table>
 
-    {{-- RELEASE CLAUSE --}}
-    <div class="release-clause">
-        This certification is being issued to 
-        <span class="release-fill-line">&nbsp;{{ strtoupper($issuedTo) }}&nbsp;</span> 
-        for whatever legal purposes it may serve him/her best. Not for medico-legal or court purposes.
-    </div>
+{{-- RELEASE CLAUSE --}}
+<div class="release-clause">
+    This certification is being issued to 
+    <span class="release-fill-line">&nbsp;{{ strtoupper($issuedTo) }}&nbsp;</span> 
+    for whatever legal purposes it may serve him/her best. Not for medico-legal or court purposes.
+</div>
 
-    {{-- SIGNATORY --}}
-    <table class="signatory-table">
-        <tr>
-            <td style="width: 55%;"></td>
-            <td style="width: 45%;">
-                <div class="signature-placeholder">
-                    {{ $physicianName }}
-                </div>
-                <div class="signature-line">
-                    {{ strtoupper($physicianName) }}
-                </div>
-                <div class="signature-sub">
-                    {{ strtoupper($physicianLicense) }}
-                </div>
-            </td>
-        </tr>
-    </table>
+{{-- SIGNATORY --}}
+<table class="signatory-table">
+    <tr>
+        <td style="width: 55%;"></td>
+        <td style="width: 45%;">
+            <div class="signature-placeholder">
+                {{ $physicianName }}
+            </div>
+            <div class="signature-line">
+                {{ strtoupper($physicianName) }}
+            </div>
+            <div class="signature-sub">
+                {{ strtoupper($physicianLicense) }}
+            </div>
+        </td>
+    </tr>
+</table>
 
-    {{-- ACADEMIC PROTOTYPE disclaimer footer --}}
-    <div class="digital-footer">
-        This is a digital copy. Physical copies can be acquired at the official location of Medscreen Diagnostic Laboratory.
-    </div>
+{{-- ACADEMIC PROTOTYPE disclaimer footer --}}
+<div class="digital-footer">
+    This is a digital copy. Physical copies can be acquired at the official location of Medscreen Diagnostic Laboratory.
+</div>
 
 </body>
 </html>

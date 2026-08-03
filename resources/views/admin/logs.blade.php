@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'Audit Logs')
+
 @section('content')
 <style>
     /* Custom pagination styling to match the neon theme */

@@ -3,41 +3,46 @@
 namespace App\Http\Controllers;
 
 use App\Models\{
-    Appointment, 
-    ActivityLog, 
-    AppointmentMedCert, 
-    AppointmentRadiologyReport, 
+    Appointment,
+    ActivityLog,
+    AppointmentMedCert,
+    AppointmentRadiologyReport,
     AppointmentLabDetail,
     LaboratoryHistory,
     LaboratoryHistoryRecord,
     LaboratoryHistoryScan,
-    User
+    User,
+    AppointmentResult,
+    CustomWorkstationResult,
+    WorkstationAudit,
+    Service
 };
+use App\Http\Controllers\Workstation\CustomWorksheetController;
+use App\Events\QueueUpdated;
+use App\Events\NotificationSent;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\{Auth, Gate, Storage, URL}; // Imported URL facade to generate cryptographically signed verification links
+use Illuminate\Support\Facades\{Auth, Gate, Storage, URL, Crypt, Log, Mail};
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class ResultController extends Controller
 {
     /**
      * THE HUB: Displays the progress tracker for all required forms.
-     * This is the central command center for viewing and modifying results.
      */
     public function hub(Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
 
-        // SECURITY: Check if staff passed the logAccess reason gate for the 'hub'
-        // If the appointment is already released, we require an audit reason to enter.
         if ($appointment->status === 'released') {
             if (!session()->has("access_granted_{$appointment->id}_hub")) {
+                if (request()->ajax() || request()->wantsJson() || request()->headers->has('X-Requested-With')) {
+                    return response()->json(['error' => 'Clinical authorization required.'], 403);
+                }
                 return redirect()->route('appointments.index')
                     ->with('error', 'Clinical authorization required to access this patient folder.');
             }
-            // One-time use session key
-            session()->forget("access_granted_{$appointment->id}_hub");
         }
 
-        // Map services to required workstation types
         $serviceNames = $appointment->services->pluck('name')->map(fn($n) => strtoupper($n))->toArray();
         $autoReportTypes = [];
 
@@ -50,13 +55,22 @@ class ResultController extends Controller
 
         $autoReportTypes = array_unique($autoReportTypes);
 
-        // Sync the results record with the list of expected reports for this folder
         $res = $appointment->result()->firstOrCreate(['appointment_id' => $appointment->id]);
-        $res->update(['included_reports' => $autoReportTypes]);
+        
+        // Only initialize included_reports if it's empty to allow persistent deletion/addition
+        if (is_null($res->included_reports) || empty($res->included_reports)) {
+            $res->update(['included_reports' => $autoReportTypes]);
+        } else {
+            $autoReportTypes = $res->included_reports;
+        }
+
+        // Fetch all active diagnostic services for the Demographics/Services revision modal
+        $services = Service::where('is_available', true)->orderBy('name')->get();
 
         return view('appointments.encode', [
             'appointment' => $appointment,
-            'autoReportTypes' => $autoReportTypes
+            'autoReportTypes' => $autoReportTypes,
+            'services' => $services
         ]);
     }
 
@@ -70,24 +84,27 @@ class ResultController extends Controller
         $request->validate(['sig_name' => 'required|string|max:255']);
 
         $res = $appointment->result;
-        $prefix = ($type == 'med_cert') ? 'med' : $type;
+        $prefix = ($type == 'med_cert' ? 'med' : $type);
 
         $updateData = [
             "{$prefix}_status" => 'verified',
             "{$prefix}_v2_by_name" => $request->sig_name,
         ];
 
+        // Replaced non-whitelisted _verified_at and _verified_by with whitelisted _v2_at and _v2_by
         if ($type === 'lab') {
             $updateData['lab_v2_at'] = now();
             $updateData['lab_v2_by'] = auth()->id();
         } else {
-            $updateData["{$prefix}_verified_at"] = now();
-            $updateData["{$prefix}_verified_by"] = auth()->id();
+            $updateData["{$prefix}_v2_at"] = now();
+            $updateData["{$prefix}_v2_by"] = auth()->id();
         }
 
         $res->update($updateData);
 
         ActivityLog::record('VERIFIED', "Clinical sign-off for $type", $appointment->patient_name, $appointment->id);
+
+        event(new QueueUpdated());
 
         return redirect()->route('appointments.encode', $appointment->id)
             ->with('success', strtoupper($type) . ' verified.');
@@ -101,43 +118,252 @@ class ResultController extends Controller
         $request->validate(['reason' => 'required|min:5']);
 
         $type = $request->query('type', 'lab');
-        $prefix = ($type == 'med_cert') ? 'med' : $type;
+        $prefix = ($type == 'med_cert' ? 'med' : $type);
 
         $updateData = [
             "{$prefix}_status" => 'returned',
+            "{$prefix}_v2_by_name" => null,
             "{$prefix}_return_reason" => $request->reason,
-            "{$prefix}_v2_by_name" => null
         ];
 
+        // Replaced non-whitelisted _verified_at and _verified_by with whitelisted _v2_at and _v2_by to allow clearing
         if ($type === 'lab') {
             $updateData['lab_v2_at'] = null;
             $updateData['lab_v2_by'] = null;
         } else {
-            $updateData["{$prefix}_verified_at"] = null;
-            $updateData["{$prefix}_verified_by"] = null;
+            $updateData["{$prefix}_v2_at"] = null;
+            $updateData["{$prefix}_v2_by"] = null;
         }
 
         $appointment->result->update($updateData);
 
+        // FIXED: Dynamically unlock the overall patient folder if returned after final release has completed
+        if ($appointment->status === 'released') {
+            $appointment->update(['status' => 'encoded']);
+        }
+
         ActivityLog::record('RETURNED', "Form ($type) sent back: " . $request->reason, $appointment->patient_name, $appointment->id);
+
+        event(new QueueUpdated());
 
         return redirect()->route('appointments.encode', $appointment->id)
             ->with('info', 'Form sent back for correction.');
     }
 
     /**
+     * DELETE ORIGINAL WORKSTATION: Deletes/removes an original worksheet from the active report set.
+     */
+    public function destroyOriginalWorkstation(Request $request, Appointment $appointment, $type)
+    {
+        if (Gate::denies('isStaff')) abort(403);
+
+        // Validate the audit justification reason
+        $request->validate([
+            'reason' => 'required|string|min:5'
+        ]);
+
+        $res = $appointment->result;
+        if (!$res) {
+            return back()->with('error', 'Appointment result folder not found.');
+        }
+
+        $reports = $res->included_reports ?? [];
+        if (($key = array_search($type, $reports)) !== false) {
+            unset($reports[$key]);
+            $res->included_reports = array_values($reports);
+
+            // Clean up corresponding data columns, files, and state details
+            $prefix = ($type == 'med_cert' ? 'med' : $type);
+            $res->{"{$prefix}_status"} = 'pending';
+            $res->{"{$prefix}_v1_by_name"} = null;
+            $res->{"{$prefix}_v1_by"} = null;
+            $res->{"{$prefix}_v1_at"} = null;
+            $res->{"{$prefix}_v2_by_name"} = null;
+            $res->{"{$prefix}_v2_by"} = null;
+            $res->{"{$prefix}_v2_at"} = null;
+            $res->{"{$prefix}_return_reason"} = null;
+
+            if ($type === 'lab') {
+                $res->lab_scan = null;
+                $res->lab_data = null;
+                $res->labResults()->delete();
+                $res->labDetails()->delete();
+            } elseif ($type === 'radio') {
+                $res->radio_scan = null;
+                $res->xray_image = null;
+                $res->radio_data = null;
+                $res->radiologyReport()->delete();
+            } elseif ($type === 'drug') {
+                $res->drug_test_scan = null;
+                $res->drug_test_data = null;
+                $res->drugTest()->delete();
+            } elseif ($type === 'med_cert') {
+                $res->med_cert_scan = null;
+                $res->med_cert_data = null;
+                $res->medCert()->delete();
+            }
+
+            $res->save();
+
+            // Clear any related audit trails
+            $res->audits()->where('workstation_type', $type)->delete();
+
+            ActivityLog::record(
+                'DELETED WORKSTATION',
+                "Deleted original workstation: " . strtoupper($type) . ". Reason: " . $request->reason,
+                $appointment->patient_name,
+                $appointment->id
+            );
+
+            event(new QueueUpdated());
+
+            return back()->with('success', 'Workstation removed from folder successfully.');
+        }
+
+        return back()->with('error', 'Workstation not found.');
+    }
+
+    /**
+     * ADD WORKSTATION: Adds an original workstation or a custom dynamic worksheet.
+     */
+    public function addWorkstation(Request $request, Appointment $appointment)
+    {
+        if (Gate::denies('isStaff')) abort(403);
+
+        $request->validate([
+            'workstation_type' => 'required|string|in:lab,radio,drug,med_cert,custom',
+            'custom_name' => 'required_if:workstation_type,custom|nullable|string|max:255',
+            'cert_no' => 'required_if:workstation_type,custom|nullable|string|max:255',
+            'scan_file' => 'required_if:workstation_type,custom|nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+        ]);
+
+        $res = $appointment->result()->firstOrCreate(['appointment_id' => $appointment->id]);
+        $type = $request->workstation_type;
+
+        if ($type === 'custom') {
+            $customRes = CustomWorkstationResult::create([
+                'appointment_result_id' => $res->id,
+                'name' => $request->custom_name,
+                'cert_no' => $request->cert_no,
+                'status' => 'encoded',
+            ]);
+
+            // Utilize upload function from standard workspace helper
+            $controller = new CustomWorksheetController();
+            $controller->uploadCustomWorksheetFile($request, $customRes, 'scan_file');
+
+            // Set system audit trail for newly added custom worksheet
+            $res->updateAudit("custom_{$customRes->id}", [
+                'v1_by' => auth()->id(),
+                'v1_by_name' => auth()->user()->name,
+                'v1_at' => now(),
+            ]);
+
+            ActivityLog::record(
+                'ENCODED',
+                "Created custom worksheet: {$customRes->name} (Cert: {$customRes->cert_no})",
+                $appointment->patient_name,
+                $appointment->id
+            );
+
+            event(new QueueUpdated());
+
+            return back()->with('success', "Worksheet '{$customRes->name}' added successfully.");
+        } else {
+            $reports = $res->included_reports ?? [];
+            if (in_array($type, $reports)) {
+                return back()->with('error', 'This workstation is already active.');
+            }
+
+            $reports[] = $type;
+            $res->included_reports = $reports;
+
+            $prefix = ($type == 'med_cert' ? 'med' : $type);
+            $res->{"{$prefix}_status"} = 'pending';
+            $res->save();
+
+            ActivityLog::record(
+                'ADDED WORKSTATION',
+                "Added workstation: " . strtoupper($type),
+                $appointment->patient_name,
+                $appointment->id
+            );
+
+            event(new QueueUpdated());
+
+            return back()->with('success', 'Workstation added successfully.');
+        }
+    }
+
+    /**
+     * REVISE DEMOGRAPHICS: Edits schedule and demographics details from the hub, with robust logging.
+     */
+    public function reviseDemographics(Request $request, Appointment $appointment)
+    {
+        if (Gate::denies('isStaff')) abort(403);
+
+        $request->validate([
+            'patient_first_name' => 'required|string|max:255',
+            'patient_middle_name' => 'nullable|string|max:255',
+            'patient_last_name' => 'required|string|max:255',
+            'patient_phone' => 'required|string|max:20',
+            'patient_sex' => 'required|string|in:Male,Female',
+            'patient_birthdate' => 'required|date|before_or_equal:today',
+            'patient_street' => 'required|string|max:255',
+            'patient_barangay' => 'required|string|max:255',
+            'patient_city' => 'required|string|max:255',
+            'patient_province' => 'required|string|max:255',
+            'service_ids' => 'required|array|min:1',
+            'reason' => 'required|string|min:5',
+        ]);
+
+        $fName = strtoupper(trim($request->patient_first_name));
+        $mName = ($request->patient_middle_name && strtoupper($request->patient_middle_name) !== 'N/A') 
+            ? strtoupper(trim($request->patient_middle_name)) : 'N/A';
+        $lName = strtoupper(trim($request->patient_last_name));
+        $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
+
+        $appointment->update([
+            'patient_first_name' => $fName,
+            'patient_middle_name' => $mName,
+            'patient_last_name' => $lName,
+            'patient_name' => $displayName,
+            'patient_phone' => $request->patient_phone,
+            'patient_sex' => $request->patient_sex,
+            'patient_birthdate' => $request->patient_birthdate,
+            'patient_street' => strtoupper(trim($request->patient_street)),
+            'patient_barangay' => strtoupper(trim($request->patient_barangay)),
+            'patient_city' => strtoupper(trim($request->patient_city)),
+            'patient_province' => strtoupper(trim($request->patient_province)),
+        ]);
+
+        // Sync the edited services requested for the appointment
+        $appointment->services()->sync($request->service_ids);
+
+        // Record audit log for compliance tracing
+        ActivityLog::record(
+            'DEMOGRAPHICS REVISED',
+            "Revised patient details and selected services. Reason: " . $request->reason,
+            $appointment->patient_name,
+            $appointment->id
+        );
+
+        event(new QueueUpdated());
+
+        return back()->with('success', 'Patient details and services revised successfully.');
+    }
+
+    /**
      * LOG ACCESS: The "Reason-Gate".
-     * Validates why staff is accessing records and grants temporary session access.
      */
     public function logAccess(Request $request, Appointment $appointment)
     {
         $request->validate([
             'access_reason' => 'required|string|min:5',
-            'type' => 'required', // can be 'hub', 'lab', 'radio', etc.
-            'mode' => 'required' // 'edit' or 'preview'
+            'type' => 'required',
+            'mode' => 'required'
         ]);
 
-        // 1. Record the audit trail
         ActivityLog::record(
             'SENSITIVE DATA ACCESS',
             "Reason: {$request->access_reason} | Action: " . strtoupper($request->mode) . " | Target: " . strtoupper($request->type),
@@ -145,10 +371,8 @@ class ResultController extends Controller
             $appointment->id
         );
 
-        // 2. Grant session-based access
-        session()->put("access_granted_{$appointment->id}_{$type}", true);
+        session()->put("access_granted_{$appointment->id}_{$request->type}", true);
 
-        // 3. UNIFIED REDIRECT: If type is 'hub', go to the Hub. Otherwise, go to file.
         if ($request->type === 'hub') {
             return redirect()->route('appointments.encode', $appointment->id);
         }
@@ -161,57 +385,125 @@ class ResultController extends Controller
     }
 
     /**
-     * ACCESS: serve physical scans first, then fall back to generated PDF.
+     * ACCESS: Enforces privacy shield and converts raw images to password-secured PDFs.
      */
     public function access(Appointment $appointment, $type, $mode)
     {
         $user = Auth::user();
 
+        if ($appointment->batch_id && $user->id === $appointment->user_id && $appointment->patient_email !== $user->email) {
+            abort(403, 'Privacy Shield: Batch coordinators are restricted from viewing individual patient worksheets.');
+        }
+
         $isOwner = $user->id === $appointment->user_id;
         $isStaff = $user->isEmployee();
 
-        // 1. Basic Auth
         if (!$isOwner && !$isStaff) abort(403);
 
-        // 2. Reason-Gate Check for Staff
         if ($isStaff && !$isOwner) {
             if (!session()->has("access_granted_{$appointment->id}_{$type}")) {
-                return redirect()->route('appointments.index')
-                    ->with('error', 'Clinical authorization required.');
+                return redirect()->route('appointments.index')->with('error', 'Clinical authorization required.');
             }
-            session()->forget("access_granted_{$appointment->id}_{$type}");
         }
 
-        $res = $appointment->result;
+        $res = $appointment->result()->firstOrCreate(['appointment_id' => $appointment->id]);
+
+        // Dynamically capture and stream custom worksheet uploads cleanly
+        if (str_starts_with($type, 'custom_')) {
+            $customId = str_replace('custom_', '', $type);
+            $customRes = CustomWorkstationResult::findOrFail($customId);
+            $filePath = $customRes->scan_path;
+
+            if ($filePath && Storage::disk('public')->exists($filePath)) {
+                $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+                $filename = "Result_{$customRes->name}_{$appointment->id}.{$ext}";
+
+                if ($mode === 'preview') {
+                    $contentType = $ext === 'pdf' ? 'application/pdf' : 'image/' . $ext;
+                    return response()->stream(function() use ($filePath) {
+                        $stream = Storage::disk('public')->readStream($filePath);
+                        fpassthru($stream);
+                        if (is_resource($stream)) fclose($stream);
+                    }, 200, [
+                        'Content-Type' => $contentType,
+                        'Content-Disposition' => 'inline; filename="' . $filename . '"'
+                    ]);
+                } else {
+                    return Storage::disk('public')->download($filePath, $filename);
+                }
+            }
+            abort(404, 'Scanned worksheet file not found on storage server.');
+        }
+
+        if ($type === 'radio') {
+            return $this->generateMergedRadioPdf($appointment, $res, $mode);
+        }
+
         $fileMap = [
-            'lab' => 'lab_scan', 'med_cert' => 'med_cert_scan', 
-            'drug' => 'drug_test_scan', 'radio' => 'radio_scan', 'xray' => 'xray_image'
+            'lab' => 'lab_scan',
+            'med_cert' => 'med_cert_scan',
+            'drug' => 'drug_test_scan',
+            'radio' => 'radio_scan',
+            'xray' => 'xray_image'
         ];
 
         $column = $fileMap[$type] ?? null;
+        $filePath = $res->$column;
 
-        // 1. Priority: Physical Scan
-        if ($column && $res && $res->$column) {
-            $path = Storage::disk('public')->path($res->$column);
-            if (file_exists($path)) {
-                return $mode === 'preview' ? response()->file($path) : response()->download($path);
+        if ($column && $res && $filePath && Storage::disk('public')->exists($filePath)) {
+            $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+
+            if (in_array($ext, ['jpg', 'jpeg', 'png', 'jfif'])) {
+                $fileContents = Storage::disk('public')->get($filePath);
+                $imageData = base64_encode($fileContents);
+                $mimeType = 'image/' . $ext;
+                if ($ext === 'jpg' || $ext === 'jfif') $mimeType = 'image/jpeg';
+                $base64Image = 'data:' . $mimeType . ';base64,' . $imageData;
+
+                // Read S3/Supabase files in memory safely before parsing their layout dimensions
+                $dimensions = @getimagesizefromstring($fileContents);
+                $imgWidth = $dimensions[0] ?? null;
+                $imgHeight = $dimensions[1] ?? null;
+
+                $pdf = Pdf::loadView('pdf.image_wrapper', [
+                    'base64Image' => $base64Image,
+                    'imgWidth' => $imgWidth,
+                    'imgHeight' => $imgHeight
+                ]);
+                $filename = "Result_{$type}_{$appointment->id}.pdf";
+                return $mode === 'preview' ? $pdf->stream($filename) : $pdf->download($filename);
+            }
+
+            $filename = "Result_{$type}_{$appointment->id}.{$ext}";
+
+            if ($mode === 'preview') {
+                $contentType = $ext === 'pdf' ? 'application/pdf' : 'image/' . $ext;
+                return response()->stream(function() use ($filePath) {
+                    $stream = Storage::disk('public')->readStream($filePath);
+                    fpassthru($stream);
+                    if (is_resource($stream)) fclose($stream);
+                }, 200, [
+                    'Content-Type' => $contentType,
+                    'Content-Disposition' => 'inline; filename="' . $filename . '"'
+                ]);
+            } else {
+                return Storage::disk('public')->download($filePath, $filename);
             }
         }
 
-        // 2. Fallback: Generate PDF dynamically using the new specialized view files
         $viewMap = [
             'lab' => 'pdf.labreport',
             'drug' => 'pdf.labreport',
             'med_cert' => 'pdf.medcert',
             'radio' => 'pdf.radio',
-            'xray' => 'pdf.radio',
+            'xray' => 'pdf.radio'
         ];
-        
+
         $viewName = $viewMap[$type] ?? 'pdf.labreport';
 
         $pdf = Pdf::loadView($viewName, [
-            'app' => $appointment, 
-            'res' => $res, 
+            'app' => $appointment,
+            'res' => $res,
             'type' => $type
         ]);
 
@@ -221,87 +513,309 @@ class ResultController extends Controller
     }
 
     /**
-     * PUBLIC QR VERIFICATION: Validate and display verified clinical records.
+     * FORWARD TO EMAIL: Triggers compiler to bundle and mail password-protected PDFs to patient.
      */
-    public function verifyPublic(Appointment $appointment)
+    public function forwardToEmail(Appointment $appointment)
     {
-        $res = $appointment->result;
-        return view('verify-result', compact('appointment', 'res'));
-    }
-
-    /**
-     * NEW: PUBLIC HISTORICAL QR VERIFICATION: Validate and display verified digitized historical records.
-     */
-    public function verifyHistoryPublic(User $user)
-    {
-        $labHistory = LaboratoryHistory::where('user_id', $user->id)->first();
-        
-        // Retrieve the verified digitized records in chronological order
-        $existingRecords = LaboratoryHistoryRecord::whereHas('laboratoryHistory', function($q) use ($user) {
-            $q->where('user_id', $user->id);
-        })->with(['scans', 'procedures'])->latest('date_of_record')->get();
-        
-        return view('verify-history', compact('user', 'existingRecords'));
-    }
-
-    /**
-     * PUBLIC SEARCH VERIFICATION: Search and resolve secure signed redirects.
-     */
-    public function verifySearch(Request $request)
-    {
-        $query = $request->query('query');
-        if ($query) {
-            // Strip whitespace
-            $query = trim($query);
-
-            // 1. Resolve by Laboratory Case Number (e.g., 2345345)
-            $labDetail = AppointmentLabDetail::where('case_no', $query)->first();
-            if ($labDetail && $labDetail->result && $labDetail->result->appointment) {
-                return redirect()->to(URL::signedRoute('result.verify-public', ['appointment' => $labDetail->result->appointment->id]));
-            }
-
-            // 2. Resolve by Medical Certificate Number (e.g., 01261065)
-            $medCert = AppointmentMedCert::where('cert_no', $query)->first();
-            if ($medCert && $medCert->result && $medCert->result->appointment) {
-                return redirect()->to(URL::signedRoute('result.verify-public', ['appointment' => $medCert->result->appointment->id]));
-            }
-
-            // 3. Resolve by Radiology Case Number (e.g., MDL-0225806)
-            $radReport = AppointmentRadiologyReport::where('case_no', $query)->first();
-            if ($radReport && $radReport->result && $radReport->result->appointment) {
-                return redirect()->to(URL::signedRoute('result.verify-public', ['appointment' => $radReport->result->appointment->id]));
-            }
-
-            // FIXED: Added public validation support for optional Certificate Numbers on digitized historical scans
-            $scan = LaboratoryHistoryScan::where('certificate_no', $query)->first();
-            if ($scan && $scan->record && $scan->record->laboratoryHistory && $scan->record->laboratoryHistory->user) {
-                $user = $scan->record->laboratoryHistory->user;
-                return redirect()->to(URL::signedRoute('history.verify-public', ['user' => $user->id]));
-            }
-
-            return back()->with('error', 'No clinical record found matching: ' . $query);
+        $user = auth()->user();
+        if ($appointment->user_id !== $user->id) {
+            abort(403, 'Unauthorized action.');
         }
 
-        return view('verify-search');
+        if ($appointment->status !== 'released') {
+            return back()->with('error', 'Results must be clinically released before they can be forwarded.');
+        }
+
+        // Deliver results securely using background PDF compiler (bypassing portal activation banner)
+        self::deliverResult($appointment, true);
+
+        return back()->with('success', "Pristine clinical results forwarded to your registered email: {$appointment->patient_email}.");
     }
 
     /**
-     * Check if all required components are 'verified'.
+     * STATIC HELPER: Compiles password-secured PDFs (including image-converted files) and delivers them.
      */
-    private function checkAllVerified($appointment)
+    public static function deliverResult(Appointment $appointment, $isForward = false)
     {
-        $res = $appointment->result;
-        $required = $res->included_reports ?? [];
+        // Resolved dynamic snapshot fallback. If patient_email is empty/null, fall back to registered parent email
+        $email = $appointment->patient_email ?: ($appointment->user?->email);
+        if (!$email) return;
 
-        if (empty($required)) return false;
+        $existingUser = User::where('email', $email)->first();
+        if ($existingUser && $appointment->user_id !== $existingUser->id) {
+            $appointment->update(['user_id' => $existingUser->id]);
+        }
 
-        foreach ($required as $type) {
-            $prefix = ($type == 'med_cert') ? 'med' : $type;
-            $statusField = $prefix . '_status';
-            if (($res->$statusField ?? 'pending') !== 'verified') {
-                return false;
+        $birthdate = $appointment->patient_birthdate;
+        $m = $birthdate ? $birthdate->format('m') : '01';
+        $d = $birthdate ? $birthdate->format('d') : '01';
+        $y = $birthdate ? $birthdate->format('Y') : '2000';
+
+        $fInit = $appointment->patient_first_name ? substr($appointment->patient_first_name, 0, 1) : 'X';
+        $mInit = ($appointment->patient_middle_name && $appointment->patient_middle_name !== 'N/A') ? substr($appointment->patient_middle_name, 0, 1) : '';
+        $lInit = $appointment->patient_last_name ? substr($appointment->patient_last_name, 0, 1) : 'Y';
+
+        $password = strtoupper("{$m}{$d}{$y}{$fInit}{$mInit}{$lInit}");
+
+        $promoUrl = route('register', [
+            'promote' => Crypt::encryptString($appointment->id),
+            'type' => 'shadow'
+        ]);
+
+        $res = $appointment->result()->firstOrCreate(['appointment_id' => $appointment->id]);
+        $included = $res->included_reports ?? ['lab'];
+        $attachments = [];
+
+        $fileMap = [
+            'lab' => 'lab_scan',
+            'med_cert' => 'med_cert_scan',
+            'drug' => 'drug_test_scan',
+            'radio' => 'radio_scan',
+            'xray' => 'xray_image'
+        ];
+
+        $viewMap = [
+            'lab' => 'pdf.labreport',
+            'drug' => 'pdf.labreport',
+            'med_cert' => 'pdf.medcert',
+            'radio' => 'pdf.radio',
+            'xray' => 'pdf.radio'
+        ];
+
+        foreach ($included as $type) {
+            if ($type === 'radio') {
+                $controller = new self();
+                $reportPages = $controller->fileToBase64Pages($res->radio_scan);
+                $xrayPages = $controller->fileToBase64Pages($res->xray_image);
+
+                $hasManualFindings = !empty($res->radio_data['findings']) || !empty($res->radio_data['impression']);
+                $renderManualReport = empty($reportPages) && ($hasManualFindings || !$res->radio_scan);
+
+                $pdf = Pdf::loadView('pdf.radio', [
+                    'app' => $appointment,
+                    'res' => $res,
+                    'renderManualReport' => $renderManualReport,
+                    'reportPages' => $reportPages,
+                    'xrayPages' => $xrayPages
+                ]);
+
+                $pdf->setEncryption($password);
+
+                $attachments[] = [
+                    'data' => $pdf->output(),
+                    'name' => "Medscreen_Result_Radiology_{$appointment->id}.pdf",
+                    'mime' => 'application/pdf'
+                ];
+                continue;
+            }
+
+            $column = $fileMap[$type] ?? null;
+            $filePath = $res->$column;
+
+            $isImage = false;
+            if ($column && $filePath) {
+                $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+                $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'jfif']);
+            }
+
+            if ($isImage && Storage::disk('public')->exists($filePath)) {
+                $fileContents = Storage::disk('public')->get($filePath);
+                $imageData = base64_encode($fileContents);
+                $mimeType = 'image/' . $ext;
+                if ($ext === 'jpg' || $ext === 'jfif') $mimeType = 'image/jpeg';
+                $base64Image = 'data:' . $mimeType . ';base64,' . $imageData;
+
+                // Load image dimensions to support proportional A4 scale calculations
+                $dimensions = @getimagesizefromstring($fileContents);
+                $imgWidth = $dimensions[0] ?? null;
+                $imgHeight = $dimensions[1] ?? null;
+
+                $pdf = Pdf::loadView('pdf.image_wrapper', [
+                    'base64Image' => $base64Image,
+                    'imgWidth' => $imgWidth,
+                    'imgHeight' => $imgHeight
+                ]);
+            } else {
+                $viewName = $viewMap[$type] ?? 'pdf.labreport';
+                $pdf = Pdf::loadView($viewName, [
+                    'app' => $appointment,
+                    'res' => $res,
+                    'type' => $type
+                ]);
+            }
+
+            $pdf->setEncryption($password);
+
+            $attachments[] = [
+                'data' => $pdf->output(),
+                'name' => "Medscreen_Result_{$type}_{$appointment->id}.pdf",
+                'mime' => 'application/pdf'
+            ];
+        }
+
+        // Dynamically capture, convert, and attach verified custom worksheets securely as well
+        $customs = $res->customWorkstationResults()->where('status', 'verified')->get();
+        foreach ($customs as $custom) {
+            $filePath = $custom->scan_path;
+            if ($filePath && Storage::disk('public')->exists($filePath)) {
+                $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+
+                if (in_array($ext, ['jpg', 'jpeg', 'png', 'jfif'])) {
+                    $fileContents = Storage::disk('public')->get($filePath);
+                    $imageData = base64_encode($fileContents);
+                    $mimeType = 'image/' . $ext;
+                    if ($ext === 'jpg' || $ext === 'jfif') $mimeType = 'image/jpeg';
+                    $base64Image = 'data:' . $mimeType . ';base64,' . $imageData;
+
+                    // Load image dimensions to support proportional A4 scale calculations
+                    $dimensions = @getimagesizefromstring($fileContents);
+                    $imgWidth = $dimensions[0] ?? null;
+                    $imgHeight = $dimensions[1] ?? null;
+
+                    $pdf = Pdf::loadView('pdf.image_wrapper', [
+                        'base64Image' => $base64Image,
+                        'imgWidth' => $imgWidth,
+                        'imgHeight' => $imgHeight
+                    ]);
+                    $pdf->setEncryption($password);
+
+                    $attachments[] = [
+                        'data' => $pdf->output(),
+                        'name' => "Medscreen_Result_{$custom->name}_{$appointment->id}.pdf",
+                        'mime' => 'application/pdf'
+                    ];
+                } else {
+                    $attachments[] = [
+                        'data' => Storage::disk('public')->get($filePath),
+                        'name' => "Medscreen_Result_{$custom->name}_{$appointment->id}.{$ext}",
+                        'mime' => $ext === 'pdf' ? 'application/pdf' : 'image/' . $ext
+                    ];
+                }
             }
         }
-        return true;
+
+        $hasAccount = User::where('email', $email)->exists();
+
+        // Dynamically title-case the patient's first name for elegant email salutation
+        $patientFirstName = ucwords(strtolower($appointment->patient_first_name));
+
+        Mail::send([], [], function ($message) use ($email, $appointment, $attachments, $promoUrl, $hasAccount, $isForward, $patientFirstName) {
+            $message->to($email)
+                ->subject('Your Medical Results are Ready - Medscreen')
+                ->html("
+                <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
+                    <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
+                        <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
+                    </div>
+                    <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
+                        <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$patientFirstName},</h3>
+                        <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Your secure, password-protected clinical results have been successfully released. Please find the encrypted PDF documents attached to this email.</p>
+                        <div style='background-color: #f8fafc; border-left: 4px solid #19D38C; padding: 20px; margin: 30px 0; border-radius: 6px;'>
+                            <strong style='color: #1c232d; display: block; margin-bottom: 8px; font-size: 16px;'>PDF Decryption Password:</strong>
+                            <span style='font-size: 14px; color: #4a5568; line-height: 1.5;'>
+                                Your files are secured using your personal password pattern:<br>
+                                <strong style='color: #15b376; font-size: 15px;'>MMDDYYYY + Capitalized Initials</strong><br>
+                                <span style='color: #718096; font-size: 12px; display: block; margin-top: 6px;'>Example: For birthdate October 24, 2005 & initials JDC, the password is <strong>10242005JDC</strong></span>
+                            </span>
+                        </div>
+                        " . (($hasAccount || $isForward) ? "" : "
+                        <div style='border: 1.5px dashed #19D38C; background-color: rgba(25, 211, 140, 0.03); padding: 25px; text-align: center; border-radius: 8px; margin: 30px 0;'>
+                            <h4 style='margin-top: 0; color: #1c232d; font-size: 18px;'>Activate Your Permanent Portal</h4>
+                            <p style='font-size: 14px; color: #4a5568; margin-bottom: 20px; line-height: 1.5;'>A temporary profile has been registered for you. Click below to secure your credentials and access your lifetime clinical history logs.</p>
+                            <a href='{$promoUrl}' style='display: inline-block; background-color: #19D38C; color: #1C232D; font-weight: bold; text-decoration: none; padding: 12px 30px; border-radius: 6px;'>ACTIVATE PROFILE</a>
+                        </div>
+                        ") . "
+                        <p style='margin-top: 30px; line-height: 1.6; color: #4a5568; font-size: 15px;'>Best regards,<br><strong>Medscreen Diagnostic Laboratory</strong></p>
+                    </div>
+                </div>
+                ");
+
+            foreach ($attachments as $file) {
+                $message->attachData($file['data'], $file['name'], ['mime' => $file['mime']]);
+            }
+        });
+
+        if ($appointment->results_released_at) {
+            $patientUser = $appointment->user;
+            if ($patientUser) {
+                $patientUser->notify(new \App\Notifications\AppointmentNotification([
+                    'title' => 'Clinical Record Corrected',
+                    'message' => "Your clinical results for Appointment #{$appointment->id} have been updated/corrected by the laboratory staff. Please review your updated files.",
+                    'url' => route('patient.history'),
+                    'type' => 'success'
+                ]));
+
+                event(new \App\Events\NotificationSent($patientUser->id, 'Clinical Record Corrected', "Your clinical results for Appointment #{$appointment->id} have been updated."));
+            }
+        }
+
+        $appointment->update(['results_released_at' => now()]);
+    }
+
+    /**
+     * Compile and merge radiology findings with scanned pages/X-rays cleanly into a PDF.
+     */
+    protected function generateMergedRadioPdf(Appointment $appointment, AppointmentResult $res, $mode)
+    {
+        $reportPages = $this->fileToBase64Pages($res->radio_scan);
+        $xrayPages = $this->fileToBase64Pages($res->xray_image);
+
+        $hasManualFindings = !empty($res->radio_data['findings']) || !empty($res->radio_data['impression']);
+        $renderManualReport = empty($reportPages) && ($hasManualFindings || !$res->radio_scan);
+
+        $pdf = Pdf::loadView('pdf.radio', [
+            'app' => $appointment,
+            'res' => $res,
+            'renderManualReport' => $renderManualReport,
+            'reportPages' => $reportPages,
+            'xrayPages' => $xrayPages
+        ]);
+
+        $filename = "Result_radio_{$appointment->id}.pdf";
+
+        return $mode === 'preview' ? $pdf->stream($filename) : $pdf->download($filename);
+    }
+
+    /**
+     * HELPER: Processes file assets and extracts individual pages as base64 images, supporting PDFs.
+     */
+    public function fileToBase64Pages($filePath)
+    {
+        if (!$filePath || !Storage::disk('public')->exists($filePath)) {
+            return [];
+        }
+
+        $fullPath = Storage::disk('public')->path($filePath);
+        $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+
+        if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'jfif'])) {
+            $data = base64_encode(Storage::disk('public')->get($filePath));
+            $mime = 'image/' . $ext;
+            if ($ext === 'jpg' || $ext === 'jfif') $mime = 'image/jpeg';
+            return ["data:{$mime};base64,{$data}"];
+        } elseif ($ext === 'pdf') {
+            $pages = [];
+            if (class_exists('Imagick')) {
+                try {
+                    $imagick = new \Imagick();
+                    $imagick->setResolution(150, 150);
+                    $imagick->readImage($fullPath);
+
+                    foreach ($imagick as $image) {
+                        $image->setImageFormat('jpeg');
+                        $data = base64_encode($image->getImageBlob());
+                        $pages[] = "data:image/jpeg;base64,{$data}";
+                    }
+                    $imagick->clear();
+                    $imagick->destroy();
+                } catch (\Exception $e) {
+                    Log::error("Imagick PDF parsing conversion failed for file {$filePath}: " . $e->getMessage());
+                }
+            } else {
+                Log::warning("Imagick extension is not installed. PDF merging was bypassed for {$filePath}.");
+            }
+            return $pages;
+        }
+        return [];
     }
 }

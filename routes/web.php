@@ -18,7 +18,8 @@ use App\Http\Controllers\{
 use App\Http\Controllers\Workstation\{
     LaboratoryController,
     ImagingController,
-    MedicalCertController
+    MedicalCertController,
+    CustomWorksheetController
 };
 
 /*
@@ -36,11 +37,15 @@ Route::get('/services', [ServiceController::class, 'index'])->name('services.ind
 // Public route for clinical QR code verification (Route Model Binding)
 Route::get('/verify-result', [ResultController::class, 'verifySearch'])->name('result.verify-search');
 
-// Secured the public verification page with cryptographic signed middleware to block IDOR/URL-tampering [15]
-Route::get('/verify-result/{appointment}', [ResultController::class, 'verifyPublic'])->name('result.verify-public')->middleware('signed');
+// Secured public verification page with cryptographic signed middleware to block IDOR/URL-tampering
+Route::get('/verify-result/{appointment}', [ResultController::class, 'verifyPublic'])
+    ->name('result.verify-public')
+    ->middleware('signed');
 
-// NEW: Secured public route for historical records verification, protected by cryptographic signatures [15]
-Route::get('/verify-history/{user}', [ResultController::class, 'verifyHistoryPublic'])->name('history.verify-public')->middleware('signed');
+// Secured public route for historical records verification, protected by cryptographic signatures
+Route::get('/verify-history/{user}', [ResultController::class, 'verifyHistoryPublic'])
+    ->name('history.verify-public')
+    ->middleware('signed');
 
 // Academic Compliance & Legal Routes
 Route::prefix('compliance')->group(function () {
@@ -67,7 +72,23 @@ Route::prefix('compliance')->group(function () {
 |--------------------------------------------------------------------------
 */
 
+// Basic Auth Group - Accessible to unverified users (e.g., Profile management, logging out, polling status)
 Route::middleware('auth')->group(function () {
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::put('/profile/password/change', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // Email verification status polling endpoint for auto-proceed flow
+    Route::get('/api/verification-status', function () {
+        return response()->json([
+            'verified' => auth()->user() ? auth()->user()->hasVerifiedEmail() : false
+        ]);
+    })->name('verification.status');
+});
+
+// Verified Auth Group - Core clinical and system functions requiring verified email
+Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // Appointments Index
@@ -80,12 +101,6 @@ Route::middleware('auth')->group(function () {
     Route::put('/appointments/{appointment}', [AppointmentController::class, 'update'])->name('appointments.update');
     Route::post('/appointments/{appointment}/resubmit-batch', [ResultController::class, 'resubmitBatch'])->name('appointments.resubmit-batch');
 
-    // Profile & Security
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::put('/profile/password/change', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-
     // Notifications
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::get('/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('notifications.markAsRead');
@@ -93,16 +108,19 @@ Route::middleware('auth')->group(function () {
 
     // Clinical Archive View (Permission Handshake)
     Route::get('/history/{user?}', [HistoryController::class, 'index'])->name('patient.history');
-
+    
     // Allowed both Patients and Clinical Staff to accept Handshake permissions securely
     Route::post('/history/accept/{user?}', [HistoryController::class, 'acceptRequest'])->name('history.accept');
 
-    /** 
-     * UNIFIED RESULT ACCESS:
-     * Patients access directly; Staff go through the Log Gate.
-     */
+    // UNIFIED RESULT ACCESS: Patients access directly; Staff go through the Log Gate
     Route::get('/appointments/{appointment}/result/{type}/{mode}', [ResultController::class, 'access'])->name('appointments.result.access');
     Route::post('/internal/appointment-log-access/{appointment}', [ResultController::class, 'logAccess'])->name('internal.logAccess');
+    
+    // Result Forwarding & Correction endpoint (Granted to bulk batch coordinators)
+    Route::post('/appointments/{appointment}/forward-result', [ResultController::class, 'forwardResult'])->name('appointments.forward-result');
+
+    // Patient Results Forwarding & Email delivery
+    Route::post('/appointments/{appointment}/forward-email', [ResultController::class, 'forwardToEmail'])->name('appointments.forward-email');
 });
 
 /*
@@ -111,13 +129,18 @@ Route::middleware('auth')->group(function () {
 |--------------------------------------------------------------------------
 */
 
-Route::middleware(['auth', 'role:user'])->group(function () {
+Route::middleware(['auth', 'role:user', 'verified'])->group(function () {
+    // Dependent Management
     Route::post('/dependents', [DependentController::class, 'store'])->name('dependents.store');
     Route::put('/dependents/{dependent}', [DependentController::class, 'update'])->name('dependents.update');
     Route::delete('/dependents/{dependent}', [DependentController::class, 'destroy'])->name('dependents.destroy');
+    Route::post('/dependents/{id}/restore', [DependentController::class, 'restore'])->name('dependents.restore');
 
     // Wizard Submission
     Route::post('/appointments', [AppointmentController::class, 'store'])->name('appointments.store');
+
+    // Patient Soft-Delete: Hide expired unpaid appointments from patient dashboard
+    Route::post('/appointments/{appointment}/soft-delete', [AppointmentController::class, 'softDelete'])->name('appointments.soft-delete');
 
     // Bulk Organization Booking (Standard Manual & Excel Parsing)
     Route::get('/bulk-appointment', [BulkAppointmentController::class, 'index'])->name('appointments.bulk');
@@ -137,13 +160,13 @@ Route::middleware(['auth', 'role:user'])->group(function () {
 |--------------------------------------------------------------------------
 */
 
-Route::middleware(['auth', 'role:staff,lab_tech,admin'])->group(function () {
+Route::middleware(['auth', 'role:staff,lab_tech,admin', 'verified'])->group(function () {
 
     // Clinical Workflow Transitions & Manual Payment Verifications
     Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus'])->name('appointments.status');
     Route::patch('/appointments/{appointment}/mark-tested', [AppointmentController::class, 'markTested'])->name('appointments.tested');
 
-    // Added missing route to confirm cashless transactions manually
+    // Added route to confirm cashless transactions manually
     Route::post('/appointments/{appointment}/confirm-payment', [AppointmentController::class, 'confirmPayment'])->name('appointments.confirm-payment');
 
     // Route for Staff-Triggered Patient Handshake Permission Request
@@ -162,12 +185,14 @@ Route::middleware(['auth', 'role:staff,lab_tech,admin'])->group(function () {
     Route::put('/admin/payment-providers/{provider}', [PaymentProviderController::class, 'update'])->name('admin.payment-providers.update');
     Route::patch('/admin/payment-providers/{provider}/toggle', [PaymentProviderController::class, 'toggle'])->name('admin.payment-providers.toggle');
     Route::delete('/admin/payment-providers/{provider}', [PaymentProviderController::class, 'destroy'])->name('admin.payment-providers.destroy');
+    Route::post('/admin/payment-providers/{id}/restore', [PaymentProviderController::class, 'restore'])->name('admin.payment-providers.restore');
 
     // Service Catalog Management
     Route::post('/services', [ServiceController::class, 'store'])->name('services.store');
     Route::put('/services/{service}', [ServiceController::class, 'update'])->name('services.update');
     Route::patch('/services/{service}/toggle', [ServiceController::class, 'toggle'])->name('services.toggle');
     Route::delete('/services/{service}', [ServiceController::class, 'destroy'])->name('services.destroy');
+    Route::post('/services/{id}/restore', [ServiceController::class, 'restore'])->name('services.restore');
 
     // WORKSTATIONS
     Route::prefix('workstation/{appointment}')->group(function () {
@@ -188,6 +213,20 @@ Route::middleware(['auth', 'role:staff,lab_tech,admin'])->group(function () {
         Route::post('/verify/{type}', [ResultController::class, 'verify'])->name('workstation.verify');
         Route::post('/return', [ResultController::class, 'return'])->name('workstation.return');
     });
+
+    // Dynamic custom workstation actions (scoped strictly to specific appointment results folder)
+    Route::post('/appointments/{appointment}/custom-worksheets', [CustomWorksheetController::class, 'store'])->name('workstation.custom.store');
+    Route::put('/appointments/{appointment}/custom-worksheets/{id}', [CustomWorksheetController::class, 'update'])->name('workstation.custom.update');
+    Route::delete('/appointments/{appointment}/custom-worksheets/{id}', [CustomWorksheetController::class, 'destroy'])->name('workstation.custom.destroy');
+    Route::post('/appointments/{appointment}/custom-worksheets/{id}/verify', [CustomWorksheetController::class, 'verify'])->name('workstation.custom.verify');
+    Route::post('/appointments/{appointment}/custom-worksheets/{id}/return', [CustomWorksheetController::class, 'return'])->name('workstation.custom.return');
+
+    // Original workstation deletion and dynamic additions routes
+    Route::delete('/appointments/{appointment}/workstation-original/{type}', [ResultController::class, 'destroyOriginalWorkstation'])->name('workstation.destroy-original');
+    Route::post('/appointments/{appointment}/add-workstation', [ResultController::class, 'addWorkstation'])->name('workstation.add');
+
+    // Demographic revision route (supports administrative justification audit trails)
+    Route::put('/internal/appointment-details/{appointment}', [ResultController::class, 'reviseDemographics'])->name('internal.appointment-details.update');
 
     // Internal User Directory
     Route::get('/admin/users', [AdminController::class, 'index'])->name('admin.users.index');
@@ -211,15 +250,19 @@ Route::middleware(['auth', 'role:staff,lab_tech,admin'])->group(function () {
 |--------------------------------------------------------------------------
 */
 
-Route::middleware(['auth', 'role:admin'])->group(function () {
+Route::middleware(['auth', 'role:admin', 'verified'])->group(function () {
     // Audit Logs
     Route::get('/admin/audit-logs', [AdminController::class, 'viewLogs'])->name('admin.logs');
 
-    // User Account Management
-    Route::patch('/admin/users/{user}/toggle', [AdminController::class, 'toggleStatus'])->name('admin.users.toggle');
-    Route::patch('/admin/users/{user}/role', [AdminController::class, 'changeRole'])->name('admin.users.updateRole');
-    Route::delete('/admin/users/{user}', [AdminController::class, 'destroy'])->name('admin.users.destroy');
+    // Consolidated User Profile Editor & Deactivation Engine
+    Route::put('/admin/users/{user}', [AdminController::class, 'updateUser'])->name('admin.users.update');
 });
+
+/*
+|--------------------------------------------------------------------------
+| 6. API HELPERS
+|--------------------------------------------------------------------------
+*/
 
 // API Helper (Used by Appointment Wizard for AJAX slot fetching)
 Route::get('/api/check-slots', [AppointmentConfigController::class, 'checkOccupancy']);

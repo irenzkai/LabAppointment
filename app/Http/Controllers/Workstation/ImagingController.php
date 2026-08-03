@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Workstation;
 use App\Http\Controllers\Controller;
 use App\Models\{Appointment, ActivityLog};
 use App\Traits\HandlesResultFiles;
+use App\Events\QueueUpdated; // Import our real-time broadcasting event
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
@@ -23,8 +24,12 @@ class ImagingController extends Controller
         $res = $appointment->result()->firstOrCreate(['appointment_id' => $appointment->id]);
 
         // Progress Tracking: Mark as 'encoding' if it was 'pending' or 'returned'
+        // This notifies the Hub that a technician is actively working on it.
         if (in_array($res->radio_status, ['pending', 'returned'])) {
             $res->update(['radio_status' => 'encoding']);
+            
+            // Broadcast state update (updates "In Progress" badge on the Hub)
+            event(new QueueUpdated());
         }
 
         // SECURED: Pre-authorize the embedded preview iframe to bypass the Reason-Gate safely
@@ -47,10 +52,24 @@ class ImagingController extends Controller
             return back()->with('error', 'Patient X-Ray image is mandatory.');
         }
 
+        // FIXED: Extract case_no and enforce global uniqueness validation across all files [153]
+        $request->validate([
+            'case_no' => 'required|string|max:255|unique:appointment_radiology_reports,case_no,' . ($res->radiologyReport?->id ?? 'NULL'),
+        ]);
+
         // 2. Handle File Uploads via Trait (Cleans up old files automatically)
         $this->uploadResultFile($request, $appointment, 'xray_image');
 
-        if ($request->input('clear_scan') == '1') {
+        $radioData = $request->input('radio_data');
+
+        // Check if any manual entries (findings/impression) are submitted in the request
+        $hasManualInput = !empty($request->input('radio_data.findings')) || !empty($request->input('radio_data.impression'));
+
+        /**
+         * FIXED: Robust clearing mechanism. If the clear flag is set OR the technician 
+         * has submitted manual findings, automatically delete and clear the existing report scan.
+         */
+        if ($request->input('clear_scan') == '1' || $hasManualInput) {
             if ($res->radio_scan) {
                 Storage::disk('public')->delete($res->radio_scan);
                 $res->update(['radio_scan' => null]);
@@ -59,22 +78,24 @@ class ImagingController extends Controller
             $this->uploadResultFile($request, $appointment, 'radio_scan');
         }
 
-        // 3. Process Data
-        $radioData = $request->input('radio_data');
-
-        /**
-         * SCAN PRIORITY LOGIC
-         * If a report scan is attached, we nullify manual text and metadata.
-         * This ensures the PDF generator only sees the scan.
-         */
         $res->refresh(); // Get updated scan path if just uploaded
         if ($res->radio_scan) {
+            // FIXED: Do not discard case_no when uploading a scanned copy [153]
             $radioData = [
-                'metadata' => [],
+                'metadata' => [
+                    'case_no' => $request->input('case_no'),
+                    'date' => $request->input('radio_data.metadata.date') ?? now()->format('Y-m-d'),
+                    'age_sex' => $request->input('radio_data.metadata.age_sex') ?? ($appointment->patient_age . ' / ' . $appointment->patient_sex),
+                ],
                 'findings' => null,
                 'impression' => null,
                 'sig' => []
             ];
+        } else {
+            // Ensure case_no is bound to metadata block for manual findings
+            if (is_array($radioData)) {
+                $radioData['metadata']['case_no'] = $request->input('case_no');
+            }
         }
 
         // 4. Update the Database with Hub Audit Info
@@ -94,7 +115,15 @@ class ImagingController extends Controller
             'radio_return_reason' => null // Clear correction instructions
         ]);
 
-        ActivityLog::record('ENCODED', 'Radiology workstation updated' . ($res->radio_scan ? ' (Scan Override)' : ''), $appointment->patient_name, $appointment->id);
+        ActivityLog::record(
+            'ENCODED', 
+            'Radiology workstation updated' . ($res->radio_scan ? ' (Scan Override)' : ''),
+            $appointment->patient_name,
+            $appointment->id
+        );
+
+        // Dispatch real-time refresh to the Results Hub and Master Queue
+        event(new QueueUpdated());
 
         return redirect()->route('appointments.encode', $appointment->id)
             ->with('success', 'Radiology report saved and sent for verification.');
@@ -109,8 +138,10 @@ class ImagingController extends Controller
 
         $res = $appointment->result()->firstOrCreate(['appointment_id' => $appointment->id]);
 
+        // Progress Tracking: Mark as 'encoding' if it was 'pending' or 'returned'
         if (in_array($res->drug_status, ['pending', 'returned'])) {
             $res->update(['drug_status' => 'encoding']);
+            event(new QueueUpdated());
         }
 
         // SECURED: Pre-authorize the embedded preview iframe to bypass the Reason-Gate safely
@@ -120,31 +151,65 @@ class ImagingController extends Controller
     }
 
     /**
-     * WORKSTATION: Drug Test Save (Strictly Scan-Based)
+     * WORKSTATION: Drug Test Save
      */
     public function drugSave(Request $request, Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
 
-        // Drug Test strictly requires a scan upload
-        if (!$appointment->result?->drug_test_scan && !$request->hasFile('drug_test_scan')) {
-            return back()->with('error', 'Official Drug Test scan is required.');
+        $res = $appointment->result;
+
+        // FIXED: If clear_scan is '1', we enforce that a file is strictly required, blocking fileless resubmits [190]
+        $isScanCleared = ($request->input('clear_scan') == '1');
+        $isScanRequired = !$res->drug_test_scan || $isScanCleared;
+
+        $request->validate([
+            'cert_no' => 'required|string|max:255',
+            'drug_test_scan' => ($isScanRequired ? 'required' : 'nullable') . '|file|mimes:pdf,jpg,jpeg,png|max:10240',
+        ]);
+
+        // Handle file uploads with static cleanup support
+        if ($isScanCleared) {
+            if ($res->drug_test_scan) {
+                Storage::disk('public')->delete($res->drug_test_scan);
+                $res->update(['drug_test_scan' => null]);
+            }
+        } else {
+            $this->uploadResultFile($request, $appointment, 'drug_test_scan');
         }
 
-        $this->uploadResultFile($request, $appointment, 'drug_test_scan');
+        $res->refresh();
 
-        // Update progress for the Hub tracker
-        $appointment->result->update([
+        // Save Certificate Number inside the JSON schema
+        $drugData = [
+            'metadata' => [
+                'cert_no' => $request->input('cert_no'),
+                'date' => now()->format('Y-m-d'),
+            ]
+        ];
+
+        $res->update([
+            'drug_test_data' => $drugData,
             'drug_status' => 'encoded',
-            'drug_v1_by_name' => auth()->user()->name, // System User
+            
+            // Workstation Audit Columns for Drug Test
+            'drug_v1_by_name' => auth()->user()->name,
             'drug_v1_at' => now(),
             'drug_v1_by' => auth()->id(),
+            
             'drug_return_reason' => null
         ]);
 
-        ActivityLog::record('ENCODED', 'Drug test scan uploaded', $appointment->patient_name, $appointment->id);
+        ActivityLog::record(
+            'ENCODED', 
+            'Drug test result saved' . ($res->drug_test_scan ? ' (Scan Override)' : ''),
+            $appointment->patient_name,
+            $appointment->id
+        );
+
+        event(new QueueUpdated());
 
         return redirect()->route('appointments.encode', $appointment->id)
-            ->with('success', 'Drug test result uploaded.');
+            ->with('success', 'Drug test result saved and sent for verification.');
     }
 }

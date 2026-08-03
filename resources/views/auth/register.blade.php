@@ -1,17 +1,19 @@
 @extends('layouts.app')
 
+@section('title', 'Register')
+
 @section('content')
 <div class="row justify-content-center align-items-center min-vh-80 animate-page">
     <div class="col-12 col-lg-11 col-xl-10">
         <div class="card p-0 border-secondary overflow-hidden shadow-lg" style="border-radius: 20px;">
             <div class="row g-0 align-items-stretch">
- 
+
                 {{-- LEFT PANEL: CLINICAL INFORMATION (Always Dark for high-contrast presentation) --}}
                 <div class="col-lg-5 d-none d-lg-flex flex-column justify-content-between p-5 bg-brand-dark position-relative" style="min-height: 600px;">
                     {{-- Soft backdrop overlay and dark brand styling --}}
                     <div class="position-absolute top-0 start-0 w-100 h-100" style="background: url('{{ asset('images/fb_cover.jpg') }}') center/cover no-repeat; opacity: 0.12; z-index: 1;"></div>
                     <div class="position-absolute top-0 start-0 w-100 h-100" style="background: linear-gradient(135deg, var(--brand-dark) 0%, rgba(28, 35, 45, 0.95) 100%); z-index: 2;"></div>
- 
+
                     {{-- Brand Content --}}
                     <div class="position-relative" style="z-index: 3;">
                         <div class="d-flex align-items-center gap-3 mb-5">
@@ -21,7 +23,7 @@
                         <h1 class="display-4 fw-800 text-white mb-3 mt-4" style="line-height: 1.15;">Join the clinical network.</h1>
                         <p class="text-white-50 fs-5 mb-0" style="line-height: 1.6;">Follow our secure, multi-step registration flow to set up your personal clinical profile and gain immediate access to our diagnostic suite.</p>
                     </div>
- 
+
                     {{-- Bottom Information --}}
                     <div class="position-relative mt-auto pt-4" style="z-index: 3;">
                         <div class="d-flex align-items-center gap-2">
@@ -35,11 +37,11 @@
                 {{-- RIGHT PANEL: MULTI-STEP FORM (Dynamic Background for Theme Compatibility) --}}
                 <div class="col-lg-7 d-flex flex-column justify-content-center p-4 p-md-5 bg-card">
                     <div class="w-100" style="max-width: 480px; margin: 0 auto;">
- 
+
                         {{-- Header & Progress --}}
                         <div class="mb-4 text-start">
                             <h3 class="text-main fw-bold mb-1 uppercase tracking-tighter" style="font-size: 1.75rem;">Create Account</h3>
- 
+
                             {{-- Step Tracker --}}
                             <div class="mt-3">
                                 <div class="d-flex justify-content-between mb-1 text-muted smaller fw-bold uppercase">
@@ -69,37 +71,42 @@
 
                         <form id="multiStepForm" method="POST" action="{{ route('register') }}">
                             @csrf
+                            
+                            {{-- FIXED: Added hidden input if this is a promoted dependent transition [381] --}}
+                            @if(isset($promotedDependent))
+                                <input type="hidden" name="promoted_dependent_id" value="{{ $promotedDependent->id }}">
+                            @endif
 
                             {{-- STEP 1: IDENTITY --}}
                             <div class="reg-section" id="section-1">
                                 <div class="row g-3 text-start">
                                     <div class="col-12">
                                         <label class="small text-muted fw-bold mb-1">FIRST NAME</label>
-                                        <input type="text" name="first_name" class="form-control uppercase" placeholder="Given Name" value="{{ old('first_name') }}" required>
+                                        <input type="text" name="first_name" class="form-control uppercase" placeholder="Given Name" value="{{ old('first_name', $promotedDependent->first_name ?? '') }}" required>
                                     </div>
                                     <div class="col-12">
                                         <div class="d-flex justify-content-between align-items-center mb-1">
                                             <label class="small text-muted fw-bold mb-0">MIDDLE NAME</label>
                                             <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="no_mn" onclick="toggleMN(this)">
+                                                <input class="form-check-input" type="checkbox" id="no_mn" onclick="toggleMN(this)" {{ old('middle_name', isset($promotedDependent) && $promotedDependent->middle_name == 'N/A' ? 'checked' : '') }}>
                                                 <label class="smaller text-muted" for="no_mn">None</label>
                                             </div>
                                         </div>
-                                        <input type="text" name="middle_name" id="middle_name" class="form-control uppercase" placeholder="Middle Name" value="{{ old('middle_name') }}">
+                                        <input type="text" name="middle_name" id="middle_name" class="form-control uppercase" placeholder="Middle Name" value="{{ old('middle_name', $promotedDependent->middle_name ?? '') }}" {{ old('middle_name', isset($promotedDependent) && $promotedDependent->middle_name == 'N/A' ? 'readonly' : '') }}>
                                     </div>
                                     <div class="col-12">
                                         <label class="small text-muted fw-bold mb-1">LAST NAME</label>
-                                        <input type="text" name="last_name" class="form-control uppercase" placeholder="Surname" value="{{ old('last_name') }}" required>
+                                        <input type="text" name="last_name" class="form-control uppercase" placeholder="Surname" value="{{ old('last_name', $promotedDependent->last_name ?? '') }}" required>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="small text-muted fw-bold mb-1">BIRTHDATE</label>
-                                        <input type="date" name="birthdate" class="form-control" value="{{ old('birthdate') }}" required max="{{ date('Y-m-d') }}">
+                                        <input type="date" name="birthdate" class="form-control" value="{{ old('birthdate', isset($promotedDependent) && $promotedDependent->birthdate ? $promotedDependent->birthdate->format('Y-m-d') : '') }}" required max="{{ date('Y-m-d') }}">
                                     </div>
                                     <div class="col-md-6">
                                         <label class="small text-muted fw-bold mb-1">SEX</label>
                                         <select name="sex" class="form-select" required>
-                                            <option value="Male" {{ old('sex') == 'Male' ? 'selected' : '' }}>Male</option>
-                                            <option value="Female" {{ old('sex') == 'Female' ? 'selected' : '' }}>Female</option>
+                                            <option value="Male" {{ old('sex', $promotedDependent->sex ?? '') == 'Male' ? 'selected' : '' }}>Male</option>
+                                            <option value="Female" {{ old('sex', $promotedDependent->sex ?? '') == 'Female' ? 'selected' : '' }}>Female</option>
                                         </select>
                                     </div>
                                 </div>
@@ -132,7 +139,7 @@
                                     </div>
                                     <div class="col-12">
                                         <label class="small text-muted fw-bold mb-1">STREET / HOUSE NO.</label>
-                                        <input type="text" name="street" class="form-control uppercase" placeholder="House/Lot/Block/Street" value="{{ old('street') }}" required>
+                                        <input type="text" name="street" class="form-control uppercase" placeholder="House/Lot/Block/Street" value="{{ old('street', $promotedDependent->street ?? '') }}" required>
                                     </div>
                                 </div>
                                 <div class="d-flex gap-2 mt-4">
@@ -145,12 +152,12 @@
                             <div class="reg-section d-none" id="section-3">
                                 <h6 class="text-accent smaller fw-bold mb-3 uppercase text-start">Contact Information</h6>
                                 <div class="mb-3 text-start">
-                                    <label class="small text-muted fw-bold mb-1">EMAIL ADDRESS</label>
-                                    <input type="email" name="email" class="form-control" placeholder="name@example.com" value="{{ old('email') }}" required>
+                                    <label class="small text-muted mb-1">EMAIL ADDRESS</label>
+                                    <input type="email" name="email" class="form-control" placeholder="name@example.com" value="{{ old('email', $promotedDependent->email ?? '') }}" required>
                                 </div>
                                 <div class="mb-3 text-start">
-                                    <label class="small text-muted fw-bold mb-1">PHONE NUMBER</label>
-                                    <input type="text" name="phone" class="form-control" placeholder="09xxxxxxxxx" value="{{ old('phone') }}" required>
+                                    <label class="small text-muted mb-1">PHONE NUMBER</label>
+                                    <input type="text" name="phone" class="form-control" placeholder="09xxxxxxxxx" value="{{ old('phone', $promotedDependent->phone ?? '') }}" required>
                                 </div>
                                 <div class="d-flex gap-2 mt-4">
                                     <button type="button" class="btn-custom btn-outline-secondary w-50 py-3" onclick="goToStep(2)">BACK</button>
@@ -162,17 +169,17 @@
                             <div class="reg-section d-none" id="section-4">
                                 <h6 class="text-accent smaller fw-bold mb-3 uppercase text-start">Account Security</h6>
                                 <div class="mb-3 text-start">
-                                    <label class="small text-muted fw-bold mb-1">PASSWORD</label>
+                                    <label class="small text-muted mb-1">PASSWORD</label>
                                     <div class="password-container position-relative">
                                         <input type="password" name="password" id="reg_pass" class="form-control" placeholder="Min. 8 characters" required>
-                                        <i class="bi bi-eye password-toggle text-accent" id="toggleRegPass" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; z-index: 10;"></i>
+                                        <i class="bi bi-eye password-toggle text-accent" id="toggleRegPass" style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); cursor: pointer; z-index: 10;"></i>
                                     </div>
                                 </div>
                                 <div class="mb-3 text-start">
-                                    <label class="small text-muted fw-bold mb-1">CONFIRM PASSWORD</label>
+                                    <label class="small text-muted mb-1">CONFIRM PASSWORD</label>
                                     <div class="password-container position-relative">
                                         <input type="password" name="password_confirmation" id="reg_pass_conf" class="form-control" placeholder="Repeat password" required>
-                                        <i class="bi bi-eye password-toggle text-accent" id="toggleRegPassConf" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; z-index: 10;"></i>
+                                        <i class="bi bi-eye password-toggle text-accent" id="toggleRegPassConf" style="position: absolute; right: 16px; top: 50%; transform: translateY(-50%); cursor: pointer; z-index: 10;"></i>
                                     </div>
                                 </div>
                                 <div class="d-flex gap-2 mt-4">
@@ -319,19 +326,55 @@ function compileRegisterAddress() {
     }
 }
 
+// FIXED: Dynamically map pre-filled fields with secure fallback assignments [385, 386]
+const savedProvince = "{{ old('province', $promotedDependent->province ?? '') }}";
+const savedCity = "{{ old('city', $promotedDependent->city ?? '') }}";
+const savedBarangay = "{{ old('barangay', $promotedDependent->barangay ?? '') }}";
+
 // --- INITIALIZATION ---
-document.addEventListener('DOMContentLoaded', () => {
-    fetchProvinces();
+document.addEventListener('DOMContentLoaded', async () => {
+    await initializeAddress();
     setupPasswordToggle('#reg_pass', '#toggleRegPass');
     setupPasswordToggle('#reg_pass_conf', '#toggleRegPassConf');
 
-    // FIXED: Form submit handler intercepts and compiles literal addresses
+    // FIXED: Form submit handler intercepts and compiles literal addresses [386]
     const regForm = document.getElementById('multiStepForm');
     if (regForm) {
         regForm.addEventListener('submit', function() {
             compileRegisterAddress();
         });
     }
+
+    // Check if middle name is N/A to trigger standard opacity adjustments on page load
+    const mnCheck = document.getElementById('no_mn');
+    if (mnCheck && mnCheck.checked) {
+        document.getElementById('middle_name').classList.add('opacity-50');
+    }
 });
+
+async function initializeAddress() {
+    await fetchProvinces();
+    if (savedProvince) {
+        const provSel = document.getElementById('addr_province');
+        let provOpt = Array.from(provSel.options).find(opt => opt.text.toUpperCase() === savedProvince.toUpperCase());
+        if (provOpt) {
+            provSel.value = provOpt.value;
+            await fetchCities(provOpt.value);
+            
+            const citySel = document.getElementById('addr_city');
+            let cityOpt = Array.from(citySel.options).find(opt => opt.text.toUpperCase() === savedCity.toUpperCase());
+            if (cityOpt) {
+                citySel.value = cityOpt.value;
+                await fetchBarangays(cityOpt.value);
+                
+                const brgySel = document.getElementById('addr_brgy');
+                let brgyOpt = Array.from(brgySel.options).find(opt => opt.text.toUpperCase() === savedBarangay.toUpperCase());
+                if (brgyOpt) {
+                    brgySel.value = brgyOpt.value;
+                }
+            }
+        }
+    }
+}
 </script>
 @endpush

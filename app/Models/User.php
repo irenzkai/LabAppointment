@@ -2,17 +2,19 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes; // 1. Import SoftDeletes trait
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, SoftDeletes; // 2. Use SoftDeletes trait
 
     /**
      * The attributes that are mass assignable.
-     * Normalized to 3NF: No physical 'name' or 'address' columns.
+     * Normalized to 3NF: No physical 'name' or 'address' columns. [102]
      */
     protected $fillable = [
         'first_name',
@@ -29,6 +31,7 @@ class User extends Authenticatable
         'province', 
         'role', // 'user', 'staff', 'lab_tech', 'admin'
         'is_active',
+        'password_change_required', // Added flag to force password updates on next login
     ];
 
     /**
@@ -49,15 +52,17 @@ class User extends Authenticatable
             'password' => 'hashed',
             'birthdate' => 'date', 
             'is_active' => 'boolean',
+            'password_change_required' => 'boolean', // Cast to boolean cleanly [102]
+            'deleted_at' => 'datetime',             // Cast SoftDelete timestamp [102]
         ];
     }
 
     // =========================================================================
-    // DYNAMIC ACCESSORS (COMPATIBILITY LAYER)
+    // DYNAMIC ACCESSORS (COMPATIBILITY LAYER) [103]
     // =========================================================================
 
     /**
-     * Dynamic Name Accessor (Compiles full name dynamically on-the-fly)
+     * Dynamic Name Accessor (Compiles full name dynamically on-the-fly) [103]
      */
     public function getNameAttribute()
     {
@@ -65,7 +70,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Dynamic Address Accessor (Compiles atomic fields into a single clinical string)
+     * Dynamic Address Accessor (Compiles atomic fields into a single clinical string) [103]
      */
     public function getAddressAttribute()
     {
@@ -73,11 +78,11 @@ class User extends Authenticatable
     }
 
     // =========================================================================
-    // ROLE CHECKING HELPERS
+    // ROLE CHECKING HELPERS [103]
     // =========================================================================
 
     /**
-     * Check if user is the System Administrator.
+     * Check if user is the System Administrator. [103]
      */
     public function isAdmin(): bool
     {
@@ -85,7 +90,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if user is a Laboratory Technician (or Admin for oversight).
+     * Check if user is a Laboratory Technician (or Admin for oversight). [103]
      */
     public function isLabTech(): bool
     {
@@ -93,7 +98,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if user is a General Staff/Receptionist.
+     * Check if user is a General Staff/Receptionist. [103]
      */
     public function isStaff(): bool
     {
@@ -101,7 +106,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Unified check for any employee (Internal Personnel).
+     * Unified check for any employee (Internal Personnel). [103]
      */
     public function isEmployee(): bool
     {
@@ -109,7 +114,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if user is purely a Patient.
+     * Check if user is purely a Patient. [104]
      */
     public function isPatient(): bool
     {
@@ -117,7 +122,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Specific check for workflow: Staff who are NOT technicians.
+     * Specific check for workflow: Staff who are NOT technicians. [104]
      */
     public function isStaffOnly(): bool
     {
@@ -125,11 +130,11 @@ class User extends Authenticatable
     }
 
     // =========================================================================
-    // RELATIONSHIPS
+    // RELATIONSHIPS [104]
     // =========================================================================
 
     /**
-     * A patient can have multiple dependents (children/elderly).
+     * A patient can have multiple dependents (children/elderly). [104]
      */
     public function dependents()
     {
@@ -137,7 +142,7 @@ class User extends Authenticatable
     }
 
     /**
-     * A user (Patient) has many appointments.
+     * A user (Patient) has many appointments. [104]
      */
     public function appointments()
     {
@@ -145,7 +150,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Tracks actions performed by this user (Staff).
+     * Tracks actions performed by this user (Staff). [104]
      */
     public function activityLogs()
     {

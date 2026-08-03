@@ -68,6 +68,7 @@ class DashboardController extends Controller
             // Patients see only their own (or their dependents') appointments
             $recentAppointments = Appointment::with('services')
                 ->where('user_id', $user->id)
+                ->where('deleted_by_patient', false) // FIXED: Exclude soft-deleted appointments from dashboard view
                 ->latest()
                 ->take(3)
                 ->get();

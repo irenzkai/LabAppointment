@@ -5,17 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>{{ config('app.name') }} | Medscreen Diagnostic Laboratory</title>
+    <title>Medscreen | @yield('title', 'Diagnostic Laboratory')</title>
+
+    <!-- Global Favicon Link -->
+    <link rel="shortcut icon" href="{{ asset('images/logo.jpg') }}" type="image/x-icon">
+    <link rel="icon" type="image/jpeg" href="{{ asset('images/logo.jpg') }}">
 
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <!-- Core Assets (Bootstrap 5.3 & Icons) -->
+    <!-- Core Assets (Bootstrap 5 & Icons) -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    
+
     <!-- Redesigned Custom Stylesheet -->
     <link rel="stylesheet" href="{{ asset('css/custom-style.css') }}">
 
@@ -27,50 +31,56 @@
     @include('layouts.partials.navigation')
 
     {{-- 2. MAIN CONTENT AREA --}}
-    {{-- We use a wrapper to ensure footer is always at the bottom if content is short --}}
-    <div class="d-flex flex-column min-vh-100">
-        
-        <main class="container py-5 mt-2 flex-grow-1">
-            
+    <div class="d-flex flex-column">
+
+        <main class="container py-5 mt-2" style="min-height: 65vh;">
+
             {{-- Global Success Message --}}
-            @if(session('success'))
-                <div class="alert alert-clinical d-flex align-items-center mb-4 shadow-sm" role="alert">
-                    <i class="bi bi-check-circle-fill me-3 fs-4 text-accent"></i>
-                    <div>
-                        <div class="fw-800 uppercase fs-x-small">Success</div>
-                        <div class="small">{{ session('success') }}</div>
+            @if(session('success') || request()->has('verified'))
+            <div class="alert alert-clinical d-flex align-items-center mb-4 shadow-sm" role="alert">
+                <i class="bi bi-check-circle-fill me-3 fs-4 text-accent"></i>
+                <div>
+                    <div class="fw-800 uppercase fs-x-small">Success</div>
+                    <div class="small">
+                        {{-- Dynamically toggle message if arriving via live verification redirect --}}
+                        @if(request()->has('verified'))
+                        Your email address has been successfully verified! Welcome to Medscreen.
+                        @else
+                        {{ session('success') }}
+                        @endif
                     </div>
-                    <button type="button" class="btn-close ms-auto shadow-none" data-bs-dismiss="alert"></button>
                 </div>
+                <button type="button" class="btn-close ms-auto shadow-none" data-bs-dismiss="alert"></button>
+            </div>
             @endif
 
-            {{-- FIXED: Global Error/Validation Message modified to display exact validation errors dynamically --}}
-            @if(session('error') || $errors->any())
-                <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 d-flex align-items-center mb-4 shadow-sm" role="alert">
-                    <i class="bi bi-exclamation-triangle-fill me-3 fs-4 text-danger"></i>
-                    <div>
-                        <div class="fw-800 uppercase fs-x-small text-danger">Action Required</div>
-                        <div class="small text-main">
-                            @if(session('error'))
-                                {{ session('error') }}
-                            @elseif($errors->any())
-                                <ul class="mb-0 ps-3">
-                                    @foreach($errors->all() as $error)
-                                        <li>{{ $error }}</li>
-                                    @endforeach
-                                </ul>
-                            @else
-                                Please check the input fields for errors.
-                            @endif
-                        </div>
+            {{-- Global Error Banner hidden on Guest Form routes to prevent duplicate alerts [410] --}}
+            @if((session('error') || $errors->any()) && !Route::is('login', 'register', 'password.request', 'password.reset', 'verification.notice'))
+            <div class="alert alert-clinical d-flex align-items-center mb-4 shadow-sm" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-3 fs-4 text-danger"></i>
+                <div>
+                    <div class="fw-800 uppercase fs-x-small">Action Required</div>
+                    <div class="small">
+                        @if(session('error'))
+                        {{ session('error') }}
+                        @elseif($errors->any())
+                        <ul class="mb-0 ps-3">
+                            @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                        @else
+                        Please check the input fields for errors.
+                        @endif
                     </div>
-                    <button type="button" class="btn-close ms-auto shadow-none" data-bs-dismiss="alert"></button>
                 </div>
+                <button type="button" class="btn-close ms-auto shadow-none" data-bs-dismiss="alert"></button>
+            </div>
             @endif
 
             {{-- Page Content Injected Here --}}
             @yield('content')
-            
+
         </main>
 
         {{-- 3. GLOBAL FOOTER (Capstone Disclaimer) --}}

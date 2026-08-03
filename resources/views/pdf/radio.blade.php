@@ -5,6 +5,7 @@
     <title>Radiologic Report - {{ $app->patient_name }}</title>
     <style>
         @page { 
+            size: A4 portrait; /* FIXED: Strictly locks the paper layout to Portrait to prevent orientation warp */
             margin: 40px 45px; 
         }
         body { 
@@ -216,25 +217,29 @@
             font-weight: bold;
             color: #64748b;
         }
+
+        .page-break {
+            page-break-before: always;
+        }
     </style>
 </head>
 <body>
 
-    @php
-        // FIXED: Safe nested key fallback mappings resolve un-fetched case number, date, and signatories cleanly
-        $radiologyReport = $res->radiologyReport;
-        
-        $caseNo = $radiologyReport->case_no ?? ($res->radio_data['metadata']['case_no'] ?? ($res->radio_data['case_no'] ?? 'N/A'));
-        $dateOfExam = $radiologyReport->date_of_exam ?? ($res->radio_data['metadata']['date'] ?? ($res->radio_data['date'] ?? now()));
-        $radiologistName = $radiologyReport->radiologist_name ?? ($res->radio_data['sig']['name'] ?? ($res->radio_data['sig_name'] ?? 'Dr. Mae Shelle Jopson'));
-        $radiologistLicense = $radiologyReport->radiologist_license ?? ($res->radio_data['sig']['lic'] ?? ($res->radio_data['sig_info'] ?? 'RADIOLOGIST'));
-        
-        $technique = $radiologyReport->technique ?? ($res->radio_data['technique'] ?? 'CHEST PA');
-        $findings = $radiologyReport->findings ?? ($res->radio_data['findings'] ?? "Both lungs are clear.\nHeart is not enlarged.\nDiaphragm and sinuses are intact.");
-        $impression = $radiologyReport->impression ?? ($res->radio_data['impression'] ?? 'ESSENTIALLY NORMAL CHEST');
-    @endphp
+@php
+    $report = $res->radiologyReport;
 
-    {{-- CLINICAL HEADER --}}
+    // FIXED: Resolves all variables safely from relational tables or fallback JSON columns [338, 473]
+    $caseNo = $report?->case_no ?? ($res->radio_data['metadata']['case_no'] ?? ($res->radio_data['case_no'] ?? 'N/A'));
+    $dateOfExam = $report?->date_of_exam ?? ($res->radio_data['metadata']['date'] ?? ($res->radio_data['date'] ?? now()));
+    $technique = $report?->technique ?? ($res->radio_data['technique'] ?? 'CHEST PA');
+    $findings = $report?->findings ?? ($res->radio_data['findings'] ?? 'NO SIGNIFICANT FINDINGS');
+    $impression = $report?->impression ?? ($res->radio_data['impression'] ?? 'NORMAL CHEST STUDY');
+    $radiologistName = $report?->radiologist_name ?? ($res->radio_data['sig']['name'] ?? ($res->radio_data['sig_name'] ?? 'INGAYON, NENA SALCEDO, MD, FPSP, MHC'));
+    $radiologistLicense = $report?->radiologist_license ?? ($res->radio_data['sig']['lic'] ?? ($res->radio_data['sig_info'] ?? 'PATHOLOGIST / License No.: 0092052'));
+@endphp
+
+@if($renderManualReport)
+    {{-- A. RENDER MANUALLY ENTERED REPORT SHEET --}}
     <table class="clinic-header-table">
         <tr>
             <td class="clinic-logo-left">
@@ -248,7 +253,6 @@
                 <div class="clinic-details">DOH ACCREDITED | Tel. No.: (083) 823 8754 | Email: medscreen.lab@gmail.com</div>
             </td>
             <td class="clinic-qr-right">
-                {{-- FIXED: Integrated live scannable verification QR code generator --}}
                 <div class="qr-placeholder">
                     <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{ urlencode(route('result.verify-public', $app->id)) }}" alt="Verification QR">
                 </div>
@@ -257,19 +261,18 @@
         </tr>
     </table>
 
-    {{-- PATIENT METADATA BOX --}}
     <table class="patient-meta-table">
         <tr>
             <td class="meta-label">Name:</td>
-            <td class="meta-value">{{ strtoupper($res->radio_data['metadata']['name'] ?? ($res->radio_data['name'] ?? $app->patient_name)) }}</td>
+            <td class="meta-value">{{ strtoupper($app->patient_name) }}</td>
             <td class="meta-label">Date:</td>
             <td class="meta-value">{{ \Carbon\Carbon::parse($dateOfExam)->format('d F Y') }}</td>
         </tr>
         <tr>
             <td class="meta-label">Address:</td>
-            <td class="meta-value">{{ strtoupper($res->radio_data['metadata']['address'] ?? ($res->radio_data['address'] ?? $app->patient_address)) }}</td>
+            <td class="meta-value">{{ strtoupper($app->patient_address) }}</td>
             <td class="meta-label">Age / Sex:</td>
-            <td class="meta-value">{{ $res->radio_data['metadata']['age_sex'] ?? ($res->radio_data['age_sex'] ?? ($app->patient_age . ' / ' . strtoupper($app->patient_sex))) }}</td>
+            <td class="meta-value">{{ $app->patient_age }} / {{ strtoupper($app->patient_sex) }}</td>
         </tr>
         <tr>
             <td class="meta-label">Case #:</td>
@@ -277,22 +280,19 @@
         </tr>
     </table>
 
-    {{-- DOCUMENT TITLE --}}
     <div class="document-title">
         <h1>RADIOLOGIC REPORT</h1>
     </div>
 
-    {{-- REPORT BODY CONTENT --}}
     <div class="report-body">
         <div class="exam-header">
             {{ strtoupper($technique) }}
         </div>
-        
+
         <div class="findings-section">
             {!! nl2br(e($findings)) !!}
         </div>
 
-        {{-- IMPRESSION --}}
         <div class="impression-section">
             <div class="impression-label">Impression:</div>
             <p class="impression-text">
@@ -301,7 +301,6 @@
         </div>
     </div>
 
-    {{-- SIGNATORY --}}
     <table class="signatory-table">
         <tr>
             <td style="width: 55%;"></td>
@@ -319,10 +318,28 @@
         </tr>
     </table>
 
-    {{-- ACADEMIC PROTOTYPE disclaimer footer --}}
     <div class="digital-footer">
         This is a digital copy. Physical copies can be acquired at the official location of Medscreen Diagnostic Laboratory.
     </div>
+@else
+    {{-- B. RENDER UPLOADED SCANNED REPORT FILE --}}
+    @if(!empty($reportPages))
+        @foreach($reportPages as $index => $pageData)
+            <div style="page-break-before: {{ $index === 0 ? 'avoid' : 'always' }}; text-align: center; margin: 0; padding: 0;">
+                <img src="{{ $pageData }}" style="width: 100%; height: auto; max-height: 100%;" alt="Scanned Report Page">
+            </div>
+        @endforeach
+    @endif
+@endif
 
-</body>
-</html>
+{{-- C. APPEND UPLOADED X-RAY SCAN PAGES (Appended strictly after the report, supporting both images and PDFs) --}}
+@if(!empty($xrayPages))
+    @foreach($xrayPages as $pageData)
+        <div style="page-break-before: always; text-align: center; margin: 0; padding: 0;">
+            <img src="{{ $pageData }}" style="width: 100%; height: auto; max-height: 100%;" alt="X-Ray Scan Page">
+        </div>
+    @endforeach
+@endif
+
+{{-- FIXED: Compresses the trailing file closure to prevent layout spacing from forcing an empty page --}}
+</body></html>

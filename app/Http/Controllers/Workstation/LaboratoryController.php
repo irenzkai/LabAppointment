@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Workstation;
 use App\Http\Controllers\Controller;
 use App\Models\{Appointment, Service, ActivityLog};
 use App\Traits\HandlesResultFiles;
+use App\Events\QueueUpdated; // Import our real-time broadcasting event
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
@@ -23,9 +24,12 @@ class LaboratoryController extends Controller
         $res = $appointment->result()->firstOrCreate(['appointment_id' => $appointment->id]);
 
         // Progress Tracking: Mark as 'encoding' if it was 'pending' or 'returned'
-        // This notifies the Hub that a technician is currently working on it.
+        // This notifies the Hub that a technician is actively working on it.
         if (in_array($res->lab_status, ['pending', 'returned'])) {
             $res->update(['lab_status' => 'encoding']);
+            
+            // Broadcast state update (updates "In Progress" badge on the Hub)
+            event(new QueueUpdated());
         }
 
         // Fetch individual services for the dynamic workstation search dropdown
@@ -47,31 +51,58 @@ class LaboratoryController extends Controller
         if (Gate::denies('isStaff')) abort(403);
 
         $res = $appointment->result;
+
+        // FIXED: Extract case_no and enforce global uniqueness validation across all files [153]
+        $request->validate([
+            'case_no' => 'required|string|max:255|unique:appointment_lab_details,case_no,' . ($res->labDetails?->id ?? 'NULL'),
+        ]);
+
         $labData = $request->input('lab_data');
 
         /**
-         * 1. SCAN PRIORITY LOGIC
-         * If a scan is attached, even metadata and signatories disappear.
-         * We empty the lab_data arrays so the PDF generator knows to only show the scan.
+         * 1. SCAN PURGE / RESET LOGIC
+         * If the scan was cleared on the front-end, remove the old file asset to 
+         * safely switch back to manual entry mode.
+         */
+        if ($request->input('clear_scan') == '1') {
+            if ($res->lab_scan) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($res->lab_scan);
+                $res->update(['lab_scan' => null]);
+            }
+        }
+
+        /**
+         * 2. SCAN PRIORITY LOGIC
+         * If a new scan is attached, empty the lab_data arrays so the PDF generator 
+         * knows to prioritize rendering only the uploaded document.
          */
         if ($request->hasFile('lab_scan')) {
             $this->uploadResultFile($request, $appointment, 'lab_scan');
 
+            // FIXED: Do not discard case_no when uploading a scanned copy [153]
             $labData = [
-                'metadata' => [],
+                'metadata' => [
+                    'case_no' => $request->input('case_no'),
+                    'date' => $request->input('lab_data.metadata.date') ?? now()->format('Y-m-d'),
+                ],
                 'results' => [],
                 'sig' => []
             ]; 
+        } else {
+            // Ensure case_no is bound to metadata block for manual findings
+            if (is_array($labData)) {
+                $labData['metadata']['case_no'] = $request->input('case_no');
+            }
         }
 
         /**
-         * 2. SYSTEM AUDIT (HUB) VS CLINICAL SIGNATORY (PDF)
+         * 3. SYSTEM AUDIT (HUB) VS CLINICAL SIGNATORY (PDF)
          * - $labData['sig'] contains the names manually typed for the PDF.
          * - Here we capture the ACTUAL SYSTEM ACCOUNT for the Hub progress tracker.
          */
         $systemUser = auth()->user()->name;
 
-        // 3. Update the Database Record
+        // 4. Update the Database Record
         $res->update([
             'lab_data' => $labData,
             'lab_status' => 'encoded', // Signals the Hub that it's ready for verification
@@ -85,7 +116,7 @@ class LaboratoryController extends Controller
             'lab_return_reason' => null 
         ]);
 
-        // 4. System Logging
+        // 5. System Logging
         ActivityLog::record(
             'ENCODED', 
             'Laboratory results submitted' . ($request->hasFile('lab_scan') ? ' (Scan Mode)' : ' (Manual Mode)'), 
@@ -93,7 +124,10 @@ class LaboratoryController extends Controller
             $appointment->id
         );
 
-        // 5. Redirect back to the Results Management Hub (The Command Center)
+        // Dispatch real-time refresh to the Results Hub and Master Queue
+        event(new QueueUpdated());
+
+        // 6. Redirect back to the Results Management Hub (The Command Center)
         return redirect()->route('appointments.encode', $appointment->id)
             ->with('success', 'Laboratory workstation saved. Awaiting verification.');
     }

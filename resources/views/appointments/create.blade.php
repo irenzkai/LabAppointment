@@ -1,10 +1,13 @@
 @extends('layouts.app')
 
+@section('title', 'Create Appointment')
+
 @section('content')
 <div class="row justify-content-center animate-page">
     <div class="col-lg-11 col-xl-10 text-start">
         <div class="card p-0 border-secondary bg-card shadow-lg overflow-hidden">
             <div class="row g-0 align-items-stretch">
+                
                 {{-- LEFT: WIZARD FORM PANEL --}}
                 <div class="col-md-8 border-end border-secondary border-opacity-25 p-4 p-md-5">
                     <form id="appointmentWizard" method="POST" action="{{ route('appointments.store') }}" enctype="multipart/form-data">
@@ -21,6 +24,7 @@
                 <div class="col-md-4 bg-secondary bg-opacity-10 p-4 p-md-5">
                     @include('appointments.partials.wizard.summary')
                 </div>
+
             </div>
         </div>
     </div>
@@ -49,7 +53,7 @@ const apiBase = "https://psgc.gitlab.io/api";
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchProvinces();
     handleTargetChange(); // Autofill "Myself" initial state on page load
- 
+
     // Watch for dependent dropdown changes to remove is-invalid flags dynamically
     const depSelect = document.getElementById('dependent_id');
     if (depSelect) {
@@ -60,6 +64,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // Initialize Bootstrap Popovers for test details on hover
+    const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'))
+    popoverTriggerList.map(function (popoverTriggerEl) {
+        return new bootstrap.Popover(popoverTriggerEl, {
+            sanitize: false // Allows rich, custom formatting inside popover layouts
+        });
+    });
+
     // Trigger custom validation alert modal on server-side validation error redirect
     @if ($errors->any())
         document.getElementById('wizardValidationTitle').innerText = "Action Required";
@@ -69,7 +81,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             errorHtml += `<li>{{ $error }}</li>`;
         @endforeach
         errorHtml += '</ul>';
- 
+
         document.getElementById('wizardValidationMsg').innerHTML = errorHtml;
         const modalEl = document.getElementById('wizardValidationModal');
         const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
@@ -171,15 +183,15 @@ function handleTargetChange() {
 
     if (type === 'self') {
         fillDetails(
-            user.first_name, 
-            user.middle_name, 
-            user.last_name, 
-            user.sex, 
-            user.birthdate, 
-            user.phone, 
-            user.street, 
-            user.barangay, 
-            user.city, 
+            user.first_name,
+            user.middle_name,
+            user.last_name,
+            user.sex,
+            user.birthdate,
+            user.phone,
+            user.street,
+            user.barangay,
+            user.city,
             user.province
         );
         document.getElementById('sum_patient_type').innerText = "Personal Account";
@@ -209,7 +221,7 @@ function handleTargetChange() {
 
 function fillDetails(f, m, l, sex, bday, phone, street, barangay, city, province) {
     document.getElementById('in_first_name').value = f || '';
- 
+
     const middleInput = document.getElementById('in_middle_name');
     const noneMnSwitch = document.getElementById('profile_no_mn');
     if (m === 'N/A' || !m) {
@@ -229,7 +241,7 @@ function fillDetails(f, m, l, sex, bday, phone, street, barangay, city, province
     document.getElementById('in_bday').value = bday ? bday.split('T')[0] : '';
     document.getElementById('in_phone').value = phone || '';
     document.getElementById('addr_street').value = street || '';
- 
+
     // Load cascading address dropdowns
     setAddressDropdowns(province, city, barangay);
 }
@@ -374,7 +386,7 @@ function compileAppointmentAddress() {
 
 document.getElementById('appointmentWizard').addEventListener('submit', function(e) {
     compileAppointmentAddress();
- 
+
     // Normalizes slash date formats (DD/MM/YYYY) to YYYY-MM-DD before form submit hits backend validation
     const bdayInput = document.getElementById('in_bday');
     if (bdayInput && bdayInput.value.includes('/')) {
@@ -415,9 +427,9 @@ async function fetchTimeSlots() {
     const date = document.getElementById('wiz_date').value;
     const container = document.getElementById('wiz_slots_container');
     if (!date) return;
- 
+
     container.innerHTML = '<div class="col-12 text-center py-5"><div class="spinner-border text-neon"></div></div>';
- 
+
     try {
         const res = await fetch(`/api/check-slots?date=${date}`);
         const data = await res.json();
@@ -433,14 +445,14 @@ async function fetchTimeSlots() {
 
         const now = new Date();
         const todayLocal = now.toLocaleDateString('en-CA');
- 
+
         while (start < end) {
             let tStr = start.toTimeString().split(' ')[0];
             let disp = start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
- 
+
             let isFull = (data.full_slots || []).includes(tStr);
             let isLunch = (data.config.has_lunch_break && tStr >= data.config.lunch_start && tStr < data.config.lunch_end);
- 
+
             // STRICT dynamic past and lead-time buffer checking
             let isPast = false;
             if (date === todayLocal) {
@@ -512,7 +524,7 @@ function initializeSingleWizardEvents() {
     const qrImage = document.getElementById('selected_provider_qr');
     const qrLabel = document.getElementById('selected_provider_name');
 
-    // FIXED: Enforce "required" attributes on the payment provider radio group to trigger form invalidation
+    // FIXED: Enforce "required" attributes on the payment provider radio group to trigger form validation
     function togglePaymentFields() {
         if (payCashless && payCashless.checked) {
             if (providerContainer) providerContainer.classList.remove('d-none');
@@ -581,7 +593,7 @@ function initializeSingleWizardEvents() {
             }
         });
     }
-    
+
     // Run initial toggling check
     togglePaymentFields();
 }

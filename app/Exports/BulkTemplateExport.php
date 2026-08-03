@@ -29,7 +29,7 @@ class BulkTemplateExport implements FromArray, WithColumnFormatting, ShouldAutoS
     }
 
     /**
-     * Forcibly define Text format for critical columns (Phone and Birthdate) 
+     * Forcibly define Text format for critical columns (Phone, Birthdate, and Address Fields)
      * to prevent Excel from auto-converting dates or stripping leading zeros.
      */
     public function columnFormats(): array
@@ -40,7 +40,10 @@ class BulkTemplateExport implements FromArray, WithColumnFormatting, ShouldAutoS
             'C' => NumberFormat::FORMAT_TEXT, // Sex
             'D' => '@',                       // Phone (Forces Text format to prevent stripping leading 0)
             'E' => NumberFormat::FORMAT_TEXT, // Email
-            'F' => NumberFormat::FORMAT_TEXT, // Address
+            'F' => NumberFormat::FORMAT_TEXT, // Street
+            'G' => NumberFormat::FORMAT_TEXT, // Barangay
+            'H' => NumberFormat::FORMAT_TEXT, // City
+            'I' => NumberFormat::FORMAT_TEXT, // Province
         ];
     }
 

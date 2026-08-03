@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
-use App\Models\ActivityLog; // FIXED: Imported ActivityLog model to prevent account deletion crashes
+use App\Models\ActivityLog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -51,11 +51,19 @@ class ProfileController extends Controller
             'province' => strtoupper(trim($request->province)),
         ]));
 
-        if ($user->isDirty('email')) {
+        $emailChanged = $user->isDirty('email');
+
+        if ($emailChanged) {
             $user->email_verified_at = null;
         }
 
         $user->save();
+
+        if ($emailChanged) {
+            // Automatically send new verification email and redirect to verify notice
+            $user->sendEmailVerificationNotification();
+            return redirect()->route('verification.notice')->with('status', 'verification-link-sent');
+        }
 
         return Redirect::route('profile.edit')->with('success', 'Profile updated successfully!');
     }

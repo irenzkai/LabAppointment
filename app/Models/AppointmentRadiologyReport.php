@@ -15,8 +15,8 @@ class AppointmentRadiologyReport extends Model
 
     /**
      * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
+     * 
+     * FIXED: Added 'xray_image' to fillable to enable mass-assignment writes on this sub-table.
      */
     protected $fillable = [
         'appointment_result_id',
@@ -27,12 +27,11 @@ class AppointmentRadiologyReport extends Model
         'impression',
         'radiologist_name',
         'radiologist_license',
+        'xray_image'
     ];
 
     /**
-     * The attributes that should be cast.
-     *
-     * @var array<string, string>
+     * Cast attributes to native types.
      */
     protected $casts = [
         'date_of_exam' => 'date',

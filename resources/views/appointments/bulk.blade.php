@@ -1,16 +1,18 @@
 @extends('layouts.app')
 
+@section('title', 'Create Bulk Appointment')
+
 @section('content')
 <div class="row justify-content-center">
     <div class="col-lg-11 col-xl-11 text-start animate-page">
- 
+
         {{-- Unified 3-Step Wizard Container --}}
         <div class="card p-0 border-secondary bg-card shadow-lg overflow-hidden">
             <div class="row g-0 align-items-stretch">
- 
+
                 {{-- LEFT PANEL: WIZARD FLOW (Col 8) --}}
                 <div class="col-md-8 border-end border-secondary border-opacity-25 p-4 p-md-5">
-                    <form id="bulkForm" action="{{ route('appointments.bulk.manual') }}" method="POST" enctype="multipart/form-data">
+                    <form id="bulkForm" action="{{ route('appointments.bulk.manual') }}" method="POST" enctype="multipart/form-data" onsubmit="return validateBulkForm(event)">
                         @csrf
                         <input type="hidden" name="organization_name" id="hidden_org">
                         <input type="hidden" name="appointment_date" id="hidden_date">
@@ -28,8 +30,8 @@
                                 </div>
                                 <div class="col-12">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Preferred Start Date</label>
-                                    <input type="date" id="master_date" class="form-control py-3 fw-bold shadow-none" min="{{ date('Y-m-d') }}">
- 
+                                    <input type="date" id="master_date" class="form-control py-3 fw-bold shadow-none" min="{{ date('Y-m-d') }}" value="{{ date('Y-m-d') }}">
+
                                     {{-- Dynamic closed-day alert element --}}
                                     <div id="date_validation_msg" class="text-danger small mt-2 d-none">
                                         <i class="bi bi-exclamation-triangle-fill me-1"></i> Clinic is closed on this day. Please select another date.
@@ -100,7 +102,7 @@
                                             </label>
                                         </div>
 
-                                        {{-- Option 2: Cashless (Enabled) --}}
+                                        {{-- Option 2: Cashless --}}
                                         <div class="col-md-6">
                                             <input type="radio" class="btn-check" name="payment_method" id="pay_cashless" value="Cashless">
                                             <label class="btn btn-outline-accent w-100 p-4 text-center hover-bg h-100 d-flex flex-column align-items-center justify-content-center" for="pay_cashless">
@@ -112,7 +114,7 @@
                                     </div>
                                 </div>
 
-                                {{-- Dynamic E-Wallet Selector Grid (Hidden until Cashless is selected) --}}
+                                {{-- Dynamic E-Wallet Selector Grid --}}
                                 <div id="provider_selection_container" class="col-12 d-none mt-4 animate-fade-in">
                                     <label class="text-accent smaller fw-bold uppercase d-block mb-3" style="font-size: 0.75rem; letter-spacing: 0.5px;">Choose E-Wallet Provider</label>
                                     <div class="row g-3">
@@ -126,7 +128,6 @@
                                                         @else
                                                             <i class="bi bi-wallet2 fs-3 mb-2 text-secondary"></i>
                                                         @endif
-                                                        {{-- FIXED: Switched static class 'text-white' to active theme variable mapping to prevent light mode blending --}}
                                                         <div class="small fw-bold uppercase" style="color: var(--text-main) !important;">{{ $provider->name }}</div>
                                                     </label>
                                                 </div>
@@ -147,14 +148,13 @@
                                     <div class="p-4 border border-secondary border-opacity-25 rounded text-center" style="background-color: rgba(108, 117, 125, 0.05) !important;">
                                         <h6 class="text-main fw-bold mb-3 uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">Scan to Pay (<span id="selected_provider_name" class="text-accent"></span>)</h6>
                                         <div class="d-flex justify-content-center">
-                                            {{-- FIXED: Added explicit ID for modern decoupled click listening --}}
-                                            <div id="qr_zoom_wrapper" class="bg-white p-2 rounded shadow-sm border border-secondary border-opacity-10" style="cursor: zoom-in;" title="Click to view full screen">
+                                            <div id="qr_zoom_wrapper" class="bg-white p-2 rounded shadow-sm border border-secondary border-opacity-10" style="cursor: zoom-in;" onclick="zoomQR(document.getElementById('selected_provider_qr').src)" title="Click to view full screen">
                                                 <img src="" id="selected_provider_qr" alt="Scan QR" style="width: 180px; height: 180px; object-fit: contain;">
                                             </div>
                                         </div>
                                         <p class="text-muted smaller mt-3 mb-0 italic" style="font-size: 0.7rem;">
-                                            <i class="bi bi-zoom-in me-1 text-accent"></i> Click the QR code image to view it full screen.<br>
-                                            Please take a screenshot of your successful transaction to present upon arrival.
+                                            <i class="bi bi-zoom-in text-accent me-1"></i> Click the QR code image to view it full screen.<br>
+                                            Please take a screenshot of your transaction to present upon arrival.
                                         </p>
                                     </div>
                                 </div>
@@ -210,122 +210,224 @@
             </div>
         </div>
 
-        {{-- MODAL 1: TEST SELECTOR MODAL --}}
-        <div class="modal fade" id="serviceModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content border-secondary bg-card shadow-lg">
-                    <div class="modal-header border-secondary bg-secondary bg-opacity-10 py-3">
-                        <h5 class="modal-title text-main fw-bold uppercase small">Select Laboratory Tests</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body p-0">
-                        <div class="p-3 border-bottom border-secondary border-opacity-10">
-                            <input type="text" id="serviceSearch" class="form-control" placeholder="Search test name...">
-                        </div>
-                        <div id="serviceList" class="overflow-auto" style="max-height: 400px;">
-                            @foreach($services as $s)
-                                <label class="d-flex align-items-center justify-content-between p-3 border-bottom border-secondary border-opacity-10 service-item cursor-pointer hover-bg" for="ch_{{ $s->id }}" data-name="{{ strtoupper($s->name) }}" data-gender="{{ $s->gender_restriction }}">
-                                    <div class="d-flex align-items-center">
-                                        <input class="form-check-input me-3 mt-0 border-secondary" type="checkbox" value="{{ $s->id }}" data-label="{{ $s->name }}" id="ch_{{ $s->id }}">
-                                        <span class="text-main fw-bold small">{{ strtoupper($s->name) }}</span>
-                                    </div>
-                                    <span class="text-accent fw-bold small"> {{ number_format($s->price) }}</span>
-                                </label>
-                            @endforeach
-                        </div>
-                    </div>
-                    <div class="modal-footer border-secondary bg-secondary bg-opacity-10 p-0">
-                        <button type="button" class="btn-custom btn-accent w-100 py-3 uppercase fw-bold" onclick="applyServices()">APPLY SELECTION</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {{-- MODAL 2: CUSTOM VALIDATION ALERT --}}
-        <div class="modal fade" id="validationModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-sm modal-dialog-centered">
-                <div class="modal-content border-secondary bg-card shadow-lg text-center p-4">
-                    <i class="bi bi-exclamation-circle text-accent mb-3 d-block" style="font-size: 3rem;"></i>
-                    <h5 class="text-main fw-bold mb-2 uppercase">Information</h5>
-                    <p id="validationMsg" class="text-secondary small mb-4"></p>
-                    <button type="button" class="btn-custom btn-accent w-100 py-2 uppercase fw-bold" data-bs-dismiss="modal">UNDERSTOOD</button>
-                </div>
+        {{-- FULLSCREEN QR LIGHTBOX OVERLAY --}}
+        <div id="qr_lightbox" class="d-none fixed inset-0 w-100 h-100 d-flex align-items-center justify-content-center" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 3000; background-color: rgba(0, 0, 0, 0.85); cursor: zoom-out;" onclick="window.closeQRLightbox()">
+            <div class="text-center p-3 animate-fade-in">
+                <img src="" id="lightbox_qr_img" alt="Zoomed QR" class="img-fluid rounded border border-secondary p-3 bg-white" style="max-height: 75vh; max-width: 90vw; object-fit: contain;">
+                <p class="text-white-50 mt-3 small mb-0"><i class="bi bi-x-circle me-1"></i> Click anywhere on the screen to close preview</p>
             </div>
         </div>
 
     </div>
 </div>
 
-{{-- FULLSCREEN QR LIGHTBOX OVERLAY --}}
-<div id="qr_lightbox" class="d-none fixed inset-0 w-100 h-100 d-flex align-items-center justify-content-center" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 3000; background-color: rgba(0, 0, 0, 0.85); cursor: zoom-out;" onclick="window.closeQRLightbox()">
-    <div class="text-center p-3 animate-fade-in">
-        <img src="" id="lightbox_qr_img" alt="Zoomed QR" class="img-fluid rounded border border-secondary p-3 bg-white" style="max-height: 75vh; max-width: 90vw; object-fit: contain;">
-        <p class="text-white-50 mt-3 small mb-0"><i class="bi bi-x-circle me-1"></i> Click anywhere on the screen to close preview</p>
+{{-- CUSTOM THEME-COMPATIBLE VALIDATION ALERT MODAL --}}
+<div class="modal fade" id="wizardValidationModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+        <div class="modal-content border-secondary bg-card shadow-lg text-center p-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+            <div class="mb-3">
+                <i class="bi bi-exclamation-circle text-accent display-4 d-block"></i>
+            </div>
+            <h5 class="text-main fw-bold mb-2 uppercase tracking-tighter" id="wizardValidationTitle">Omissions Found</h5>
+            <div id="wizardValidationMsg" class="text-secondary small mb-4">Please fill in all required fields and complete your selections before proceeding.</div>
+            <button type="button" class="btn-custom btn-accent w-100 py-3 uppercase fw-bold" data-bs-dismiss="modal">UNDERSTOOD</button>
+        </div>
     </div>
 </div>
 
 <style>
-.hover-bg:hover { background-color: rgba(25, 211, 140, 0.05); }
-.cursor-pointer { cursor: pointer; }
+    .hover-bg:hover { background-color: rgba(25, 211, 140, 0.05); }
+    .cursor-pointer { cursor: pointer; }
 
-#rowContainer input, #rowContainer select, #rowContainer textarea { 
-    background-color: var(--bg-card) !important; 
-    border: 1px solid var(--border-color) !important; 
-    color: var(--text-main) !important; 
-}
-.cursor-not-allowed { cursor: not-allowed !important; }
+    #rowContainer input, #rowContainer select { 
+        background-color: var(--bg-card) !important; 
+        border: 1px solid var(--border-color) !important; 
+        color: var(--text-main) !important; 
+    }
+    .cursor-not-allowed { cursor: not-allowed !important; }
 
-/* FIXED: Highlights selected payment method cleanly with themed border-accent glow */
-.btn-check:checked + label.btn-outline-accent {
-    background-color: rgba(25, 211, 140, 0.06) !important;
-    border-color: var(--brand-accent) !important;
-    border-width: 2.2px !important;
-    box-shadow: 0 0 12px rgba(25, 211, 140, 0.12) !important;
-}
-.btn-check:checked + label.btn-outline-accent i {
-    color: var(--brand-accent) !important;
-}
+    /* Highlights selected payment method cleanly with themed border-accent glow */
+    .btn-check:checked + label.btn-outline-accent {
+        background-color: rgba(25, 211, 140, 0.06) !important;
+        border-color: var(--brand-accent) !important;
+        border-width: 2.2px !important;
+        box-shadow: 0 0 12px rgba(25, 211, 140, 0.12) !important;
+    }
+    .btn-check:checked + label.btn-outline-accent i {
+        color: var(--brand-accent) !important;
+    }
 
-/* FIXED: Light Mode Checked text / icon high contrast emerald green */
-.btn-check:checked + label.btn-outline-accent,
-.btn-check:checked + label.btn-outline-accent i,
-.btn-check:checked + label.btn-outline-accent div,
-.btn-check:checked + label.btn-outline-accent span {
-    color: #15b376 !important; 
-}
+    /* Light Mode Checked text / icon high contrast emerald green */
+    .btn-check:checked + label.btn-outline-accent,
+    .btn-check:checked + label.btn-outline-accent i,
+    .btn-check:checked + label.btn-outline-accent div,
+    .btn-check:checked + label.btn-outline-accent span {
+        color: #15b376 !important; 
+    }
 
-/* FIXED: Dark Mode Checked text / icon high contrast brand accent */
-[data-bs-theme="dark"] .btn-check:checked + label.btn-outline-accent,
-[data-bs-theme="dark"] .btn-check:checked + label.btn-outline-accent i,
-[data-bs-theme="dark"] .btn-check:checked + label.btn-outline-accent div,
-[data-bs-theme="dark"] .btn-check:checked + label.btn-outline-accent span {
-    color: var(--brand-accent) !important;
-}
+    /* Dark Mode Checked text / icon high contrast brand accent */
+    [data-bs-theme="dark"] .btn-check:checked + label.btn-outline-accent,
+    [data-bs-theme="dark"] .btn-check:checked + label.btn-outline-accent i,
+    [data-bs-theme="dark"] .btn-check:checked + label.btn-outline-accent div,
+    [data-bs-theme="dark"] .btn-check:checked + label.btn-outline-accent span {
+        color: var(--brand-accent) !important;
+    }
 
-/* FIXED: Ensure unselected payment method cards use high-contrast, non-blending colors in both modes */
-label.btn-outline-accent {
-    border-color: var(--border-color) !important;
-    color: var(--text-main) !important;
-    background-color: var(--bg-card) !important;
-}
-label.btn-outline-accent i {
-    color: var(--brand-accent) !important;
-}
-label.btn-outline-accent div, 
-label.btn-outline-accent span {
-    color: var(--text-main) !important;
-}
-label.btn-outline-accent .opacity-75, 
-label.btn-outline-accent div.smaller {
-    color: var(--text-muted) !important;
-}
+    /* Ensure unselected payment method cards use high-contrast, non-blending colors in both modes */
+    label.btn-outline-accent {
+        border-color: var(--border-color) !important;
+        color: var(--text-main) !important;
+        background-color: var(--bg-card) !important;
+    }
+    label.btn-outline-accent i {
+        color: var(--brand-accent) !important;
+    }
+    label.btn-outline-accent div, 
+    label.btn-outline-accent span {
+        color: var(--text-main) !important;
+    }
+    label.btn-outline-accent .opacity-75, 
+    label.btn-outline-accent div.smaller {
+        color: var(--text-muted) !important;
+    }
+
+    /* --- REDESIGNED ACTION BUTTON CORES --- */
+    .btn-outline-accent {
+        border-color: var(--brand-accent) !important;
+        color: var(--brand-accent) !important;
+        background-color: transparent !important;
+        transition: all 0.2s ease-in-out;
+    }
+    .btn-outline-accent:hover {
+        background-color: var(--brand-accent) !important;
+        color: var(--brand-dark) !important;
+        box-shadow: 0 0 10px rgba(25, 211, 140, 0.2);
+    }
+    .btn-outline-danger {
+        border-color: #ff4d4d !important;
+        color: #ff4d4d !important;
+        background-color: transparent !important;
+        transition: all 0.2s ease-in-out;
+    }
+    .btn-outline-danger:hover {
+        background-color: #ff4d4d !important;
+        color: #ffffff !important;
+        box-shadow: 0 0 10px rgba(255, 77, 77, 0.2);
+    }
+
+    /* --- SERVICE SELECTOR MODAL HIGH CONTRAST THEMING --- */
+    #serviceModal .modal-content {
+        background-color: var(--bg-card) !important;
+        border: 1.5px solid var(--border-color) !important;
+        border-radius: 16px !important;
+    }
+    #serviceModal .modal-header {
+        border-bottom: 1px solid var(--border-color) !important;
+        background-color: rgba(25, 211, 140, 0.05) !important;
+    }
+    #serviceModal .modal-title {
+        color: var(--brand-accent) !important;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+    }
+    #serviceModal .service-item .form-check {
+        background-color: var(--bg-card);
+        border: 1.5px solid var(--border-color) !important;
+        border-radius: 10px;
+        transition: all 0.2s ease-in-out;
+        cursor: pointer;
+        padding: 14px 15px 14px 38px !important;
+        margin-bottom: 0;
+    }
+    #serviceModal .service-item .form-check:hover {
+        border-color: var(--brand-accent) !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(25, 211, 140, 0.1);
+    }
+    #serviceModal .service-item .form-check-input {
+        margin-left: -24px !important;
+        margin-top: 5px !important;
+        border: 1.5px solid var(--border-color);
+        cursor: pointer;
+        width: 1.15em;
+        height: 1.15em;
+    }
+    #serviceModal .service-item .form-check-input:checked {
+        background-color: var(--brand-accent) !important;
+        border-color: var(--brand-accent) !important;
+    }
+    #serviceModal .service-item .form-check:has(.form-check-input:checked) {
+        border-color: var(--brand-accent) !important;
+        background-color: rgba(25, 211, 140, 0.06) !important;
+    }
+    #serviceModal .service-item .form-check-input:checked + .form-check-label {
+        color: var(--brand-accent) !important;
+    }
+    #serviceModal .modal-footer {
+        border-top: 1px solid var(--border-color) !important;
+        background-color: rgba(0, 0, 0, 0.02) !important;
+    }
+    #serviceModal #serviceSearch {
+        background-color: var(--bg-card) !important;
+        border: 1.5px solid var(--border-color) !important;
+        color: var(--text-main) !important;
+        border-radius: 10px;
+    }
+    #serviceModal #serviceSearch:focus {
+        border-color: var(--brand-accent) !important;
+        box-shadow: 0 0 0 4px rgba(25, 211, 140, 0.1) !important;
+    }
 </style>
+
+<!-- Service Selection Modal -->
+<div class="modal fade" id="serviceModal" tabindex="-1" aria-labelledby="serviceModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content shadow-lg border-secondary bg-card">
+            <div class="modal-header">
+                <h5 class="modal-title" id="serviceModalLabel">
+                    <i class="bi bi-flask-fill me-2"></i>Select Laboratory Tests
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 text-start">
+                <!-- Search Input -->
+                <div class="mb-4">
+                    <div class="input-group">
+                        <span class="input-group-text bg-secondary bg-opacity-10 border-secondary border-opacity-25 text-secondary">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" id="serviceSearch" class="form-control shadow-none" placeholder="Search tests by name...">
+                    </div>
+                </div>
+
+                <!-- Services List -->
+                <div class="row g-3" id="serviceListContainer" style="max-height: 400px; overflow-y: auto;">
+                    @foreach($services as $service)
+                        <div class="col-md-6 service-item" data-name="{{ strtoupper($service->name) }}" data-gender="{{ $service->gender_restriction }}">
+                            <div class="form-check p-2">
+                                <input class="form-check-input ms-0 me-2" type="checkbox" value="{{ $service->id }}" data-label="{{ $service->name }}" id="service_chk_{{ $service->id }}">
+                                <label class="form-check-label text-main small cursor-pointer" for="service_chk_{{ $service->id }}">
+                                    <span class="fw-bold d-block text-main">{{ strtoupper($service->name) }}</span>
+                                    <span class="text-accent">&#x20B1;<span class="fw-bold">{{ number_format($service->price, 2) }}</span></span>
+                                </label>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">CANCEL</button>
+                <button type="button" class="btn-custom btn-accent py-2 px-4 fw-bold uppercase" onclick="applyServices()">APPLY SELECTIONS</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 @include('appointments.partials.bulk.scripts')
 
 @push('scripts')
 <script>
-// FIXED: Attached layout handlers globally onto window object to avoid DOM namespace collisions
+// Attached layout handlers globally onto window object to avoid DOM namespace collisions
 window.zoomQR = function(qrSrc) {
     if (qrSrc) {
         document.getElementById('lightbox_qr_img').src = qrSrc;
@@ -349,7 +451,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const qrImage = document.getElementById('selected_provider_qr');
     const qrLabel = document.getElementById('selected_provider_name');
 
-    // proof of payment uploader now only appears once a cashless provider is checked
     function togglePaymentFields() {
         if (payCashless.checked) {
             providerContainer.classList.remove('d-none');

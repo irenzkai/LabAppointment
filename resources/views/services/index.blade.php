@@ -1,7 +1,10 @@
 @extends('layouts.app')
 
+@section('title', 'Laboratory Services')
+
 @section('content')
 <div class="container text-start animate-page">
+    
     {{-- 1. HEADER SECTION --}}
     <div class="d-flex justify-content-between align-items-center mb-5 border-bottom border-secondary border-opacity-25 pb-4">
         <div>
@@ -34,6 +37,15 @@
                 Health Packages
             </button>
         </li>
+        @can('isStaff')
+        @if(count($archivedServices) > 0)
+        <li class="nav-item ms-auto">
+            <button class="nav-link fs-x-small fw-800 uppercase px-4 py-2 text-warning border-warning" data-bs-toggle="pill" data-bs-target="#tab-archive">
+                <i class="bi bi-archive me-1"></i> Archived Services ({{ count($archivedServices) }})
+            </button>
+        </li>
+        @endif
+        @endcan
     </ul>
 
     {{-- 3. SERVICES LISTINGS --}}
@@ -44,78 +56,77 @@
                 @php $filtered = $services->where('category', $cat); @endphp
 
                 @forelse($filtered as $service)
-                    {{-- Logic check: Staff sees everything; Patients see active only --}}
-                    @if((Auth::check() && Auth::user()->isStaff()) || $service->is_available)
-                    <div class="col-md-6 col-lg-4">
-                        <div class="card h-100 shadow-sm {{ !$service->is_available ? 'opacity-50 grayscale border-dashed' : 'border-light' }}">
-                            <div class="card-body d-flex flex-column p-4">
-                                {{-- Name & Pricing --}}
-                                <div class="d-flex justify-content-between align-items-start mb-3">
-                                    <h5 class="text-main fw-800 mb-0 lh-sm">{{ strtoupper($service->name) }}</h5>
-                                    <div class="text-accent fw-800 fs-5 ps-3"> {{ number_format($service->price, 2) }}</div>
-                                </div>
-
-                                {{-- Info Badges --}}
-                                <div class="mb-3 d-flex flex-wrap gap-2">
-                                    @if($service->gender_restriction == 'male')
-                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2.5 py-1.5 small rounded uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Male Only</span>
-                                    @elseif($service->gender_restriction == 'female')
-                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2.5 py-1.5 small rounded uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Female Only</span>
-                                    @else
-                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2.5 py-1.5 small rounded uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">All Genders</span>
-                                    @endif
-
-                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2.5 py-1.5 small rounded uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">
-                                        <i class="bi bi-clock me-1"></i>{{ $service->formatted_time }}
-                                    </span>
-                                </div>
-
-                                {{-- Description --}}
-                                <p class="text-muted small flex-grow-1 mb-4">
-                                    {{ $service->description }}
-                                </p>
-
-                                {{-- Preparation Instructions --}}
-                                <div class="alert-clinical d-flex flex-column mb-3">
-                                    <label class="text-accent fw-800 fs-x-small uppercase mb-1">Preparation Required:</label>
-                                    <span class="text-main small">{{ $service->preparation }}</span>
-                                </div>
-
-                                {{-- Staff Administration Panel --}}
-                                @can('isStaff')
-                                <div class="mt-auto pt-3 border-top border-secondary border-opacity-10 d-flex gap-2">
-                                    @if($service->is_available)
-                                        {{-- Actions for Available Services --}}
-                                        <button class="btn btn-outline-secondary btn-sm flex-grow-1 fw-bold" data-bs-toggle="modal" data-bs-target="#editModal{{$service->id}}">
-                                            EDIT
-                                        </button>
-                                        <form action="{{ route('services.toggle', $service->id) }}" method="POST" class="flex-grow-1 m-0">
-                                            @csrf 
-                                            @method('PATCH')
-                                            <button type="submit" class="btn btn-outline-danger btn-sm w-100 fw-bold">
-                                                DISABLE
-                                            </button>
-                                        </form>
-                                    @else
-                                        {{-- Actions for Disabled Services: ENABLE and DELETE --}}
-                                        <form action="{{ route('services.toggle', $service->id) }}" method="POST" class="flex-grow-1 m-0">
-                                            @csrf 
-                                            @method('PATCH')
-                                            <button type="submit" class="btn btn-accent btn-sm w-100 fw-bold">
-                                                ENABLE
-                                            </button>
-                                        </form>
-                                        {{-- Triggers system delete confirmation modal --}}
-                                        <button type="button" class="btn btn-outline-danger btn-sm px-3" data-bs-toggle="modal" data-bs-target="#delModal{{$service->id}}" title="Delete Service">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    @endif
-                                </div>
-                                @endcan
+                {{-- Logic check: Staff sees everything; Patients see active only --}}
+                @if((Auth::check() && Auth::user()->isStaff()) || $service->is_available)
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100 shadow-sm {{ !$service->is_available ? 'opacity-50 grayscale border-dashed' : 'border-light' }}">
+                        <div class="card-body d-flex flex-column p-4">
+                            {{-- Name & Pricing --}}
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <h5 class="text-main fw-800 mb-0 lh-sm">{{ strtoupper($service->name) }}</h5>
+                                <div class="text-accent fw-800 fs-5 ps-3"> {{ number_format($service->price, 2) }}</div>
                             </div>
+
+                            {{-- Info Badges --}}
+                            <div class="mb-3 d-flex flex-wrap gap-2">
+                                @if($service->gender_restriction == 'male')
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2.5 py-1.5 small rounded uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Male Only</span>
+                                @elseif($service->gender_restriction == 'female')
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2.5 py-1.5 small rounded uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Female Only</span>
+                                @else
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2.5 py-1.5 small rounded uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">All Genders</span>
+                                @endif
+
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2.5 py-1.5 small rounded uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">
+                                    <i class="bi bi-clock me-1"></i>{{ $service->formatted_time }}
+                                </span>
+                            </div>
+
+                            {{-- Description --}}
+                            <p class="text-muted small flex-grow-1 mb-4">
+                                {{ $service->description }}
+                            </p>
+
+                            {{-- Preparation Instructions --}}
+                            <div class="alert-clinical d-flex flex-column mb-3">
+                                <label class="text-accent fw-800 fs-x-small uppercase mb-1">Preparation Required:</label>
+                                <span class="text-main small">{{ $service->preparation }}</span>
+                            </div>
+
+                            {{-- Staff Administration Panel --}}
+                            @can('isStaff')
+                            <div class="mt-auto pt-3 border-top border-secondary border-opacity-10 d-flex gap-2">
+                                @if($service->is_available)
+                                {{-- Actions for Available Services --}}
+                                <button class="btn btn-outline-secondary btn-sm flex-grow-1 fw-bold" data-bs-toggle="modal" data-bs-target="#editModal{{$service->id}}">
+                                    EDIT
+                                </button>
+                                <form action="{{ route('services.toggle', $service->id) }}" method="POST" class="flex-grow-1 m-0">
+                                    @csrf 
+                                    @method('PATCH')
+                                    <button type="submit" class="btn btn-outline-danger btn-sm w-100 fw-bold">
+                                        DISABLE
+                                    </button>
+                                </form>
+                                @else
+                                {{-- Actions for Disabled Services: ENABLE and DELETE --}}
+                                <form action="{{ route('services.toggle', $service->id) }}" method="POST" class="flex-grow-1 m-0">
+                                    @csrf 
+                                    @method('PATCH')
+                                    <button type="submit" class="btn btn-accent btn-sm w-100 fw-bold">
+                                        ENABLE
+                                    </button>
+                                </form>
+                                <button type="button" class="btn btn-outline-danger btn-sm px-3" data-bs-toggle="modal" data-bs-target="#delModal{{$service->id}}" title="Delete Service">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                @endif
+                            </div>
+                            @endcan
                         </div>
                     </div>
-                    @endif
+                </div>
+                @endif
                 @empty
                 <div class="col-12 py-5 text-center text-muted border border-secondary border-dashed rounded-4">
                     <i class="bi bi-flask fs-1 d-block mb-3 opacity-25"></i>
@@ -125,6 +136,39 @@
             </div>
         </div>
         @endforeach
+
+        {{-- 3.B ARCHIVED SERVICES TAB (Internal Personnel Only) --}}
+        @can('isStaff')
+        @if(count($archivedServices) > 0)
+        <div class="tab-pane fade" id="tab-archive">
+            <div class="row g-4">
+                @foreach($archivedServices as $service)
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100 shadow-sm border-dashed border-warning opacity-75">
+                        <div class="card-body d-flex flex-column p-4">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <h5 class="text-warning fw-800 mb-0 lh-sm">{{ strtoupper($service->name) }}</h5>
+                                <div class="text-warning fw-800 fs-5 ps-3"> {{ number_format($service->price, 2) }}</div>
+                            </div>
+                            <p class="text-muted small flex-grow-1 mb-4">
+                                {{ $service->description }}
+                            </p>
+                            <div class="mt-auto pt-3 border-top border-warning border-opacity-10 d-flex gap-2">
+                                <form action="{{ route('services.restore', $service->id) }}" method="POST" class="w-100 m-0">
+                                    @csrf
+                                    <button type="submit" class="btn btn-outline-warning btn-sm w-100 fw-bold">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i> REACTIVATE / RESTORE
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                @endforeach
+            </div>
+        </div>
+        @endif
+        @endcan
     </div>
 
     {{-- 4. ADMINISTRATIVE MODALS --}}
@@ -155,7 +199,7 @@
                                 <strong class="uppercase d-block mb-1 text-danger">Validation Failure</strong>
                                 <ul class="mb-0 ps-3 text-secondary">
                                     @foreach ($errors->all() as $error)
-                                        <li>{{ $error }}</li>
+                                    <li>{{ $error }}</li>
                                     @endforeach
                                 </ul>
                             </div>
@@ -235,7 +279,7 @@
                                         </div>
                                     </div>
 
-                                    {{-- Custom Sample input --}}
+                                    {{-- Custom Sample Input --}}
                                     <div class="input-group input-group-sm mt-3" style="max-width: 300px;">
                                         <input type="text" id="custom-input-add" class="form-control bg-card text-main" placeholder="Add custom type...">
                                         <button class="btn btn-outline-accent" type="button" onclick="addCustomSample('add')">ADD</button>
@@ -258,7 +302,6 @@
 <style>
 .grayscale { filter: grayscale(1); }
 .border-dashed { border-style: dashed !important; }
-
 .nav-pills .nav-link {
     color: var(--text-muted);
     border: 1px solid var(--border-color);
@@ -271,27 +314,27 @@
     border-color: var(--brand-accent);
 }
 </style>
+@endsection
 
 @push('scripts')
 <script>
 @if ($errors->any())
-    // Automatically re-open the creation modal if any validation errors are returned
-    document.addEventListener('DOMContentLoaded', () => {
-        const addModalEl = document.getElementById('addServiceModal');
-        if (addModalEl) {
-            const modal = new bootstrap.Modal(addModalEl);
-            modal.show();
-            
-            // Highlight each invalid input inside the form
-            @foreach ($errors->keys() as $key)
-                const input = addModalEl.querySelector(`[name="{{ $key }}"]`);
-                if (input) {
-                    input.classList.add('is-invalid');
-                }
-            @endforeach
+// Automatically re-open the creation modal if any validation errors are returned
+document.addEventListener('DOMContentLoaded', () => {
+    const addModalEl = document.getElementById('addServiceModal');
+    if (addModalEl) {
+        const modal = new bootstrap.Modal(addModalEl);
+        modal.show();
+        
+        // Highlight each invalid input inside the form
+        @foreach ($errors->keys() as $key)
+        const input = addModalEl.querySelector(`[name="{{ $key }}"]`);
+        if (input) {
+            input.classList.add('is-invalid');
         }
-    });
+        @endforeach
+    }
+});
 @endif
 </script>
 @endpush
-@endsection

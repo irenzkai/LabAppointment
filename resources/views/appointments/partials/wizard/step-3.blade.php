@@ -1,6 +1,6 @@
 <!-- PAGE 3: SELECT TESTS -->
 <div class="wiz-section d-none text-start animate-page" id="page-3">
-    
+ 
     {{-- Step Header & Search --}}
     <div class="mb-4">
         <div class="d-flex justify-content-between align-items-end mb-1">
@@ -24,41 +24,52 @@
     </div>
 
     {{-- Scrollable Test List --}}
-    {{-- FIXED: Changed bg-black bg-opacity-50 to bg-card --}}
-    <div class="test-list-container border border-secondary border-opacity-25 rounded bg-card overflow-hidden" style="max-height: 480px; overflow-y: auto;">
+    {{-- FIXED: Added custom-scroll class and ensured scrollability --}}
+    <div class="test-list-container custom-scroll border border-secondary border-opacity-25 rounded bg-card" style="max-height: 480px; overflow-y: auto;">
         @foreach($services as $s)
-        <div class="test-item border-bottom border-secondary border-opacity-10 transition-all">
-            <input type="checkbox" name="service_ids[]" value="{{ $s->id }}" id="test_{{ $s->id }}" class="btn-check test-checkbox" data-name="{{ $s->name }}" data-price="{{ $s->price }}" data-sample="{{ $s->sample_required ?? 'N/A' }}" data-time="{{ $s->estimated_time ?? 0 }}" onchange="updateSummary(); updateTestBadge();">
-            
-            <label class="d-flex align-items-center justify-content-between p-3 cursor-pointer w-100" for="test_{{ $s->id }}">
-                <div class="d-flex align-items-center me-3">
+            <div class="test-item border-bottom border-secondary border-opacity-10 transition-all">
+                <input type="checkbox" name="service_ids[]" value="{{ $s->id }}" id="test_{{ $s->id }}" class="btn-check test-checkbox"
+                 data-name="{{ $s->name }}" data-price="{{ $s->price }}" data-sample="{{ $s->sample_required ?? 'N/A' }}" data-time="{{ $s->estimated_time ?? 0 }}" onchange="updateSummary(); updateTestBadge();">
+                 
+                {{-- FIXED: Bound popover triggers directly to the entire label container --}}
+                <label class="d-flex align-items-center justify-content-between p-3 cursor-pointer w-100" 
+                       for="test_{{ $s->id }}"
+                       data-bs-toggle="popover" 
+                       data-bs-trigger="hover focus" 
+                       data-bs-container="body"
+                       data-bs-html="true" 
+                       title="<span class='fw-bold text-accent'>{{ strtoupper($s->name) }}</span>" 
+                       data-bs-content="<div class='text-start'><p class='mb-2 small text-muted'>{{ addslashes($s->description) }}</p>@if($s->preparation)<div class='pt-2 border-top border-secondary border-opacity-25'><small class='text-warning fw-bold'><i class='bi bi-exclamation-triangle-fill me-1'></i>PREPARATION REQUIRED:</small><p class='mb-0 small text-muted mt-1'>{{ addslashes($s->preparation) }}</p></div>@endif</div>">
                     
-                    {{-- Check Icon Indicator --}}
-                    <div class="check-indicator rounded border border-secondary me-3 d-flex align-items-center justify-content-center" style="width: 24px; height: 24px; flex-shrink: 0;">
-                        <i class="bi bi-check-lg text-dark d-none"></i>
-                    </div>
-                    
-                    <div>
-                        {{-- FIXED: Changed text-white to text-main --}}
-                        <div class="text-main fw-bold small uppercase mb-1">{{ $s->name }}</div>
-                        <div class="d-flex gap-2">
-                            {{-- FIXED: Removed bg-dark and border-secondary to support dynamic themes --}}
-                            <span class="badge bg-secondary bg-opacity-10 text-secondary smaller" style="font-size: 0.6rem;">
-                                <i class="bi bi-droplet-fill text-danger me-1"></i>{{ $s->sample_required ?? 'N/A' }}
-                            </span>
-                            <span class="badge bg-secondary bg-opacity-10 text-secondary smaller" style="font-size: 0.6rem;">
-                                <i class="bi bi-clock me-1"></i>{{ $s->formatted_time }}
-                            </span>
+                    <div class="d-flex align-items-center me-3">
+                        {{-- Check Icon Indicator --}}
+                        <div class="check-indicator rounded border border-secondary me-3 d-flex align-items-center justify-content-center" style="width: 24px; height: 24px; flex-shrink: 0;">
+                            <i class="bi bi-check-lg text-dark d-none"></i>
+                        </div>
+                        
+                        <div>
+                            {{-- FIXED: Changed text-white to text-main --}}
+                            <div class="text-main fw-bold small uppercase mb-1">
+                                {{ $s->name }}
+                            </div>
+                            <div class="d-flex gap-2">
+                                {{-- FIXED: Removed bg-dark and border-secondary to support dynamic themes --}}
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary smaller" style="font-size: 0.6rem;">
+                                    <i class="bi bi-droplet-fill text-danger me-1"></i>{{ $s->sample_required ?? 'N/A' }}
+                                </span>
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary smaller" style="font-size: 0.6rem;">
+                                    <i class="bi bi-clock me-1"></i>{{ $s->formatted_time }}
+                                </span>
+                            </div>
                         </div>
                     </div>
-                </div>
-                
-                <div class="text-end">
-                    {{-- FIXED: Changed text-neon to text-accent --}}
-                    <div class="text-accent fw-bold">&#x20B1;{{ number_format($s->price, 2) }}</div>
-                </div>
-            </label>
-        </div>
+                    
+                    <div class="text-end">
+                        {{-- FIXED: Changed text-neon to text-accent --}}
+                        <div class="text-accent fw-bold">&#x20B1;{{ number_format($s->price, 2) }}</div>
+                    </div>
+                </label>
+            </div>
         @endforeach
     </div>
 
@@ -72,40 +83,55 @@
             NEXT: CHOOSE SCHEDULE <i class="bi bi-arrow-right ms-2"></i>
         </button>
     </div>
-    
+ 
 </div>
 
 <script>
-// Local script for search filtering within Step 3
-document.getElementById('testSearch').addEventListener('input', function() {
-    const query = this.value.toLowerCase();
-    document.querySelectorAll('.test-item').forEach(item => {
-        const name = item.querySelector('.text-main').innerText.toLowerCase();
-        if (name.includes(query)) {
-            item.classList.remove('d-none');
-        } else {
-            item.classList.add('d-none');
-        }
+    // Local script for search filtering within Step 3
+    document.getElementById('testSearch').addEventListener('input', function() {
+        const query = this.value.toLowerCase();
+        document.querySelectorAll('.test-item').forEach(item => {
+            const name = item.querySelector('.text-main').innerText.toLowerCase();
+            if (name.includes(query)) {
+                item.classList.remove('d-none');
+            } else {
+                item.classList.add('d-none');
+            }
+        });
     });
-});
 </script>
 
 <style>
-/* Styling for the custom list checkboxes */
-.test-item:hover {
-    background-color: rgba(25, 211, 140, 0.03);
-}
-.test-checkbox:checked + label {
-    background-color: rgba(25, 211, 140, 0.08);
-}
-.test-checkbox:checked + label .check-indicator {
-    background-color: var(--brand-accent);
-    border-color: var(--brand-accent) !important;
-}
-.test-checkbox:checked + label .check-indicator i {
-    display: block !important;
-}
-.test-item.d-none {
-    display: none !important;
-}
+    /* Styling for the custom list checkboxes */
+    .test-item:hover {
+        background-color: rgba(25, 211, 140, 0.03);
+    }
+    .test-checkbox:checked + label {
+        background-color: rgba(25, 211, 140, 0.08);
+    }
+    .test-checkbox:checked + label .check-indicator {
+        background-color: var(--brand-accent);
+        border-color: var(--brand-accent) !important;
+    }
+    .test-checkbox:checked + label .check-indicator i {
+        display: block !important;
+    }
+    .test-item.d-none {
+        display: none !important;
+    }
+
+    /* Custom scrollbar layout specifically tailored for the test list */
+    .test-list-container.custom-scroll::-webkit-scrollbar {
+        width: 6px;
+    }
+    .test-list-container.custom-scroll::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.03);
+    }
+    .test-list-container.custom-scroll::-webkit-scrollbar-thumb {
+        background: var(--brand-accent);
+        border-radius: 10px;
+    }
+    .test-list-container.custom-scroll::-webkit-scrollbar-thumb:hover {
+        background: var(--brand-accent-hover, #15b376);
+    }
 </style>

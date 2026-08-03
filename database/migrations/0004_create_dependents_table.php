@@ -14,7 +14,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             
-            // Split Name Fields (1NF Atomic)
+            // Split Name Fields (1NF Atomic) [159]
             $table->string('first_name');
             $table->string('middle_name')->nullable();
             $table->string('last_name');
@@ -22,15 +22,18 @@ return new class extends Migration
             $table->date('birthdate');
             $table->string('sex');
             $table->string('phone')->nullable();
-            $table->string('relationship'); // e.g. Son, Daughter, Parent, Spouse
+            $table->string('relationship'); // e.g. Son, Daughter, Parent, Spouse [159]
             
-            // Split Address Fields (3NF Atomic - PSGC API Compatible)
+            // Split Address Fields (3NF Atomic - PSGC API Compatible) [159]
             $table->string('street');
             $table->string('barangay');
             $table->string('city');
             $table->string('province');
 
             $table->timestamps();
+
+            // AUDIT & DATA RETENTION: SoftDeletes (25-year retention for minor records)
+            $table->softDeletes(); // Adds 'deleted_at' column for compliant deactivations
         });
     }
 
