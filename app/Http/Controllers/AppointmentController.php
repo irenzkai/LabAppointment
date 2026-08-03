@@ -192,7 +192,7 @@ class AppointmentController extends Controller
             if (isset($data['payment_receipt'])) {
                 Storage::disk('public')->delete($data['payment_receipt']);
             }
-            return back()->with('error', 'Booking failed: ' . $e->getmessage())->withInput();
+            return back()->with('error', 'Booking failed: ' . $e->getMessage())->withInput();
         }
     }
 
@@ -409,16 +409,18 @@ class AppointmentController extends Controller
             }
         }
 
-        // FIXED: Trigger automatic delivery of encrypted results on release [15, 16]
+        // REVISED: Trigger automatic delivery of encrypted results on release strictly for bulk (batch-linked) appointments [15, 16]
         if ($request->status === 'released') {
             if ($appointment->batch_id && $request->input('batch') === 'true') {
                 $batchApps = Appointment::where('batch_id', $appointment->batch_id)->get();
                 foreach ($batchApps as $app) {
                     ResultController::deliverResult($app);
                 }
-            } else {
+            } elseif ($appointment->batch_id) {
+                // Auto-send if released individually but belongs to a bulk batch
                 ResultController::deliverResult($appointment);
             }
+            // Normal appointments (batch_id === null) are skipped as they can forward results manually from their accounts
         }
 
         // Dispatch live updates

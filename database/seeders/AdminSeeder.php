@@ -171,7 +171,7 @@ class AdminSeeder extends Seeder
                 'birthdate' => '1998-03-15',
                 'sex' => 'Female',
                 'street' => 'LAGUNA ROAD',
-                'barangay' => 'DADIANGAS HEIGHTS',
+                'barangay' => 'CITY HEIGHTS',
                 'city' => 'CITY OF GENERAL SANTOS',
                 'province' => 'SOUTH COTABATO',
                 'email_verified_at' => now(),
