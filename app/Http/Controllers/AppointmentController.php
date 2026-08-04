@@ -20,7 +20,7 @@ class AppointmentController extends Controller
     {
         $user = Auth::user();
 
-        // 1. SELF-CLEANING SWEEP: Enforces exact clinical data data retention policies [10]
+        // 1. SELF-CLEANING SWEEP: Enforces exact clinical data retention policies [10]
 
         // A. Automatically purge incomplete, unpaid, soft-deleted, or expired appointments older than 90 days [10]
         Appointment::where('appointment_date', '<', Carbon::now()->subDays(90))
@@ -87,9 +87,9 @@ class AppointmentController extends Controller
         if ($search) {
             $query->where(function($q) use ($search) {
                 $q->where('patient_name', 'like', "%{$search}%")
-                  ->orWhere('id', 'like', "%{$search}%")
-                  ->orWhere('organization_name', 'like', "%{$search}%")
-                  ->orWhere('batch_id', 'like', "%{$search}%");
+                    ->orWhere('id', 'like', "%{$search}%")
+                    ->orWhere('organization_name', 'like', "%{$search}%")
+                    ->orWhere('batch_id', 'like', "%{$search}%");
             });
         }
 
@@ -99,22 +99,22 @@ class AppointmentController extends Controller
             if ($statusFilter === 'needs_action') {
                 $query->where(function($q) {
                     $q->whereIn('status', ['pending', 'approved', 'retest', 'tested', 'encoded'])
-                      ->orWhere(function($sub) {
-                          $sub->where('status', 'canceled')
-                              ->where('payment_method', 'Cashless')
-                              ->where('payment_status', 'paid');
-                      });
+                        ->orWhere(function($sub) {
+                            $sub->where('status', 'canceled')
+                                ->where('payment_method', 'Cashless')
+                                ->where('payment_status', 'paid');
+                        });
                 });
             } elseif ($statusFilter === 'no_action') {
                 $query->where(function($q) {
                     $q->where('status', 'released')
-                      ->orWhere(function($sub) {
-                          $sub->where('status', 'canceled')
-                              ->where(function($sub2) {
-                                  $sub2->where('payment_method', '!=', 'Cashless')
-                                       ->orWhere('payment_status', '!=', 'paid');
-                              });
-                      });
+                        ->orWhere(function($sub) {
+                            $sub->where('status', 'canceled')
+                                ->where(function($sub2) {
+                                    $sub2->where('payment_method', '!=', 'Cashless')
+                                        ->orWhere('payment_status', '!=', 'paid');
+                                });
+                        });
                 });
             } else {
                 $query->where('status', $statusFilter);
@@ -148,7 +148,7 @@ class AppointmentController extends Controller
             $query->orderBy('created_at', $order);
         } else {
             $query->orderBy('appointment_date', $order)
-                  ->orderBy('time_slot', $order);
+                ->orderBy('time_slot', $order);
         }
 
         $staffPaginator = $query->paginate(10, ['*'], 'staff_page')->withQueryString();
@@ -209,7 +209,6 @@ class AppointmentController extends Controller
         $dayNum = date('w', strtotime($request->appointment_date));
         $config = AppointmentConfig::where('day_of_week', $dayNum)->first();
 
-        // FIXED: Count all active, slot-occupying statuses [201]
         $bookedCount = Appointment::where('appointment_date', $request->appointment_date)
             ->where('time_slot', $request->time_slot)
             ->whereIn('status', ['pending', 'approved', 'tested', 'encoded', 'released'])->count();
@@ -244,12 +243,10 @@ class AppointmentController extends Controller
             'status' => 'pending'
         ];
 
-        // Safely uploads to 'referrals/' inside your Supabase S3 bucket
         if ($request->hasFile('referral_note') && $request->file('referral_note')->isValid()) {
             $data['referral_note'] = $request->file('referral_note')->store('referrals', 'public');
         }
 
-        // Safely uploads to 'receipts/' inside your Supabase S3 bucket
         if ($request->hasFile('payment_receipt') && $request->file('payment_receipt')->isValid()) {
             $data['payment_receipt'] = $request->file('payment_receipt')->store('receipts', 'public');
         }
@@ -263,7 +260,6 @@ class AppointmentController extends Controller
 
             $notifiables = User::whereIn('role', ['staff', 'lab_tech', 'admin'])->get();
             foreach ($notifiables as $staff) {
-                // Persistent database inbox log
                 $staff->notify(new AppointmentNotification([
                     'title' => 'New Booking Request',
                     'message' => "Patient: {$appointment->patient_name} for " . date('M d', strtotime($appointment->appointment_date)),
@@ -271,21 +267,13 @@ class AppointmentController extends Controller
                     'type' => 'info'
                 ]));
 
-                // Real-time broadcast notification [423]
-                event(new NotificationSent(
-                    $staff->id,
-                    'New Booking Request',
-                    "Patient: {$appointment->patient_name} for " . date('M d', strtotime($appointment->appointment_date))
-                ));
+                event(new NotificationSent($staff->id, 'New Booking Request', "Patient: {$appointment->patient_name} for " . date('M d', strtotime($appointment->appointment_date))));
             }
 
             DB::commit();
-
-            // Dispatch live update for the staff/admin workspace
             event(new QueueUpdated());
 
             return redirect()->route('appointments.index')->with('success', 'Appointment successfully requested!');
-
         } catch (\Exception $e) {
             DB::rollback();
             if (isset($data['referral_note'])) {
@@ -324,8 +312,7 @@ class AppointmentController extends Controller
             $rules['patient_province'] = 'required|string|max:255';
             $rules['payment_method'] = 'required|string';
             $rules['referral_note'] = 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240';
-            
-            // Strictly enforce that the receipt must be overwritten if the previous payment was canceled, refunded, or invalid
+
             if ($request->payment_method === 'Cashless' && (in_array($appointment->status, ['canceled', 'returned']) || in_array($appointment->payment_status, ['invalid', 'refunded']))) {
                 $rules['payment_receipt'] = 'required|file|mimes:pdf,jpg,jpeg,png|max:10240';
             } else {
@@ -338,7 +325,6 @@ class AppointmentController extends Controller
         $dayNum = date('w', strtotime($request->appointment_date));
         $config = AppointmentConfig::where('day_of_week', $dayNum)->first();
 
-        // Count all active, slot-occupying statuses
         $booked = Appointment::where('appointment_date', $request->appointment_date)
             ->where('time_slot', $request->time_slot)
             ->whereIn('status', ['pending', 'approved', 'tested', 'encoded', 'released'])
@@ -371,14 +357,13 @@ class AppointmentController extends Controller
             'appointment_date' => $request->appointment_date,
             'time_slot' => $request->time_slot,
             'status' => 'pending',
-            'payment_status' => 'unpaid', // Reset payment status to unpaid on resubmission
+            'payment_status' => 'unpaid',
             'return_reason' => null
         ];
 
         if (!$isBulk) {
             $updateData['payment_method'] = $request->payment_method;
 
-            // Clear out previous proof of payment receipt if changing method to Cash on Site
             if ($request->payment_method === 'Cash') {
                 if ($appointment->payment_receipt) {
                     Storage::disk('public')->delete($appointment->payment_receipt);
@@ -387,7 +372,6 @@ class AppointmentController extends Controller
             }
         }
 
-        // Manage and update the referral note file in Supabase S3
         if (!$isBulk && $request->hasFile('referral_note') && $request->file('referral_note')->isValid()) {
             if ($appointment->referral_note) {
                 Storage::disk('public')->delete($appointment->referral_note);
@@ -395,7 +379,6 @@ class AppointmentController extends Controller
             $updateData['referral_note'] = $request->file('referral_note')->store('referrals', 'public');
         }
 
-        // Manage and update the cashless payment receipt file in Supabase S3
         if (!$isBulk && $request->hasFile('payment_receipt') && $request->file('payment_receipt')->isValid()) {
             if ($appointment->payment_receipt) {
                 Storage::disk('public')->delete($appointment->payment_receipt);
@@ -410,7 +393,6 @@ class AppointmentController extends Controller
 
         $notifiables = User::whereIn('role', ['staff', 'lab_tech', 'admin'])->get();
         foreach ($notifiables as $staff) {
-            // Database inbox
             $staff->notify(new AppointmentNotification([
                 'title' => 'Resubmitted Booking',
                 'message' => "Patient: {$appointment->patient_name} has corrected and resubmitted their appointment.",
@@ -418,15 +400,9 @@ class AppointmentController extends Controller
                 'type' => 'info'
             ]));
 
-            // Real-time broadcast
-            event(new NotificationSent(
-                $staff->id,
-                'Resubmitted Booking',
-                "Patient: {$appointment->patient_name} has corrected and resubmitted their appointment."
-            ));
+            event(new NotificationSent($staff->id, 'Resubmitted Booking', "Patient: {$appointment->patient_name} has corrected and resubmitted their appointment."));
         }
 
-        // Dispatch live update for the staff/admin workspace
         event(new QueueUpdated());
 
         return redirect()->route('appointments.index')->with('success', 'Appointment resubmitted for approval.');
@@ -457,7 +433,6 @@ class AppointmentController extends Controller
             $updatePayload['payment_status'] = $request->payment_status;
         }
 
-        // FIXED: Only cascade updates if explicitly requested as a batch-level action [15, 290]
         if ($appointment->batch_id && $request->input('batch') === 'true') {
             Appointment::where('batch_id', $appointment->batch_id)->update($updatePayload);
 
@@ -476,9 +451,7 @@ class AppointmentController extends Controller
                             'type' => 'success'
                         ]));
 
-                        // Real-time broadcast for patient (within batch cascade)
                         event(new NotificationSent($patient->id, 'Appointment Approved', "Your laboratory appointment scheduled for {$dateFormatted} at {$timeFormatted} has been approved."));
-
                     } elseif ($request->status === 'returned') {
                         $patient->notify(new AppointmentNotification([
                             'title' => 'Appointment Returned',
@@ -487,13 +460,11 @@ class AppointmentController extends Controller
                             'type' => 'danger'
                         ]));
 
-                        // Real-time broadcast for patient (within batch cascade)
                         event(new NotificationSent($patient->id, 'Appointment Returned', "Your appointment scheduled for {$dateFormatted} requires corrections."));
                     }
                 }
             }
         } else {
-            // Update ONLY this single, specific appointment record [15]
             $appointment->update($updatePayload);
 
             $patient = $appointment->user;
@@ -509,9 +480,7 @@ class AppointmentController extends Controller
                         'type' => 'success'
                     ]));
 
-                    // Real-time broadcast for patient (individual appointment) [15]
                     event(new NotificationSent($patient->id, 'Appointment Approved', "Your laboratory appointment scheduled for {$dateFormatted} at {$timeFormatted} has been approved."));
-
                 } elseif ($request->status === 'returned') {
                     $appointment->user->notify(new AppointmentNotification([
                         'title' => 'Appointment Returned',
@@ -520,13 +489,11 @@ class AppointmentController extends Controller
                         'type' => 'danger'
                     ]));
 
-                    // Real-time broadcast for patient (individual appointment) [15]
                     event(new NotificationSent($patient->id, 'Appointment Returned', "Your appointment scheduled for {$dateFormatted} requires corrections."));
                 }
             }
         }
 
-        // REVISED: Trigger automatic delivery of encrypted results on release strictly for bulk (batch-linked) appointments [15, 16]
         if ($request->status === 'released') {
             if ($appointment->batch_id && $request->input('batch') === 'true') {
                 $batchApps = Appointment::where('batch_id', $appointment->batch_id)->get();
@@ -534,13 +501,10 @@ class AppointmentController extends Controller
                     ResultController::deliverResult($app);
                 }
             } elseif ($appointment->batch_id) {
-                // Auto-send if released individually but belongs to a bulk batch
                 ResultController::deliverResult($appointment);
             }
-            // Normal appointments (batch_id === null) are skipped as they can forward results manually from their accounts
         }
 
-        // Dispatch live updates
         event(new QueueUpdated());
 
         if ($request->status === 'released') {
@@ -562,16 +526,57 @@ class AppointmentController extends Controller
         $action = $request->input('action', 'tested'); // 'tested' or 'retest'
 
         if ($action === 'retest') {
+            $request->validate([
+                'patient_first_name' => 'required|string|max:255',
+                'patient_middle_name' => 'nullable|string|max:255',
+                'patient_last_name' => 'required|string|max:255',
+                'patient_birthdate' => 'required|date|before_or_equal:today',
+                'patient_sex' => 'required|in:Male,Female',
+                'patient_phone' => 'required|string|max:20',
+                'patient_street' => 'required|string|max:255',
+                'patient_barangay' => 'required|string|max:255',
+                'patient_city' => 'required|string|max:255',
+                'patient_province' => 'required|string|max:255',
+                'service_ids' => 'required|array|min:1',
+                'payment_amount' => 'required|numeric|min:0',
+                'retest_reason' => 'required|string',
+                'retest_custom_reason' => 'required_if:retest_reason,Others|nullable|string|min:5',
+            ]);
+
             $retestReason = $request->input('retest_reason') === 'Others'
                 ? $request->input('retest_custom_reason')
                 : $request->input('retest_reason');
 
-            $appointment->update([
+            $fName = strtoupper(trim($request->patient_first_name));
+            $mName = ($request->patient_middle_name && strtoupper($request->patient_middle_name) !== 'N/A') ? strtoupper(trim($request->patient_middle_name)) : 'N/A';
+            $lName = strtoupper(trim($request->patient_last_name));
+            $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
+
+            $updatePayload = [
+                'patient_first_name' => $fName,
+                'patient_middle_name' => $mName,
+                'patient_last_name' => $lName,
+                'patient_name' => $displayName,
+                'patient_birthdate' => $request->patient_birthdate,
+                'patient_sex' => $request->patient_sex,
+                'patient_phone' => $request->patient_phone,
+                'patient_street' => strtoupper(trim($request->patient_street)),
+                'patient_barangay' => strtoupper(trim($request->patient_barangay)),
+                'patient_city' => strtoupper(trim($request->patient_city)),
+                'patient_province' => strtoupper(trim($request->patient_province)),
+                'payment_status' => 'paid', // Automatically flagged as PAID
                 'status' => 'retest',
                 'return_reason' => $retestReason, // Stores the exception reason in return_reason
                 'tested_at' => null, // Resets tested timestamp since a recollect is needed
                 'result_estimated_at' => null
-            ]);
+            ];
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('appointments', 'payment_amount')) {
+                $updatePayload['payment_amount'] = $request->input('payment_amount');
+            }
+
+            $appointment->update($updatePayload);
+            $appointment->services()->sync($request->service_ids);
 
             ActivityLog::record('RETEST', 'Marked for retesting: ' . $retestReason, $appointment->patient_name, $appointment->id);
 
@@ -593,22 +598,64 @@ class AppointmentController extends Controller
             return redirect()->back()->with('success', 'Appointment successfully flagged for retesting.');
         }
 
+        // --- PROGRESSION TO TESTED: CONFIRM, UPDATE DETAILS & COMPLETE CLINICAL SAMPLING ---
+        $request->validate([
+            'patient_first_name' => 'required|string|max:255',
+            'patient_middle_name' => 'nullable|string|max:255',
+            'patient_last_name' => 'required|string|max:255',
+            'patient_birthdate' => 'required|date|before_or_equal:today',
+            'patient_sex' => 'required|in:Male,Female',
+            'patient_phone' => 'required|string|max:20',
+            'patient_street' => 'required|string|max:255',
+            'patient_barangay' => 'required|string|max:255',
+            'patient_city' => 'required|string|max:255',
+            'patient_province' => 'required|string|max:255',
+            'service_ids' => 'required|array|min:1',
+            'payment_amount' => 'required|numeric|min:0',
+            'est_hours' => 'nullable|integer|min:0',
+            'est_minutes' => 'nullable|integer|min:0',
+        ]);
+
         $h = (int)$request->input('est_hours', 0);
         $m = (int)$request->input('est_minutes', 0);
         $est = ($h > 0 || $m > 0) ? now()->addHours($h)->addMinutes($m) : null;
 
-        // Progressing to Tested automatically flags Cash appointments as PAID
-        $paymentStatus = ($appointment->payment_method === 'Cash') ? 'paid' : $appointment->payment_status;
+        $fName = strtoupper(trim($request->patient_first_name));
+        $mName = ($request->patient_middle_name && strtoupper($request->patient_middle_name) !== 'N/A') ? strtoupper(trim($request->patient_middle_name)) : 'N/A';
+        $lName = strtoupper(trim($request->patient_last_name));
+        $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
 
-        $appointment->update([
+        // Save customized payment configurations and snapshot details
+        $updatePayload = [
+            'patient_first_name' => $fName,
+            'patient_middle_name' => $mName,
+            'patient_last_name' => $lName,
+            'patient_name' => $displayName,
+            'patient_birthdate' => $request->patient_birthdate,
+            'patient_sex' => $request->patient_sex,
+            'patient_phone' => $request->patient_phone,
+            'patient_street' => strtoupper(trim($request->patient_street)),
+            'patient_barangay' => strtoupper(trim($request->patient_barangay)),
+            'patient_city' => strtoupper(trim($request->patient_city)),
+            'patient_province' => strtoupper(trim($request->patient_province)),
+            'payment_status' => 'paid', // Automatically flagged as PAID on sampling stage
             'status' => 'tested',
             'tested_at' => now(),
             'result_estimated_at' => $est,
-            'payment_status' => $paymentStatus,
-            'return_reason' => null // Clears the retest reason once successfully re-sampled
-        ]);
+            'return_reason' => null
+        ];
 
-        ActivityLog::record('TESTED', 'Sampling completed', $appointment->patient_name, $appointment->id);
+        // Safely record custom payments if the database column has been generated
+        if (\Illuminate\Support\Facades\Schema::hasColumn('appointments', 'payment_amount')) {
+            $updatePayload['payment_amount'] = $request->input('payment_amount');
+        }
+
+        $appointment->update($updatePayload);
+
+        // Sync examinations selected/modified upon desk registration
+        $appointment->services()->sync($request->service_ids);
+
+        ActivityLog::record('TESTED', 'Sampling completed and details verified', $appointment->patient_name, $appointment->id);
 
         $patient = $appointment->user;
         if ($patient) {
@@ -620,7 +667,6 @@ class AppointmentController extends Controller
                 'type' => 'info'
             ]));
 
-            // Real-time broadcast for patient
             event(new NotificationSent($patient->id, 'Sampling Completed', "Your clinical laboratory sampling is complete. Your results are currently being processed in our lab."));
         }
 
@@ -638,12 +684,10 @@ class AppointmentController extends Controller
     {
         $user = Auth::user();
 
-        // Admin/Staff are strictly barred from canceling appointments via this action.
         if ($user->isEmployee()) {
             abort(403, 'Employees/Staff are not authorized to cancel appointments.');
         }
 
-        // Ensure the logged-in patient owns the appointment
         if ($appointment->user_id !== $user->id) {
             abort(403, 'Unauthorized action.');
         }
@@ -652,10 +696,8 @@ class AppointmentController extends Controller
             return back()->with('error', 'Appointments that have progressed to sampling cannot be canceled.');
         }
 
-        // Set native cancellation tag (no justification textarea required from patient dashboard)
         $reason = 'Canceled by patient';
 
-        // Update status to canceled and revoke unpaid/cashless validation flags
         $appointment->update([
             'status' => 'canceled',
             'payment_status' => 'unpaid',
@@ -671,7 +713,6 @@ class AppointmentController extends Controller
 
     /**
      * POST /appointments/{appointment}/invalid-payment
-     * Flag cashless transactions as invalid if canceled before validation is complete.
      */
     public function markPaymentInvalid(Request $request, Appointment $appointment)
     {
@@ -700,7 +741,6 @@ class AppointmentController extends Controller
 
     /**
      * POST /appointments/{appointment}/refund
-     * Confirms manually processed refunds with comprehensive logging (including role).
      */
     public function confirmRefund(Request $request, Appointment $appointment)
     {
@@ -709,7 +749,7 @@ class AppointmentController extends Controller
         }
 
         $staffName = Auth::user()->name;
-        $staffRole = strtoupper(Auth::user()->role); // Retain active role
+        $staffRole = strtoupper(Auth::user()->role);
         $timestamp = now()->format('M d, Y | h:i A');
         $logMessage = "Refund processed by {$staffName} ({$staffRole}) on {$timestamp}";
 
@@ -726,7 +766,7 @@ class AppointmentController extends Controller
     }
 
     /**
-     * Patient Soft Delete: Hide expired unpaid appointments from patient dashboard
+     * Patient Soft Delete
      */
     public function softDelete(Appointment $appointment)
     {
@@ -742,7 +782,6 @@ class AppointmentController extends Controller
 
         ActivityLog::record('SOFT DELETED', 'Patient soft-deleted expired appointment', $appointment->patient_name, $appointment->id);
 
-        // Dispatch live updates
         event(new QueueUpdated());
 
         return redirect()->back()->with('success', 'Appointment removed from your dashboard.');
@@ -761,7 +800,6 @@ class AppointmentController extends Controller
             'payment_status' => 'required|in:unpaid,paid'
         ]);
 
-        // Bulk batch rule updating payment status cascades across the entire batch
         if ($appointment->batch_id) {
             Appointment::where('batch_id', $appointment->batch_id)->update(['payment_status' => $request->payment_status]);
         } else {
@@ -771,7 +809,6 @@ class AppointmentController extends Controller
         $statusLabel = strtoupper($request->payment_status);
         ActivityLog::record('PAYMENT UPDATE', "Staff flagged appointment payment as {$statusLabel}", $appointment->patient_name, $appointment->id);
 
-        // Dispatch live updates
         event(new QueueUpdated());
 
         return redirect()->back()->with('success', "Payment status updated to {$statusLabel}.");

@@ -50,6 +50,7 @@ return new class extends Migration
             $table->string('payment_method'); // Cash, Cashless
             $table->string('payment_status')->default('unpaid'); // unpaid, paid
             $table->string('payment_receipt')->nullable(); // Stores path for uploaded proof of payment receipts
+            $table->decimal('payment_amount', 10, 2); // Field for payments
 
             // 7. STATUS LOGIC & SOFT DELETION
             $table->string('status')->default('pending'); // pending, approved, tested, encoded, released

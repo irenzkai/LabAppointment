@@ -18,32 +18,33 @@ class Appointment extends Model
         'batch_id',
         'appointment_date',
         'time_slot',
-        
+
         // Normalized Patient Name snapshots (1NF)
         'patient_first_name',
         'patient_middle_name',
         'patient_last_name',
         'patient_name', // Compiled string representation
-        
+
         'patient_email', 
         'patient_phone', 
         'patient_sex', 
         'patient_birthdate', 
-        
+
         // Referral Attachments (Optional)
         'referral_note',
-        
+
         // Normalized Patient Address snapshots (3NF)
         'patient_street',
         'patient_barangay',
         'patient_city',
         'patient_province',
-        
+
         // Settlement Methods & Audit Records
         'payment_method', // Cash, Cashless
         'payment_status', // unpaid, paid
         'payment_receipt', // Stores path for uploaded proof of payment receipts
-        
+        'payment_amount',  // Persists confirmed payment amount collected on-site
+
         // STATUS LOGIC & SOFT DELETION
         'status',
         'return_reason',
@@ -63,6 +64,7 @@ class Appointment extends Model
         'tested_at' => 'datetime',
         'result_estimated_at' => 'datetime', 
         'results_released_at' => 'datetime',
+        'payment_amount' => 'decimal:2',
     ];
 
     /** 
@@ -187,7 +189,7 @@ class Appointment extends Model
     {
         $res = $this->result; 
         if (!$res) return false;
-        
+
         $reports = $res->included_reports ?? [];
         if (empty($reports)) return false;
 

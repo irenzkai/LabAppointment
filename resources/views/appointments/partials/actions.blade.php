@@ -1,37 +1,37 @@
 @php
-    // Intercept status metrics on-the-fly to represent unprogressed expired records safely
-    $isExpired = $app->isExpired();
+// Intercept status metrics on-the-fly to represent unprogressed expired records safely
+$isExpired = $app->isExpired();
 
-    $statusColor = $isExpired ? 'danger' : match($app->status) {
-        'pending' => 'warning',
-        'approved' => 'info',
-        'tested' => 'info',
-        'encoded' => 'info',
-        'released' => 'accent',
-        'returned' => 'danger',
-        'retest' => 'danger',
-        'canceled' => 'danger',
-        default => 'secondary'
-    };
+$statusColor = $isExpired ? 'danger' : match($app->status) {
+    'pending' => 'warning',
+    'approved' => 'info',
+    'tested' => 'info',
+    'encoded' => 'info',
+    'released' => 'accent',
+    'returned' => 'danger',
+    'retest' => 'danger',
+    'canceled' => 'danger',
+    default => 'secondary'
+};
 
-    $statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
+$statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
 @endphp
 
 <div class="mt-2 text-start">
 
     {{-- 1. FEEDBACK: SHOW RETURN REASON (Visible to Everyone) --}}
     @if($app->status == 'returned' && $app->return_reason)
-        <div class="alert-clinical p-3 mb-3 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
-            <div class="d-flex align-items-center mb-1">
-                <i class="bi bi-exclamation-octagon-fill text-danger me-2"></i>
-                <small class="text-danger fw-bold uppercase" style="font-size: 0.65rem; letter-spacing: 1px;">
-                    Staff Feedback / Reason for Return:
-                </small>
-            </div>
-            <p class="small mb-0 italic" style="line-height: 1.4; color: var(--text-main);">
-                "{{ $app->return_reason }}"
-            </p>
+    <div class="alert-clinical p-3 mb-3 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
+        <div class="d-flex align-items-center mb-1">
+            <i class="bi bi-exclamation-octagon-fill text-danger me-2"></i>
+            <small class="text-danger fw-bold uppercase" style="font-size: 0.65rem; letter-spacing: 1px;">
+                Staff Feedback / Reason for Return:
+            </small>
         </div>
+        <p class="small mb-0 italic" style="line-height: 1.4; color: var(--text-main);">
+            "{{ $app->return_reason }}"
+        </p>
+    </div>
     @endif
 
     {{-- 2. RETEST NOTICE (Context-Aware: Distinguishes Patient vs Staff) --}}
@@ -124,7 +124,6 @@
                     {{ strtoupper($app->payment_status) }}
                 </span>
             </div>
-
             @if($app->payment_receipt)
                 {{-- Click-to-zoom thumbnail of proof of payment receipt file --}}
                 <div class="d-flex align-items-center gap-3 bg-white p-2 rounded mb-3 border" style="cursor: zoom-in;" onclick="window.zoomQR('{{ Storage::url($app->payment_receipt) }}')" title="Click to view full screen">
@@ -196,8 +195,8 @@
                 {{-- STEP A: PENDING -> APPROVE, RETURN, or CANCEL (Administrative) --}}
                 {{-- Only display individual approval forms if the appointment is NOT part of a bulk batch --}}
                 @php
-                    // Enable individual actions for single appointments, or bulk records once payment is confirmed [263]
-                    $allowIndividualActions = !$app->batch_id || ($app->payment_method === 'Cash' || $app->payment_status === 'paid');
+                // Enable individual actions for single appointments, or bulk records once payment is confirmed [263]
+                $allowIndividualActions = !$app->batch_id || ($app->payment_method === 'Cash' || $app->payment_status === 'paid');
                 @endphp
 
                 @if($app->status == 'pending' && $allowIndividualActions)
@@ -209,7 +208,7 @@
 
                             {{-- Disabled only if payment is Cashless AND remains unpaid [263] --}}
                             @php
-                                $isApproveDisabled = ($app->payment_method === 'Cashless' && $app->payment_status !== 'paid');
+                            $isApproveDisabled = ($app->payment_method === 'Cashless' && $app->payment_status !== 'paid');
                             @endphp
                             <button type="submit" class="btn-custom btn-accent w-100 py-2 fw-bold {{ $isApproveDisabled ? 'opacity-50 cursor-not-allowed' : '' }}" {{ $isApproveDisabled ? 'disabled title="Cashless payment must be confirmed before approval"' : '' }}>
                                 <i class="bi bi-check-circle me-1"></i> APPROVE
@@ -236,6 +235,7 @@
                         <button type="button" class="btn-custom btn-accent w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#testModal{{$app->id}}">
                             <i class="bi bi-person-check me-1"></i> MARK PATIENT AS TESTED
                         </button>
+                        @include('appointments.partials.mark-tested-modal')
                     @else
                         {{-- Fixed "Awaiting Lab Sampling" banner --}}
                         <div class="alert small py-2.5 mb-0 text-center" style="background-color: rgba(25, 211, 140, 0.05); color: var(--text-main); border: 1.5px solid var(--border-color); border-radius: 8px;">
@@ -250,9 +250,12 @@
                         <a href="{{ route('appointments.encode', $app->id) }}" class="btn-custom btn-outline-accent py-2 fw-bold text-center text-decoration-none shadow">
                             <i class="bi bi-pencil-square me-1"></i> ENCODE RESULTS
                         </a>
-                        <button type="button" class="btn-custom btn-outline-danger py-2 fw-bold text-center" data-bs-toggle="modal" data-bs-target="#testModal{{$app->id}}">
-                            <i class="bi bi-arrow-repeat me-1"></i> MARK FOR RETEST
-                        </button>
+                        @can('isLabTech')
+                            <button type="button" class="btn-custom btn-outline-danger py-2 fw-bold text-center" data-bs-toggle="modal" data-bs-target="#testModal{{$app->id}}">
+                                <i class="bi bi-arrow-repeat me-1"></i> MARK FOR RETEST
+                            </button>
+                            @include('appointments.partials.mark-tested-modal')
+                        @endcan
                     </div>
                 @endif
 
