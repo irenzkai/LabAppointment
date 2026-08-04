@@ -3,11 +3,13 @@
 $statusPriority = [
     'expired' => 1,
     'returned' => 2,
-    'pending' => 3,
-    'approved' => 4,
-    'tested' => 5,
-    'encoded' => 6,
-    'released' => 7,
+    'retest' => 3,
+    'canceled' => 4,
+    'pending' => 5,
+    'approved' => 6,
+    'tested' => 7,
+    'encoded' => 8,
+    'released' => 9,
 ];
 
 if ($app->batch_id) {
@@ -44,6 +46,8 @@ $statusColor = match($finalStatus) {
     'encoded' => 'info',
     'released' => 'accent',
     'returned' => 'danger',
+    'retest' => 'danger',
+    'canceled' => 'danger',
     default => 'secondary'
 };
 
@@ -96,6 +100,16 @@ if ($app->batch_id) {
             @if($latestCardEditTimestamp)
             <div class="text-warning fw-bold mt-0.5" style="font-size: 0.7rem;">
                 <i class="bi bi-pencil-square me-1"></i>Edited: {{ $latestCardEditTimestamp->format('M d, Y | h:i A') }}
+            </div>
+            @endif
+            @if($app->status == 'retest')
+            <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>Retest Required: Please return to lab
+            </div>
+            @endif
+            @if($app->status == 'canceled')
+            <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;">
+                <i class="bi bi-x-circle-fill me-1"></i>Appointment Canceled
             </div>
             @endif
         </div>

@@ -99,15 +99,18 @@ class AppointmentConfigController extends Controller
     }
 
     /**
-     * API: Check Occupancy for the Booking Wizard
+     * API: Check Occupancy for the Booking Wizard with Exclude ID overrides
      * Handles: Lead Time check, Capacity, and Lunch breaks.
      */
     public function checkOccupancy(Request $request)
     {
         $date = $request->query('date');
         $depId = $request->query('dependent_id');
+        $excludeId = $request->query('exclude_id'); // Optional ID of currently active resubmission record
 
-        if (!$date) return response()->json(['error' => 'Date required'], 400);
+        if (!$date) {
+            return response()->json(['error' => 'Date required'], 400);
+        }
 
         try {
             // 1. Determine Patient Gender for validation
@@ -123,19 +126,29 @@ class AppointmentConfigController extends Controller
             $config = AppointmentConfig::where('specific_date', $date)->first()
                 ?? AppointmentConfig::where('day_of_week', date('w', strtotime($date)))->first();
 
-            // 3. Identify Full Slots via DB
-            $fullSlots = Appointment::where('appointment_date', $date)
-                ->whereIn('status', ['pending', 'approved', 'tested', 'encoded', 'released'])
-                ->select('time_slot', DB::raw('count(*) as patient_count'))
+            // 3. Identify Full Slots via DB (Excluding active resubmitting appointment)
+            $fullQuery = Appointment::where('appointment_date', $date)
+                ->whereIn('status', ['pending', 'approved', 'tested', 'encoded', 'released']);
+
+            if ($excludeId) {
+                $fullQuery->where('id', '!=', $excludeId);
+            }
+
+            $fullSlots = $fullQuery->select('time_slot', DB::raw('count(*) as patient_count'))
                 ->groupBy('time_slot')
                 ->having('patient_count', '>=', $config->max_patients_per_slot ?? 1)
                 ->pluck('time_slot')
                 ->toArray();
 
-            // NEW: Fetch all occupied slots and their exact counts to support live on-screen capacity validation [126]
-            $occupiedSlots = Appointment::where('appointment_date', $date)
-                ->whereIn('status', ['pending', 'approved', 'tested', 'encoded', 'released'])
-                ->select('time_slot', DB::raw('count(*) as patient_count'))
+            // 4. Fetch all occupied slots and their exact counts (Excluding active resubmitting appointment)
+            $occupiedQuery = Appointment::where('appointment_date', $date)
+                ->whereIn('status', ['pending', 'approved', 'tested', 'encoded', 'released']);
+
+            if ($excludeId) {
+                $occupiedQuery->where('id', '!=', $excludeId);
+            }
+
+            $occupiedSlots = $occupiedQuery->select('time_slot', DB::raw('count(*) as patient_count'))
                 ->groupBy('time_slot')
                 ->get()
                 ->pluck('patient_count', 'time_slot')

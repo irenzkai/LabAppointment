@@ -101,6 +101,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/appointments/{appointment}', [AppointmentController::class, 'update'])->name('appointments.update');
     Route::post('/appointments/{appointment}/resubmit-batch', [ResultController::class, 'resubmitBatch'])->name('appointments.resubmit-batch');
 
+    // Shared & Patient-accessible Cancellation Action Route [15, 290]
+    Route::post('/appointments/{appointment}/cancel', [AppointmentController::class, 'cancel'])->name('appointments.cancel');
+
     // Notifications
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::get('/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('notifications.markAsRead');
@@ -108,14 +111,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Clinical Archive View (Permission Handshake)
     Route::get('/history/{user?}', [HistoryController::class, 'index'])->name('patient.history');
-    
+
     // Allowed both Patients and Clinical Staff to accept Handshake permissions securely
     Route::post('/history/accept/{user?}', [HistoryController::class, 'acceptRequest'])->name('history.accept');
 
     // UNIFIED RESULT ACCESS: Patients access directly; Staff go through the Log Gate
     Route::get('/appointments/{appointment}/result/{type}/{mode}', [ResultController::class, 'access'])->name('appointments.result.access');
     Route::post('/internal/appointment-log-access/{appointment}', [ResultController::class, 'logAccess'])->name('internal.logAccess');
-    
+
     // Result Forwarding & Correction endpoint (Granted to bulk batch coordinators)
     Route::post('/appointments/{appointment}/forward-result', [ResultController::class, 'forwardResult'])->name('appointments.forward-result');
 
@@ -169,6 +172,10 @@ Route::middleware(['auth', 'role:staff,lab_tech,admin', 'verified'])->group(func
     // Added route to confirm cashless transactions manually
     Route::post('/appointments/{appointment}/confirm-payment', [AppointmentController::class, 'confirmPayment'])->name('appointments.confirm-payment');
 
+    // Staff-only payment handshake deactivation and manual refund verification routes
+    Route::post('/appointments/{appointment}/invalid-payment', [AppointmentController::class, 'markPaymentInvalid'])->name('appointments.invalid-payment');
+    Route::post('/appointments/{appointment}/refund', [AppointmentController::class, 'confirmRefund'])->name('appointments.refund');
+
     // Route for Staff-Triggered Patient Handshake Permission Request
     Route::post('/history/staff-trigger/{user}', [HistoryController::class, 'staffTriggerRequest'])->name('history.staff-trigger');
 
@@ -202,7 +209,7 @@ Route::middleware(['auth', 'role:staff,lab_tech,admin', 'verified'])->group(func
         Route::get('/medical', [MedicalCertController::class, 'index'])->name('workstation.med_cert');
         Route::post('/medical/save', [MedicalCertController::class, 'save'])->name('workstation.medical.save');
 
-        Route::get('/radiology', [ImagingController::class, 'radioIndex'])->name('workstation.radiology');
+        Route::get('/radiology', [ImagingController::class, 'index'])->name('workstation.radiology');
         Route::post('/radiology/save', [ImagingController::class, 'radioSave'])->name('workstation.radiology.save');
 
         // Moved drugtest and drugtest/save inside the workstation prefix group for proper Route Model Binding

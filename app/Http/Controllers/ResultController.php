@@ -56,7 +56,7 @@ class ResultController extends Controller
         $autoReportTypes = array_unique($autoReportTypes);
 
         $res = $appointment->result()->firstOrCreate(['appointment_id' => $appointment->id]);
-        
+
         // Only initialize included_reports if it's empty to allow persistent deletion/addition
         if (is_null($res->included_reports) || empty($res->included_reports)) {
             $res->update(['included_reports' => $autoReportTypes]);
@@ -753,7 +753,7 @@ class ResultController extends Controller
     }
 
     /**
-     * Compile and merge radiology findings with scanned pages/X-rays cleanly into a PDF.
+     * Generate centered radiology PDF documents.
      */
     protected function generateMergedRadioPdf(Appointment $appointment, AppointmentResult $res, $mode)
     {
@@ -777,7 +777,7 @@ class ResultController extends Controller
     }
 
     /**
-     * HELPER: Processes file assets and extracts individual pages as base64 images, supporting PDFs.
+     * File Base64 Parser.
      */
     public function fileToBase64Pages($filePath)
     {
@@ -817,5 +817,74 @@ class ResultController extends Controller
             return $pages;
         }
         return [];
+    }
+
+    /**
+     * GET /verify-result
+     * Public search gateway to evaluate and verify code identifiers.
+     */
+    public function verifySearch(Request $request)
+    {
+        $query = $request->query('query');
+
+        if (empty($query)) {
+            return view('verify-search');
+        }
+
+        $query = trim($query);
+
+        // 1. Check if it matches a Laboratory Case Number
+        $labDetail = AppointmentLabDetail::where('case_no', $query)->first();
+        if ($labDetail && $labDetail->result && $labDetail->result->appointment) {
+            return redirect(URL::signedRoute('result.verify-public', ['appointment' => $labDetail->result->appointment->id]));
+        }
+
+        // 2. Check if it matches a Medical Certificate ID
+        $medCert = AppointmentMedCert::where('cert_no', $query)->first();
+        if ($medCert && $medCert->result && $medCert->result->appointment) {
+            return redirect(URL::signedRoute('result.verify-public', ['appointment' => $medCert->result->appointment->id]));
+        }
+
+        // 3. Check if it matches a Radiology Case Number
+        $radioReport = AppointmentRadiologyReport::where('case_no', $query)->first();
+        if ($radioReport && $radioReport->result && $radioReport->result->appointment) {
+            return redirect(URL::signedRoute('result.verify-public', ['appointment' => $radioReport->result->appointment->id]));
+        }
+
+        // 4. Check if it matches a Drug Test Certificate Number
+        $drugTest = AppointmentDrugTest::where('cert_no', $query)->first();
+        if ($drugTest && $drugTest->parentResult && $drugTest->parentResult->appointment) {
+            return redirect(URL::signedRoute('result.verify-public', ['appointment' => $drugTest->parentResult->appointment->id]));
+        }
+
+        // 5. Check if it matches an Archived Digitized Certificate Number
+        $historyScan = LaboratoryHistoryScan::where('certificate_no', $query)->first();
+        if ($historyScan && $historyScan->record && $historyScan->record->laboratoryHistory && $historyScan->record->laboratoryHistory->user) {
+            return redirect(URL::signedRoute('history.verify-public', ['user' => $historyScan->record->laboratoryHistory->user->id]));
+        }
+
+        // Fallback: If no document matches
+        return back()->withErrors(['query' => 'No active clinical records or digitized certificates match the provided ID. Please verify the code and try again.'])->withInput();
+    }
+
+    /**
+     * GET /verify-result/{appointment}
+     * Render the signed, public clinical result verification layout.
+     */
+    public function verifyPublic(Appointment $appointment)
+    {
+        $appointment->load(['result', 'services']);
+        return view('verify-result', compact('appointment'));
+    }
+
+    /**
+     * GET /verify-history/{user}
+     * Render the signed, public clinical archive history layout.
+     */
+    public function verifyHistoryPublic(User $user)
+    {
+        $labHistory = LaboratoryHistory::where('user_id', $user->id)->first();
+        $existingRecords = $labHistory ? (is_array($labHistory->dynamic_data) ? array_reverse($labHistory->dynamic_data) : []) : [];
+        return view('verify-history', compact('user', 'existingRecords', 'labHistory'));
     }
 }

@@ -93,9 +93,9 @@
                 <div class="bg-secondary bg-opacity-10 rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center text-main" style="width: 60px; height: 60px;">
                     <i class="bi bi-people fs-3 text-accent"></i>
                 </div>
-                <h5 class="fw-bold text-main">Family Records</h5>
-                <p class="text-muted small mb-4">Add, register, and manage account details for your dependents.</p>
-                <a href="{{ route('profile.edit') }}" class="btn-custom btn-outline-accent w-100 mt-auto">Manage Family</a>
+                <h5 class="fw-bold text-main">Dependent Records</h5>
+                <p class="text-muted small mb-4">Add, register, and manage account details for your child dependents.</p>
+                <a href="{{ route('profile.edit') }}" class="btn-custom btn-outline-accent w-100 mt-auto">Manage Dependents</a>
             </div>
         </div>
     @endif
