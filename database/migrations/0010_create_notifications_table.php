@@ -12,11 +12,17 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('notifications', function (Blueprint $table) {
+            // 1. Primary UUID Key
             $table->uuid('id')->primary();
-            $table->string('type');
-            $table->morphs('notifiable');
-            $table->text('data');
-            $table->timestamp('read_at')->nullable();
+            
+            // 2. Notification Parameters
+            $table->string('type', 191); // Explicitly sized for database index safety
+            $table->morphs('notifiable'); // Creates compound index (notifiable_type, notifiable_id)
+            $table->text('data');         // JSON payload containing notification variables
+
+            // 3. Read/Unread State Tracking
+            $table->timestamp('read_at')->nullable()->index(); // Indexed to optimize count(unread) queries
+            
             $table->timestamps();
         });
     }

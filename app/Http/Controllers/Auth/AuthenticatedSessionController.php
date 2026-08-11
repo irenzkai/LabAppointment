@@ -25,9 +25,17 @@ class AuthenticatedSessionController extends Controller
     public function store(LoginRequest $request): RedirectResponse
     {
         // 1. Validate and Authenticate credentials
-        $request->authenticate();
+        try {
+            $request->authenticate();
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($e->errors() && isset($e->errors()['deactivated'])) {
+                // Redirect them to the reactivation route with a notice!
+                return redirect()->route('reactivate.notice');
+            }
+            throw $e;
+        }
 
-        // 2. Security Check: Ensure the account hasn't been disabled by an Admin
+        // 2. Security Check: Ensure the account hasn't been disabled by an Admin [30, 31]
         if (!Auth::user()->is_active) {
             Auth::logout();
 

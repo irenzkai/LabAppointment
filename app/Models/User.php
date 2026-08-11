@@ -4,22 +4,23 @@ namespace App\Models;
 
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\SoftDeletes; // 1. Import SoftDeletes trait
+use Illuminate\Database\Eloquent\SoftDeletes; // Import SoftDeletes trait
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
-    use HasFactory, Notifiable, SoftDeletes; // 2. Use SoftDeletes trait
+    use HasFactory, Notifiable, SoftDeletes; // Use SoftDeletes trait
 
     /**
      * The attributes that are mass assignable.
-     * Normalized to 3NF: No physical 'name' or 'address' columns. [102]
+     * Normalized to 3NF: No physical 'name' or 'address' columns [102]
      */
     protected $fillable = [
         'first_name',
         'middle_name',
         'last_name',
+        'suffix', // Added to support optional user suffixes (e.g. JR, III)
         'email',
         'password',
         'phone', 
@@ -31,7 +32,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'province', 
         'role', // 'user', 'staff', 'lab_tech', 'admin'
         'is_active',
-        'password_change_required', // Added flag to force password updates on next login
+        'password_change_required', // Flag to force password updates on next login
     ];
 
     /**
@@ -53,7 +54,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'birthdate' => 'date', 
             'is_active' => 'boolean',
             'password_change_required' => 'boolean', // Cast to boolean cleanly [102]
-            'deleted_at' => 'datetime',             // Cast SoftDelete timestamp [102]
+            'deleted_at' => 'datetime', // Cast SoftDelete timestamp [102]
         ];
     }
 
@@ -66,7 +67,14 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function getNameAttribute()
     {
-        return $this->first_name . ($this->middle_name && strtoupper($this->middle_name) !== 'N/A' ? ' ' . $this->middle_name : '') . ' ' . $this->last_name;
+        $fullName = $this->first_name . ($this->middle_name && strtoupper($this->middle_name) !== 'N/A' ? ' ' . $this->middle_name : '') . ' ' . $this->last_name;
+        
+        // Append suffix if it exists on the model instance
+        if ($this->suffix) {
+            $fullName .= ' ' . $this->suffix;
+        }
+
+        return $fullName;
     }
 
     /**
@@ -126,7 +134,7 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function isStaffOnly(): bool
     {
-        return $this->role === 'staff';
+        return $this->role === 'staff'; 
     }
 
     // =========================================================================

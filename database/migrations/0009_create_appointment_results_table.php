@@ -13,10 +13,17 @@ return new class extends Migration
     {
         Schema::create('appointment_results', function (Blueprint $table) {
             $table->id();
+
+            // 1. Relational 1-to-1 Foreign Key
+            // unique() is critical to enforce that an appointment has EXACTLY one results folder
             $table->foreignId('appointment_id')
-                  ->constrained('appointments')
-                  ->onDelete('cascade');
-            $table->json('included_reports')->nullable(); // Arrays tracking active worksheets (e.g., ['lab', 'radio'])
+                ->unique() 
+                ->constrained('appointments')
+                ->onDelete('cascade');
+
+            // 2. Dynamic Worksheets Tracker
+            $table->json('included_reports')->nullable(); // Tracks active worksheet states (e.g., ['lab', 'radio'])
+
             $table->timestamps();
         });
     }

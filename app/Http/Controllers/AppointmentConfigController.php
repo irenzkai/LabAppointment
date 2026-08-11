@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\{Appointment, AppointmentConfig, Dependent};
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\{Auth, DB, Log};
 
 class AppointmentConfigController extends Controller
@@ -15,7 +16,7 @@ class AppointmentConfigController extends Controller
     {
         $selectedDate = $request->get('date', date('Y-m-d'));
 
-        // 1. Get Effective Configuration (Override takes priority)
+        // 1. Get Effective Configuration (Specific Date Override takes priority, fall back to recurring weekly rule)
         $config = AppointmentConfig::where('specific_date', $selectedDate)->first()
             ?? AppointmentConfig::where('day_of_week', date('w', strtotime($selectedDate)))->first();
 
@@ -35,18 +36,18 @@ class AppointmentConfigController extends Controller
                 $isLunch = ($config->has_lunch_break && $time >= $config->lunch_start && $time < $config->lunch_end);
 
                 if (!$isLunch) {
-                    // Fetch real appointments for this specific slot to show names/status
+                    // Fetch real appointments for this specific slot to show names/status in popovers
                     $appointments = Appointment::where('appointment_date', $selectedDate)
                         ->where('time_slot', $time)
                         ->whereIn('status', ['pending', 'approved', 'tested', 'encoded', 'released'])
-                        ->with('user') // Eager load for popover
+                        ->with('user') // Eager load for popover performance
                         ->get();
 
                     $slots[] = [
                         'time' => $time,
                         'booked_count' => $appointments->count(),
                         'capacity' => $config->max_patients_per_slot,
-                        'patients' => $appointments, // Used for the interactable popovers
+                        'patients' => $appointments, // Used for the interactive popovers
                     ];
                 }
                 $current = strtotime("+{$config->slot_duration} minutes", $current);
@@ -74,10 +75,11 @@ class AppointmentConfigController extends Controller
         ]);
 
         $data = $request->only([
-            'opening_time', 'closing_time', 'slot_duration', 
+            'opening_time', 'closing_time', 'slot_duration',
             'lunch_start', 'lunch_end', 'max_patients_per_slot', 'lead_time_hours'
         ]);
 
+        // Explicit cast to map directly to our boolean schema columns [0008]
         $data['is_open'] = $request->has('is_open');
         $data['has_lunch_break'] = $request->has('has_lunch_break');
 
@@ -86,11 +88,11 @@ class AppointmentConfigController extends Controller
             AppointmentConfig::whereNotNull('day_of_week')->update($data);
             $msg = "Global rules updated for all standard operating days.";
         } elseif ($request->mode === 'date') {
-            // Create or Update a one-off override (e.g. Holiday)
+            // Create or Update a one-off override (e.g., Holiday or special schedule)
             AppointmentConfig::updateOrCreate(['specific_date' => $request->specific_date], $data);
             $msg = "Schedule override set for " . date('M d, Y', strtotime($request->specific_date));
         } else {
-            // Update a standard recurring day (e.g. Every Monday)
+            // Update a standard recurring day (e.g., Every Monday)
             AppointmentConfig::updateOrCreate(['day_of_week' => $request->day_of_week], $data);
             $msg = "Recurring rules updated.";
         }
@@ -102,7 +104,7 @@ class AppointmentConfigController extends Controller
      * API: Check Occupancy for the Booking Wizard with Exclude ID overrides
      * Handles: Lead Time check, Capacity, and Lunch breaks.
      */
-    public function checkOccupancy(Request $request)
+    public function checkOccupancy(Request $request): JsonResponse
     {
         $date = $request->query('date');
         $depId = $request->query('dependent_id');
@@ -113,6 +115,11 @@ class AppointmentConfigController extends Controller
         }
 
         try {
+            $timestamp = strtotime($date);
+            if ($timestamp === false) {
+                return response()->json(['error' => 'Invalid date format'], 400);
+            }
+
             // 1. Determine Patient Gender for validation
             $gender = 'both';
             if ($depId) {
@@ -124,7 +131,9 @@ class AppointmentConfigController extends Controller
 
             // 2. Fetch Effective Config for the requested date
             $config = AppointmentConfig::where('specific_date', $date)->first()
-                ?? AppointmentConfig::where('day_of_week', date('w', strtotime($date)))->first();
+                ?? AppointmentConfig::where('day_of_week', (int) date('w', $timestamp))->first();
+
+            $maxPatients = $config?->max_patients_per_slot ?? 1;
 
             // 3. Identify Full Slots via DB (Excluding active resubmitting appointment)
             $fullQuery = Appointment::where('appointment_date', $date)
@@ -134,13 +143,15 @@ class AppointmentConfigController extends Controller
                 $fullQuery->where('id', '!=', $excludeId);
             }
 
+            // FIXED: Fetched records with get() first to keep the selected 'patient_count' column intact before plucking
             $fullSlots = $fullQuery->select('time_slot', DB::raw('count(*) as patient_count'))
                 ->groupBy('time_slot')
-                ->having('patient_count', '>=', $config->max_patients_per_slot ?? 1)
+                ->having('patient_count', '>=', $maxPatients)
+                ->get()
                 ->pluck('time_slot')
                 ->toArray();
 
-            // 4. Fetch all occupied slots and their exact counts (Excluding active resubmitting appointment)
+            // 4. Fetch all occupied slots and their exact counts
             $occupiedQuery = Appointment::where('appointment_date', $date)
                 ->whereIn('status', ['pending', 'approved', 'tested', 'encoded', 'released']);
 
@@ -156,7 +167,7 @@ class AppointmentConfigController extends Controller
 
             return response()->json([
                 'patient_gender' => strtolower($gender),
-                'is_closed' => !($config->is_open ?? false),
+                'is_closed' => !($config?->is_open ?? false),
                 'config' => $config,
                 'full_slots' => $fullSlots,
                 'occupied_slots' => $occupiedSlots,

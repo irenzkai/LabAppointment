@@ -8,6 +8,7 @@ use App\Http\Controllers\ResultController; // Imported to execute secure PDF del
 use App\Events\QueueUpdated; // Broadcasts status/badge refreshes to the Hub and master queue [53]
 use App\Events\NotificationSent; // Broadcasts instant real-time bell notifications globally [423]
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\{Auth, Gate, DB, Str, Storage};
 use Carbon\Carbon;
 
@@ -184,26 +185,57 @@ class AppointmentController extends Controller
      */
     public function store(Request $request)
     {
+        // Custom name validation closure rules matching register schema
+        $nameRule = function ($attribute, $value, $fail) {
+            $val = trim($value);
+            if (empty($val) || $val === 'N/A') {
+                return;
+            }
+            if (!preg_match('/^[a-zA-ZñÑ\s.\'-]+$/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
+                return;
+            }
+            if (!preg_match('/^[a-zA-ZñÑ]/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " must start with a letter.");
+                return;
+            }
+            if (!preg_match('/[a-zA-ZñÑ]/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " must contain at least one letter.");
+                return;
+            }
+            if (preg_match('/[.\'-]{2,}/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " cannot contain consecutive punctuation marks.");
+                return;
+            }
+        };
+
         $request->validate([
             'target_type' => 'required|in:self,dependent,bulk',
             'dependent_id' => 'required_if:target_type,dependent|nullable|exists:dependents,id',
             'organization_name' => 'required_if:target_type,bulk|nullable|string|max:255',
-            'patient_first_name' => 'required|string|max:255',
-            'patient_middle_name' => 'nullable|string|max:255',
-            'patient_last_name' => 'required|string|max:255',
+            'patient_first_name' => ['required', 'string', 'max:60', $nameRule],
+            'patient_middle_name' => ['nullable', 'string', 'max:60', $nameRule],
+            'patient_last_name' => ['required', 'string', 'max:60', $nameRule],
+            'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'], // Optional suffix
             'patient_sex' => 'required|in:Male,Female',
             'patient_birthdate' => 'required|date|before_or_equal:today',
-            'patient_phone' => 'required|string',
-            'patient_street' => 'required|string|max:255',
-            'patient_barangay' => 'required|string|max:255',
-            'patient_city' => 'required|string|max:255',
-            'patient_province' => 'required|string|max:255',
+            'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'], // PH standard format
+
+            // PSGC size standard matching
+            'patient_street' => 'required|string|max:150',
+            'patient_barangay' => 'required|string|max:100',
+            'patient_city' => 'required|string|max:100',
+            'patient_province' => 'required|string|max:100',
+
             'referral_note' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
             'service_ids' => 'required|array|min:1',
             'appointment_date' => 'required|date|after_or_equal:today',
             'time_slot' => 'required',
             'payment_method' => 'required|string',
             'payment_receipt' => 'required_if:payment_method,Cashless|nullable|file|mimes:pdf,jpg,jpeg,png|max:10240'
+        ], [
+            'patient_phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
+            'patient_suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
         ]);
 
         $dayNum = date('w', strtotime($request->appointment_date));
@@ -218,7 +250,14 @@ class AppointmentController extends Controller
         }
 
         $mName = $request->patient_middle_name;
-        $fullName = $request->patient_first_name . ($mName && strtoupper($mName) !== 'N/A' ? ' ' . $mName : '') . ' ' . $request->patient_last_name;
+        $lName = $request->patient_last_name;
+        $suffix = $request->filled('patient_suffix') ? strtoupper($request->patient_suffix) : '';
+
+        // Compile display name dynamically
+        $fullName = $request->patient_first_name . ($mName && strtoupper($mName) !== 'N/A' ? ' ' . $mName : '') . ' ' . $lName;
+        if (!empty($suffix)) {
+            $fullName .= ' ' . $suffix;
+        }
 
         $data = [
             'user_id' => Auth::id(),
@@ -228,8 +267,9 @@ class AppointmentController extends Controller
             'appointment_date' => $request->appointment_date,
             'time_slot' => $request->time_slot,
             'patient_first_name' => strtoupper($request->patient_first_name),
-            'patient_middle_name' => $request->patient_middle_name ? strtoupper($request->patient_middle_name) : 'N/A',
-            'patient_last_name' => strtoupper($request->patient_last_name),
+            'patient_middle_name' => $mName ? strtoupper($mName) : 'N/A',
+            'patient_last_name' => strtoupper($lName),
+            'patient_suffix' => $suffix ?: null,
             'patient_name' => strtoupper($fullName),
             'patient_sex' => $request->patient_sex,
             'patient_birthdate' => $request->patient_birthdate,
@@ -293,34 +333,70 @@ class AppointmentController extends Controller
     {
         $isBulk = !is_null($appointment->batch_id);
 
+        $nameRule = function ($attribute, $value, $fail) {
+            $val = trim($value);
+            if (empty($val) || $val === 'N/A') {
+                return;
+            }
+            if (!preg_match('/^[a-zA-Z \s.\'-]+$/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
+                return;
+            }
+            if (!preg_match('/^[a-zA-Z ]/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " must start with a letter.");
+                return;
+            }
+            if (!preg_match('/[a-zA-Z ]/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " must contain at least one letter.");
+                return;
+            }
+            if (preg_match('/[.\'-]{2,}/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " cannot contain consecutive punctuation marks.");
+                return;
+            }
+        };
+
         $rules = [
-            'patient_first_name' => 'required|string|max:255',
-            'patient_middle_name' => 'nullable|string|max:255',
-            'patient_last_name' => 'required|string|max:255',
+            'patient_first_name' => ['required', 'string', 'max:60', $nameRule],
+            'patient_middle_name' => ['nullable', 'string', 'max:60', $nameRule],
+            'patient_last_name' => ['required', 'string', 'max:60', $nameRule],
+            'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
             'patient_sex' => 'required|in:Male,Female',
             'patient_birthdate' => 'required|date|before_or_equal:today',
-            'patient_phone' => 'required|string',
-            'patient_street' => 'required|string|max:255',
+            'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
+            'patient_street' => 'required|string|max:150',
             'service_ids' => 'required|array|min:1',
             'appointment_date' => 'required|date|after_or_equal:today',
             'time_slot' => 'required',
         ];
 
         if (!$isBulk) {
-            $rules['patient_barangay'] = 'required|string|max:255';
-            $rules['patient_city'] = 'required|string|max:255';
-            $rules['patient_province'] = 'required|string|max:255';
+            $rules['patient_barangay'] = 'required|string|max:100';
+            $rules['patient_city'] = 'required|string|max:100';
+            $rules['patient_province'] = 'required|string|max:100';
             $rules['payment_method'] = 'required|string';
             $rules['referral_note'] = 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240';
 
+            // FIXED: Only require a payment receipt upload if there is no existing file on the server,
+            // OR if the user explicitly chose to remove the existing one.
+            $isReceiptRequired = false;
             if ($request->payment_method === 'Cashless' && (in_array($appointment->status, ['canceled', 'returned']) || in_array($appointment->payment_status, ['invalid', 'refunded']))) {
+                if (!$appointment->payment_receipt || $request->input('remove_receipt') === '1') {
+                    $isReceiptRequired = true;
+                }
+            }
+
+            if ($isReceiptRequired) {
                 $rules['payment_receipt'] = 'required|file|mimes:pdf,jpg,jpeg,png|max:10240';
             } else {
                 $rules['payment_receipt'] = 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240';
             }
         }
 
-        $request->validate($rules);
+        $request->validate($rules, [
+            'patient_phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
+            'patient_suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
+        ]);
 
         $dayNum = date('w', strtotime($request->appointment_date));
         $config = AppointmentConfig::where('day_of_week', $dayNum)->first();
@@ -335,7 +411,13 @@ class AppointmentController extends Controller
         }
 
         $mName = $request->patient_middle_name;
-        $fullName = $request->patient_first_name . ($mName && strtoupper($mName) !== 'N/A' ? ' ' . $mName : '') . ' ' . $request->patient_last_name;
+        $lName = $request->patient_last_name;
+        $suffix = $request->filled('patient_suffix') ? strtoupper($request->patient_suffix) : '';
+
+        $fullName = $request->patient_first_name . ($mName && strtoupper($mName) !== 'N/A' ? ' ' . $mName : '') . ' ' . $lName;
+        if (!empty($suffix)) {
+            $fullName .= ' ' . $suffix;
+        }
 
         $street = strtoupper(trim($request->patient_street));
         $barangay = $isBulk ? 'N/A' : strtoupper(trim($request->patient_barangay));
@@ -345,7 +427,8 @@ class AppointmentController extends Controller
         $updateData = [
             'patient_first_name' => strtoupper($request->patient_first_name),
             'patient_middle_name' => $mName ? strtoupper($mName) : 'N/A',
-            'patient_last_name' => strtoupper($request->patient_last_name),
+            'patient_last_name' => strtoupper($lName),
+            'patient_suffix' => $suffix ?: null,
             'patient_name' => strtoupper($fullName),
             'patient_sex' => $request->patient_sex,
             'patient_birthdate' => $request->patient_birthdate,
@@ -372,18 +455,38 @@ class AppointmentController extends Controller
             }
         }
 
-        if (!$isBulk && $request->hasFile('referral_note') && $request->file('referral_note')->isValid()) {
-            if ($appointment->referral_note) {
-                Storage::disk('public')->delete($appointment->referral_note);
+        // FIXED: Safely process server-side file deletion if the user explicitly clicked "Remove" on the server-cached Referral Note
+        if (!$isBulk) {
+            if ($request->input('remove_referral') === '1') {
+                if ($appointment->referral_note) {
+                    Storage::disk('public')->delete($appointment->referral_note);
+                }
+                $updateData['referral_note'] = null;
             }
-            $updateData['referral_note'] = $request->file('referral_note')->store('referrals', 'public');
+
+            if ($request->hasFile('referral_note') && $request->file('referral_note')->isValid()) {
+                if ($appointment->referral_note) {
+                    Storage::disk('public')->delete($appointment->referral_note);
+                }
+                $updateData['referral_note'] = $request->file('referral_note')->store('referrals', 'public');
+            }
         }
 
-        if (!$isBulk && $request->hasFile('payment_receipt') && $request->file('payment_receipt')->isValid()) {
-            if ($appointment->payment_receipt) {
-                Storage::disk('public')->delete($appointment->payment_receipt);
+        // FIXED: Safely process server-side file deletion if the user explicitly clicked "Remove" on the server-cached Cashless Receipt
+        if (!$isBulk) {
+            if ($request->input('remove_receipt') === '1') {
+                if ($appointment->payment_receipt) {
+                    Storage::disk('public')->delete($appointment->payment_receipt);
+                }
+                $updateData['payment_receipt'] = null;
             }
-            $updateData['payment_receipt'] = $request->file('payment_receipt')->store('receipts', 'public');
+
+            if ($request->hasFile('payment_receipt') && $request->file('payment_receipt')->isValid()) {
+                if ($appointment->payment_receipt) {
+                    Storage::disk('public')->delete($appointment->payment_receipt);
+                }
+                $updateData['payment_receipt'] = $request->file('payment_receipt')->store('receipts', 'public');
+            }
         }
 
         $appointment->update($updateData);
@@ -426,7 +529,7 @@ class AppointmentController extends Controller
         if ($request->status == 'returned') {
             $updatePayload['return_reason'] = $request->return_reason;
         } else {
-            $updatePayload['return_reason'] = null;
+            $updatePayload['return_reason'] = null; 
         }
 
         if ($request->has('payment_status')) {
@@ -525,22 +628,49 @@ class AppointmentController extends Controller
 
         $action = $request->input('action', 'tested'); // 'tested' or 'retest'
 
+        $nameRule = function ($attribute, $value, $fail) {
+            $val = trim($value);
+            if (empty($val) || $val === 'N/A') {
+                return;
+            }
+            if (!preg_match('/^[a-zA-ZñÑ\s.\'-]+$/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
+                return;
+            }
+            if (!preg_match('/^[a-zA-ZñÑ]/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " must start with a letter.");
+                return;
+            }
+            if (!preg_match('/[a-zA-ZñÑ]/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " must contain at least one letter.");
+                return;
+            }
+            if (preg_match('/[.\'-]{2,}/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " cannot contain consecutive punctuation marks.");
+                return;
+            }
+        };
+
         if ($action === 'retest') {
             $request->validate([
-                'patient_first_name' => 'required|string|max:255',
-                'patient_middle_name' => 'nullable|string|max:255',
-                'patient_last_name' => 'required|string|max:255',
+                'patient_first_name' => ['required', 'string', 'max:60', $nameRule],
+                'patient_middle_name' => ['nullable', 'string', 'max:60', $nameRule],
+                'patient_last_name' => ['required', 'string', 'max:60', $nameRule],
+                'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
                 'patient_birthdate' => 'required|date|before_or_equal:today',
                 'patient_sex' => 'required|in:Male,Female',
-                'patient_phone' => 'required|string|max:20',
-                'patient_street' => 'required|string|max:255',
-                'patient_barangay' => 'required|string|max:255',
-                'patient_city' => 'required|string|max:255',
-                'patient_province' => 'required|string|max:255',
+                'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
+                'patient_street' => 'required|string|max:150',
+                'patient_barangay' => 'required|string|max:100',
+                'patient_city' => 'required|string|max:100',
+                'patient_province' => 'required|string|max:100',
                 'service_ids' => 'required|array|min:1',
                 'payment_amount' => 'required|numeric|min:0',
                 'retest_reason' => 'required|string',
                 'retest_custom_reason' => 'required_if:retest_reason,Others|nullable|string|min:5',
+            ], [
+                'patient_phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
+                'patient_suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
             ]);
 
             $retestReason = $request->input('retest_reason') === 'Others'
@@ -550,12 +680,18 @@ class AppointmentController extends Controller
             $fName = strtoupper(trim($request->patient_first_name));
             $mName = ($request->patient_middle_name && strtoupper($request->patient_middle_name) !== 'N/A') ? strtoupper(trim($request->patient_middle_name)) : 'N/A';
             $lName = strtoupper(trim($request->patient_last_name));
+            $suffix = $request->filled('patient_suffix') ? strtoupper($request->patient_suffix) : '';
+
             $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
+            if (!empty($suffix)) {
+                $displayName .= " {$suffix}";
+            }
 
             $updatePayload = [
                 'patient_first_name' => $fName,
                 'patient_middle_name' => $mName,
                 'patient_last_name' => $lName,
+                'patient_suffix' => $suffix ?: null,
                 'patient_name' => $displayName,
                 'patient_birthdate' => $request->patient_birthdate,
                 'patient_sex' => $request->patient_sex,
@@ -580,7 +716,6 @@ class AppointmentController extends Controller
 
             ActivityLog::record('RETEST', 'Marked for retesting: ' . $retestReason, $appointment->patient_name, $appointment->id);
 
-            // Notify Patient about the retest request
             $patient = $appointment->user;
             if ($patient) {
                 $patient->notify(new AppointmentNotification([
@@ -600,20 +735,24 @@ class AppointmentController extends Controller
 
         // --- PROGRESSION TO TESTED: CONFIRM, UPDATE DETAILS & COMPLETE CLINICAL SAMPLING ---
         $request->validate([
-            'patient_first_name' => 'required|string|max:255',
-            'patient_middle_name' => 'nullable|string|max:255',
-            'patient_last_name' => 'required|string|max:255',
+            'patient_first_name' => ['required', 'string', 'max:60', $nameRule],
+            'patient_middle_name' => ['nullable', 'string', 'max:60', $nameRule],
+            'patient_last_name' => ['required', 'string', 'max:60', $nameRule],
+            'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
             'patient_birthdate' => 'required|date|before_or_equal:today',
             'patient_sex' => 'required|in:Male,Female',
-            'patient_phone' => 'required|string|max:20',
-            'patient_street' => 'required|string|max:255',
-            'patient_barangay' => 'required|string|max:255',
-            'patient_city' => 'required|string|max:255',
-            'patient_province' => 'required|string|max:255',
+            'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
+            'patient_street' => 'required|string|max:150',
+            'patient_barangay' => 'required|string|max:100',
+            'patient_city' => 'required|string|max:100',
+            'patient_province' => 'required|string|max:100',
             'service_ids' => 'required|array|min:1',
             'payment_amount' => 'required|numeric|min:0',
             'est_hours' => 'nullable|integer|min:0',
             'est_minutes' => 'nullable|integer|min:0',
+        ], [
+            'patient_phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
+            'patient_suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
         ]);
 
         $h = (int)$request->input('est_hours', 0);
@@ -623,13 +762,18 @@ class AppointmentController extends Controller
         $fName = strtoupper(trim($request->patient_first_name));
         $mName = ($request->patient_middle_name && strtoupper($request->patient_middle_name) !== 'N/A') ? strtoupper(trim($request->patient_middle_name)) : 'N/A';
         $lName = strtoupper(trim($request->patient_last_name));
-        $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
+        $suffix = $request->filled('patient_suffix') ? strtoupper($request->patient_suffix) : '';
 
-        // Save customized payment configurations and snapshot details
+        $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
+        if (!empty($suffix)) {
+            $displayName .= " {$suffix}";
+        }
+
         $updatePayload = [
             'patient_first_name' => $fName,
             'patient_middle_name' => $mName,
             'patient_last_name' => $lName,
+            'patient_suffix' => $suffix ?: null,
             'patient_name' => $displayName,
             'patient_birthdate' => $request->patient_birthdate,
             'patient_sex' => $request->patient_sex,
@@ -641,18 +785,15 @@ class AppointmentController extends Controller
             'payment_status' => 'paid', // Automatically flagged as PAID on sampling stage
             'status' => 'tested',
             'tested_at' => now(),
-            'result_estimated_at' => $est,
+            'result_estimated_at' => $est, 
             'return_reason' => null
         ];
 
-        // Safely record custom payments if the database column has been generated
         if (\Illuminate\Support\Facades\Schema::hasColumn('appointments', 'payment_amount')) {
             $updatePayload['payment_amount'] = $request->input('payment_amount');
         }
 
         $appointment->update($updatePayload);
-
-        // Sync examinations selected/modified upon desk registration
         $appointment->services()->sync($request->service_ids);
 
         ActivityLog::record('TESTED', 'Sampling completed and details verified', $appointment->patient_name, $appointment->id);
@@ -670,7 +811,6 @@ class AppointmentController extends Controller
             event(new NotificationSent($patient->id, 'Sampling Completed', "Your clinical laboratory sampling is complete. Your results are currently being processed in our lab."));
         }
 
-        // Dispatch live update for real-time trackers
         event(new QueueUpdated());
 
         return redirect()->back()->with('success', 'Sampling logged. Results are being processed.');
@@ -751,6 +891,7 @@ class AppointmentController extends Controller
         $staffName = Auth::user()->name;
         $staffRole = strtoupper(Auth::user()->role);
         $timestamp = now()->format('M d, Y | h:i A');
+
         $logMessage = "Refund processed by {$staffName} ({$staffRole}) on {$timestamp}";
 
         $appointment->update([

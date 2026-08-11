@@ -23,6 +23,7 @@ class AdminSeeder extends Seeder
                 'first_name' => 'SYSTEM',
                 'middle_name' => 'N/A',
                 'last_name' => 'ADMIN',
+                'suffix' => null,
                 'password' => Hash::make('1@23qweASD'),
                 'role' => 'admin',
                 'phone' => '09399510464',
@@ -42,6 +43,7 @@ class AdminSeeder extends Seeder
                 'first_name' => 'SUPPORT',
                 'middle_name' => 'N/A',
                 'last_name' => 'ADMIN',
+                'suffix' => null,
                 'password' => Hash::make('1@23qweASD'),
                 'role' => 'admin',
                 'phone' => '09399510465',
@@ -64,7 +66,8 @@ class AdminSeeder extends Seeder
                 'first_name' => 'CLINIC',
                 'middle_name' => 'N/A',
                 'last_name' => 'STAFF',
-                'password' => Hash::make('1@23qweASD'), 
+                'suffix' => null,
+                'password' => Hash::make('1@23qweASD'),
                 'role' => 'staff',
                 'phone' => '09112223334',
                 'birthdate' => '1995-05-15',
@@ -83,7 +86,8 @@ class AdminSeeder extends Seeder
                 'first_name' => 'FRONT',
                 'middle_name' => 'DESK',
                 'last_name' => 'STAFF',
-                'password' => Hash::make('1@23qweASD'), 
+                'suffix' => null,
+                'password' => Hash::make('1@23qweASD'),
                 'role' => 'staff',
                 'phone' => '09112223335',
                 'birthdate' => '1997-08-20',
@@ -105,7 +109,8 @@ class AdminSeeder extends Seeder
                 'first_name' => 'LAB',
                 'middle_name' => 'ONE',
                 'last_name' => 'TECH',
-                'password' => Hash::make('1@23qweASD'), 
+                'suffix' => null,
+                'password' => Hash::make('1@23qweASD'),
                 'role' => 'lab_tech',
                 'phone' => '09112224334',
                 'birthdate' => '1994-05-15',
@@ -124,7 +129,8 @@ class AdminSeeder extends Seeder
                 'first_name' => 'LAB',
                 'middle_name' => 'TWO',
                 'last_name' => 'TECH',
-                'password' => Hash::make('1@23qweASD'), 
+                'suffix' => null,
+                'password' => Hash::make('1@23qweASD'),
                 'role' => 'lab_tech',
                 'phone' => '09113223334',
                 'birthdate' => '2001-05-15',
@@ -146,7 +152,8 @@ class AdminSeeder extends Seeder
                 'first_name' => 'JUAN',
                 'middle_name' => 'DELA',
                 'last_name' => 'CRUZ',
-                'password' => Hash::make('1@23qweASD'), 
+                'suffix' => null,
+                'password' => Hash::make('1@23qweASD'),
                 'role' => 'user',
                 'phone' => '09445556667',
                 'birthdate' => '2000-12-25',
@@ -159,13 +166,15 @@ class AdminSeeder extends Seeder
             ]
         );
 
+        // Demonstrating Spanish-Filipino "Ñ" character support inside database seeder
         User::updateOrCreate(
             ['email' => 'patient2@gmail.com'],
             [
-                'first_name' => 'MARIA',
+                'first_name' => 'MARIA CLARA',
                 'middle_name' => 'MERCADO',
-                'last_name' => 'CLARA',
-                'password' => Hash::make('1@23qweASD'), 
+                'last_name' => 'PEÑARANDA',
+                'suffix' => null,
+                'password' => Hash::make('1@23qweASD'),
                 'role' => 'user',
                 'phone' => '09445556668',
                 'birthdate' => '1998-03-15',
@@ -178,13 +187,15 @@ class AdminSeeder extends Seeder
             ]
         );
 
+        // Demonstrating Suffix "JR" support inside database seeder
         User::updateOrCreate(
             ['email' => 'patient3@gmail.com'],
             [
                 'first_name' => 'PEDRO',
                 'middle_name' => 'SANTOS',
                 'last_name' => 'PENDUKO',
-                'password' => Hash::make('1@23qweASD'), 
+                'suffix' => 'JR',
+                'password' => Hash::make('1@23qweASD'),
                 'role' => 'user',
                 'phone' => '09445556669',
                 'birthdate' => '1995-07-22',
@@ -197,13 +208,15 @@ class AdminSeeder extends Seeder
             ]
         );
 
+        // Demonstrating Hyphenated Married Surname support inside database seeder
         User::updateOrCreate(
             ['email' => 'patient4@gmail.com'],
             [
                 'first_name' => 'ANA',
                 'middle_name' => 'REYES',
-                'last_name' => 'SILANG',
-                'password' => Hash::make('1@23qweASD'), 
+                'last_name' => 'SILANG-SANTOS',
+                'suffix' => null,
+                'password' => Hash::make('1@23qweASD'),
                 'role' => 'user',
                 'phone' => '09445556670',
                 'birthdate' => '1996-11-30',
@@ -221,7 +234,7 @@ class AdminSeeder extends Seeder
         // =========================================================================
         $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-        foreach($days as $index => $day) {
+        foreach ($days as $index => $day) {
             AppointmentConfig::updateOrCreate(
                 ['day_of_week' => $index],
                 [
@@ -233,7 +246,7 @@ class AdminSeeder extends Seeder
                     'has_lunch_break' => true,
                     'lunch_start' => '12:00:00',
                     'lunch_end' => '13:00:00',
-                    'lead_time_hours' => 2 // Standard 2-hour lead time
+                    'lead_time_hours' => 2, // Standard 2-hour lead time
                 ]
             );
         }

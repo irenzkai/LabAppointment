@@ -14,14 +14,22 @@ return new class extends Migration
         // Creates the normalized, appointment-scoped Custom Workstation Results table (Worksheets)
         Schema::create('custom_workstation_results', function (Blueprint $table) {
             $table->id();
+
+            // 1. Relational Many-to-1 Foreign Key
+            // Linked to results folder; Cascade deletes ensure orphan records are auto-removed
             $table->foreignId('appointment_result_id')
-                  ->constrained('appointment_results')
-                  ->onDelete('cascade');
-            $table->string('name'); // Name of the dynamic custom worksheet (e.g., 'ECG', 'Dental Clearance')
-            $table->string('status')->default('pending'); // pending, encoding, encoded, verified, returned
-            $table->string('cert_no')->nullable(); // Certificate / Reference ID tracking number
-            $table->string('scan_path')->nullable(); // Uploaded clinical document scan path
-            $table->text('return_reason')->nullable(); // Verifier correction notes
+                ->constrained('appointment_results')
+                ->onDelete('cascade');
+
+            // 2. Custom Worksheet Parameters
+            $table->string('name', 100); // e.g. "ECG", "Dental Clearance", "Pap Smear"
+            $table->enum('status', ['pending', 'encoding', 'encoded', 'verified', 'returned'])->default('pending');
+            $table->string('cert_no', 50)->nullable()->index();  // Indexed for quick validation search queries
+            $table->string('scan_path', 255)->nullable();        // Path to clinical document file scan
+
+            // 3. Correction & Auditor logs
+            $table->text('return_reason')->nullable(); // Verifier correction details
+
             $table->timestamps();
         });
     }

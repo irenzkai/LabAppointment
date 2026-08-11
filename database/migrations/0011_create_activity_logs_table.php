@@ -9,16 +9,13 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up(): void 
+    public function up(): void
     {
         Schema::create('activity_logs', function (Blueprint $table) {
             $table->id();
-            
-            /**
-             * FIXED: Added nullable() and onDelete('set null')
-             * This allows the System Admin to purge a user account while keeping 
-             * the audit trail intact for clinical compliance.
-             */
+
+            // 1. Relational Handshakes (DPA RA 10173 Compliance)
+            // Ensures audit logs persist even if parents, patients, or appointments are deleted
             $table->foreignId('user_id')
                 ->nullable() 
                 ->constrained('users')
@@ -26,17 +23,16 @@ return new class extends Migration
 
             $table->foreignId('appointment_id')
                 ->nullable()
-                ->constrained()
+                ->constrained('appointments')
                 ->onDelete('set null');
 
-            /**
-             * Snapshots are preserved even if the user/appointment is deleted
-             */
-            $table->string('patient_name');
-            $table->string('action'); // e.g., "BOOKED", "ENCODED", "PERMANENT ACCOUNT DELETION"
-            $table->text('reason')->nullable(); // Justification provided via Reason-Gate modals
-            
-            $table->timestamps();
+            // 2. Snapshotted Identity and Audit Details
+            // Indexed to support high-speed administrative live searches
+            $table->string('patient_name', 255)->index(); 
+            $table->string('action', 50)->index(); // e.g. "SENSITIVE DATA ACCESS", "BOOKED", "ENCODED"
+            $table->text('reason')->nullable();    // Justification from Reason-Gate modals
+
+            $table->timestamps(); // Serves as the indexed audit timestamp (created_at desc)
         });
     }
 

@@ -13,14 +13,20 @@ return new class extends Migration
     {
         Schema::create('payment_providers', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->string('logo')->nullable(); // Optional path to logotypes [176]
-            $table->string('qr_code'); // Path to uploaded scan QR [176]
-            $table->boolean('is_active')->default(true);
+
+            // 1. Gateway Identifiers & Assets
+            $table->string('name', 50)->unique();    // e.g. "GCASH", "MAYA", "GRABPAY"
+            $table->string('logo', 255)->nullable(); // Path to public brand logotype
+            $table->string('qr_code', 255);          // Path to merchant's dynamic scan-to-pay QR image
+
+            // 2. Operational parameters
+            $table->boolean('is_active')->default(true); // Status toggle
+            
             $table->timestamps();
 
-            // AUDIT & DATA RETENTION: SoftDeletes (Re-activation archive, no expiry) [102]
-            $table->softDeletes(); // Adds 'deleted_at' column for compliant deactivations
+            // AUDIT & DATA RETENTION COMPLIANCE [102]
+            // Permits archiving of gateways while preserving payment logs
+            $table->softDeletes(); 
         });
     }
 

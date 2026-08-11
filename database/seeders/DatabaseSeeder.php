@@ -17,7 +17,8 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             AdminSeeder::class,
-            ServiceSeeder::class, 
+            ServiceSeeder::class,
+            PaymentProviderSeeder::class, // Added payment provider seeder
         ]);
     }
 }

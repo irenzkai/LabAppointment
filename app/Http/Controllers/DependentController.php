@@ -17,24 +17,63 @@ class DependentController extends Controller
         // Calculate the threshold date exactly 18 years ago from today [38]
         $eighteenYearsAgo = Carbon::now()->subYears(18)->toDateString();
 
+        // Custom name validation rule block matching parent registries
+        $nameRule = function ($attribute, $value, $fail) {
+            $val = trim($value);
+            if (empty($val) || $val === 'N/A') {
+                return; // Handled by nullable/required constraints
+            }
+
+            // 1. Allowed characters boundary validation (Letters, Spanish ñ/Ñ, periods, hyphens, spaces, apostrophes)
+            if (!preg_match('/^[a-zA-ZñÑ\s.\'-]+$/u', $val)) {
+                $fail("The " . str_replace('_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
+                return;
+            }
+
+            // 2. Strict non-punctuation starting validation
+            if (!preg_match('/^[a-zA-ZñÑ]/u', $val)) {
+                $fail("The " . str_replace('_', ' ', $attribute) . " must start with a letter.");
+                return;
+            }
+
+            // 3. Must possess at least one character letter to prevent punctuation-only values
+            if (!preg_match('/[a-zA-ZñÑ]/u', $val)) {
+                $fail("The " . str_replace('_', ' ', $attribute) . " must contain at least one letter.");
+                return;
+            }
+
+            // 4. Consecutive punctuation marks validation
+            if (preg_match('/[.\'-]{2,}/u', $val)) {
+                $fail("The " . str_replace('_', ' ', $attribute) . " cannot contain consecutive punctuation marks.");
+                return;
+            }
+        };
+
         $request->validate([
-            'first_name' => 'required|string|max:255',
-            'middle_name' => 'nullable|string|max:255',
-            'last_name' => 'required|string|max:255',
+            // 1. Identity with strict name rules and 60/10-character limits
+            'first_name' => ['required', 'string', 'max:60', $nameRule],
+            'middle_name' => ['nullable', 'string', 'max:60', $nameRule],
+            'last_name' => ['required', 'string', 'max:60', $nameRule],
+            'suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'], // Alphanumeric, spaces, and periods allowed
+            
             // Enforce minor status (under 18 years of age) to meet legal compliance [38]
             'birthdate' => 'required|date|before_or_equal:today|after:' . $eighteenYearsAgo, 
             'sex' => 'required|in:Male,Female',
-            'relationship' => 'required|string',
-            'province' => 'required_unless:inherit_address,1|nullable|string',
-            'city' => 'required_unless:inherit_address,1|nullable|string',
-            'barangay' => 'required_unless:inherit_address,1|nullable|string',
-            'street' => 'required_unless:inherit_address,1|nullable|string|max:255',
+            'relationship' => 'required|string|in:Son,Daughter,SON,DAUGHTER',
+
+            // 2. Address fields (PSGC size standard matching)
+            'province' => 'required_unless:inherit_address,1|nullable|string|max:100',
+            'city' => 'required_unless:inherit_address,1|nullable|string|max:100',
+            'barangay' => 'required_unless:inherit_address,1|nullable|string|max:100',
+            'street' => 'required_unless:inherit_address,1|nullable|string|max:150',
         ], [
             'birthdate.after' => 'Administrative Policy: Dependents must be minors (under 18 years of age).',
+            'suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
         ]);
 
         $user = Auth::user();
 
+        // 3. Inherit parent addresses if toggled
         if ($request->has('inherit_address')) {
             $street = $user->street;
             $barangay = $user->barangay;
@@ -47,17 +86,21 @@ class DependentController extends Controller
             $province = strtoupper(trim($request->province));
         }
 
+        // 4. Create record with normalized fields
         $user->dependents()->create([
             'first_name' => strtoupper(trim($request->first_name)),
-            'middle_name' => ($request->middle_name && strtoupper($request->middle_name) !== 'N/A') ? strtoupper(trim($request->middle_name)) : 'N/A',
+            'middle_name' => ($request->middle_name && strtoupper($request->middle_name) !== 'N/A') 
+                ? strtoupper(trim($request->middle_name)) 
+                : 'N/A',
             'last_name' => strtoupper(trim($request->last_name)),
+            'suffix' => $request->filled('suffix') ? strtoupper(trim($request->suffix)) : null,
             'birthdate' => $request->birthdate,
             'sex' => $request->sex,
-            'relationship' => strtoupper(trim($request->relationship)),
+            'relationship' => strtoupper(trim($request->relationship)), // Normalized to SON/DAUGHTER
             'street' => $street,
             'barangay' => $barangay,
-            'city' => $city,
-            'province' => $province
+            'city' => $city, 
+            'province' => $province 
         ]);
 
         return back()->with('success', 'Dependent record created.');
@@ -75,24 +118,63 @@ class DependentController extends Controller
         // Calculate the threshold date exactly 18 years ago from today [39]
         $eighteenYearsAgo = Carbon::now()->subYears(18)->toDateString();
 
+        // Custom name validation rule block matching parent registries
+        $nameRule = function ($attribute, $value, $fail) {
+            $val = trim($value);
+            if (empty($val) || $val === 'N/A') {
+                return; // Handled by nullable/required constraints
+            }
+
+            // 1. Allowed characters boundary validation (Letters, Spanish ñ/Ñ, periods, hyphens, spaces, apostrophes)
+            if (!preg_match('/^[a-zA-ZñÑ\s.\'-]+$/u', $val)) {
+                $fail("The " . str_replace('_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
+                return;
+            }
+
+            // 2. Strict non-punctuation starting validation
+            if (!preg_match('/^[a-zA-ZñÑ]/u', $val)) {
+                $fail("The " . str_replace('_', ' ', $attribute) . " must start with a letter.");
+                return;
+            }
+
+            // 3. Must possess at least one character letter to prevent punctuation-only values
+            if (!preg_match('/[a-zA-ZñÑ]/u', $val)) {
+                $fail("The " . str_replace('_', ' ', $attribute) . " must contain at least one letter.");
+                return;
+            }
+
+            // 4. Consecutive punctuation marks validation
+            if (preg_match('/[.\'-]{2,}/u', $val)) {
+                $fail("The " . str_replace('_', ' ', $attribute) . " cannot contain consecutive punctuation marks.");
+                return;
+            }
+        };
+
         $request->validate([
-            'first_name' => 'required|string|max:255',
-            'middle_name' => 'nullable|string|max:255',
-            'last_name' => 'required|string|max:255',
+            // 1. Identity with strict name rules and 60/10-character limits
+            'first_name' => ['required', 'string', 'max:60', $nameRule],
+            'middle_name' => ['nullable', 'string', 'max:60', $nameRule],
+            'last_name' => ['required', 'string', 'max:60', $nameRule],
+            'suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'], // Alphanumeric, spaces, and periods allowed
+            
             // Enforce minor status (under 18 years of age) to meet legal compliance [39]
             'birthdate' => 'required|date|before_or_equal:today|after:' . $eighteenYearsAgo, 
             'sex' => 'required|in:Male,Female',
-            'relationship' => 'required|string',
-            'province' => 'required_unless:inherit_address,1|nullable|string',
-            'city' => 'required_unless:inherit_address,1|nullable|string',
-            'barangay' => 'required_unless:inherit_address,1|nullable|string',
-            'street' => 'required_unless:inherit_address,1|nullable|string|max:255',
+            'relationship' => 'required|string|in:Son,Daughter,SON,DAUGHTER',
+
+            // 2. Address fields (PSGC size standard matching)
+            'province' => 'required_unless:inherit_address,1|nullable|string|max:100',
+            'city' => 'required_unless:inherit_address,1|nullable|string|max:100',
+            'barangay' => 'required_unless:inherit_address,1|nullable|string|max:100',
+            'street' => 'required_unless:inherit_address,1|nullable|string|max:150',
         ], [
             'birthdate.after' => 'Administrative Policy: Dependents must be minors (under 18 years of age).',
+            'suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
         ]);
 
         $user = Auth::user();
 
+        // 3. Inherit parent addresses if toggled
         if ($request->has('inherit_address')) {
             $street = $user->street;
             $barangay = $user->barangay;
@@ -105,15 +187,19 @@ class DependentController extends Controller
             $province = strtoupper(trim($request->province));
         }
 
+        // 4. Update record with normalized fields
         $dependent->update([
             'first_name' => strtoupper(trim($request->first_name)),
-            'middle_name' => ($request->middle_name && strtoupper($request->middle_name) !== 'N/A') ? strtoupper(trim($request->middle_name)) : 'N/A',
+            'middle_name' => ($request->middle_name && strtoupper($request->middle_name) !== 'N/A') 
+                ? strtoupper(trim($request->middle_name)) 
+                : 'N/A',
             'last_name' => strtoupper(trim($request->last_name)),
+            'suffix' => $request->filled('suffix') ? strtoupper(trim($request->suffix)) : null,
             'birthdate' => $request->birthdate,
             'sex' => $request->sex,
-            'relationship' => strtoupper(trim($request->relationship)),
-            'street' => $street,
-            'barangay' => $barangay,
+            'relationship' => strtoupper(trim($request->relationship)), // Normalized to SON/DAUGHTER
+            'street' => $street, 
+            'barangay' => $barangay, 
             'city' => $city,
             'province' => $province
         ]);
@@ -123,7 +209,6 @@ class DependentController extends Controller
 
     /**
      * Remove the specified family dependent from the database.
-     * Triggers an audit-compliant soft delete (retained for 25 years for legal compliance) [40].
      */
     public function destroy(Dependent $dependent) 
     {
@@ -131,25 +216,22 @@ class DependentController extends Controller
             abort(403);
         }
 
-        // Soft deletes the dependent (sets 'deleted_at' timestamp) [40]
-        $dependent->delete();
+        $dependent->delete(); // Soft-deletes record (preserves audit trail)
 
         return back()->with('success', 'Dependent removed.');
     }
 
     /**
-     * Reactivate an archived family dependent record (Reverses Soft-Delete).
+     * Reactivate an archived family dependent record.
      */
     public function restore($id)
     {
-        // Fetch the soft-deleted record explicitly
         $dependent = Dependent::onlyTrashed()->findOrFail($id);
 
         if ($dependent->user_id !== Auth::id()) {
             abort(403);
         }
 
-        // Reverses the soft-delete state
         $dependent->restore();
 
         return back()->with('success', 'Dependent record successfully reactivated.');

@@ -9,12 +9,26 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up(): void {
+    public function up(): void
+    {
         Schema::create('laboratory_histories', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            // 'none', 'pending_patient', 'pending_staff', 'granted'
-            $table->string('permission_status')->default('none');
+
+            // 1. Relational 1-to-1 Foreign Key linking to the patient
+            // unique() guarantees each patient has exactly one consolidated history folder header
+            $table->foreignId('user_id')
+                ->unique() 
+                ->constrained('users')
+                ->onDelete('cascade');
+
+            // 2. Handshake Permission States (RA 10173 Compliance)
+            // Explicitly constrained ENUM prevents invalid or bypassed authorization levels
+            $table->enum('permission_status', [
+                'none', 
+                'pending_patient', 
+                'pending_staff', 
+                'granted'
+            ])->default('none');
             
             $table->timestamps();
         });

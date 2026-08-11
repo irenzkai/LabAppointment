@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\ActivityLog;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -23,28 +24,33 @@ class ProfileController extends Controller
     }
 
     /**
-     * Update the user's profile information (Handles name separation).
+     * Update the user's profile information (Handles name and suffix collation).
      */
-    public function update(ProfileUpdateRequest $request): RedirectResponse
+    public function update(ProfileUpdateRequest $request): RedirectResponse 
     {
         $user = $request->user();
 
-        // Clean name fields
+        // 1. Clean and normalize name values
         $fName = strtoupper(trim($request->first_name));
         $mName = ($request->middle_name && strtoupper($request->middle_name) !== 'N/A') 
             ? strtoupper(trim($request->middle_name)) 
             : 'N/A';
         $lName = strtoupper(trim($request->last_name));
+        $suffix = $request->filled('suffix') ? strtoupper(trim($request->suffix)) : '';
 
-        // Compile combined display name
+        // 2. Compile combined display name, appending the suffix if it exists
         $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
+        if (!empty($suffix)) {
+            $displayName .= " {$suffix}";
+        }
 
-        // Fill user attributes
+        // 3. Fill and save the mass-assignable attributes
         $user->fill(array_merge($request->validated(), [
             'first_name' => $fName,
             'middle_name' => $mName,
             'last_name' => $lName,
-            'name' => $displayName,
+            'suffix' => $suffix ?: null, // Save suffix snapshot
+            'name' => $displayName,      // Computed dynamic display name
             'street' => strtoupper(trim($request->street)),
             'barangay' => strtoupper(trim($request->barangay)),
             'city' => strtoupper(trim($request->city)),
@@ -59,19 +65,22 @@ class ProfileController extends Controller
 
         $user->save();
 
+        // 4. Record security audit log per RA 10173 compliance guidelines
+        ActivityLog::record('PROFILE UPDATED', "User updated their clinical profile details.", $user->name, $user->id);
+
         if ($emailChanged) {
-            // Automatically send new verification email and redirect to verify notice
-            $user->sendEmailVerificationNotification();
-            return redirect()->route('verification.notice')->with('status', 'verification-link-sent');
+            // Clear current OTP session to trigger a fresh OTP email upon prompt redirection
+            session()->forget('email_otp_code');
+            return redirect()->route('verification.notice')->with('status', 'verification-code-sent');
         }
 
         return Redirect::route('profile.edit')->with('success', 'Profile updated successfully!');
     }
 
     /**
-     * Delete the user's account.
+     * Delete the user's account (Supports standard redirect and async AJAX workflows).
      */
-    public function destroy(Request $request): RedirectResponse 
+    public function destroy(Request $request): RedirectResponse|JsonResponse 
     {
         $request->validateWithBag('userDeletion', [
             'password' => ['required', 'current_password'],
@@ -79,19 +88,22 @@ class ProfileController extends Controller
 
         $user = $request->user();
 
-        /**
-         * FIXED: Moved ActivityLog::record BEFORE Auth::logout() and $user->delete().
-         * This allows the system to correctly associate the 'user_id' with the log 
-         * before the record is purged from the database.
-         */
-        ActivityLog::record('ACCOUNT DELETED', 'User voluntarily deleted their account', $user->name);
+        // Log the account deactivation event before session invalidation
+        ActivityLog::record('ACCOUNT DELETED', 'User voluntarily deactivated their account', $user->name);
 
         Auth::logout();
-
-        $user->delete();
+        $user->delete(); // Soft-deletes user record
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+
+        // Deliver clean, non-redirect JSON to the async frontend deactivation interceptor
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'redirect' => url('/')
+            ]);
+        }
 
         return Redirect::to('/');
     }
@@ -110,6 +122,38 @@ class ProfileController extends Controller
             'password' => Hash::make($validated['password']),
         ]);
 
+        ActivityLog::record('PASSWORD UPDATED', "User updated their account password.", $request->user()->name, $request->user()->id);
+
         return back()->with('status', 'password-updated');
+    }
+
+    /**
+     * Update unverified email corrections on the fly directly from the verification hub.
+     */
+    public function changeUnverifiedEmail(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        if ($user->hasVerifiedEmail()) {
+            return redirect()->route('dashboard');
+        }
+
+        $request->validate([
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,' . $user->id, 'regex:/^[^@]+@[^@]+$/'],
+        ], [
+            'email.regex' => 'The email address must contain exactly one @ symbol.',
+            'email.unique' => 'This email address is already registered.'
+        ]);
+
+        $user->email = $request->email;
+        $user->email_verified_at = null;
+        $user->save();
+
+        ActivityLog::record('EMAIL CORRECTED', "User changed their unverified email address to {$user->email}.", $user->name, $user->id);
+
+        // Clear current OTP session to trigger a fresh OTP email upon prompt redirection
+        session()->forget('email_otp_code');
+
+        return back()->with('status', 'verification-code-sent');
     }
 }

@@ -14,24 +14,28 @@ return new class extends Migration
         // 1. Stores metadata and patient demographics snapshot for each digitized report
         Schema::create('laboratory_history_records', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('laboratory_history_id')->constrained('laboratory_histories')->onDelete('cascade');
+            
+            $table->foreignId('laboratory_history_id')
+                ->constrained('laboratory_histories')
+                ->onDelete('cascade');
+
             $table->date('date_of_record');
-            $table->string('requested_by');
-            
-            // Patient Demographics Snapshot
-            $table->string('patient_first_name');
-            $table->string('patient_middle_name')->nullable();
-            $table->string('patient_last_name');
-            $table->string('patient_name'); // Composite Full Name
-            $table->integer('age');
-            $table->string('sex');
-            
-            // Address Snapshot
-            $table->string('patient_street');
-            $table->string('patient_barangay');
-            $table->string('patient_city');
-            $table->string('patient_province');
-            $table->text('patient_address'); // Composite Full Address
+            $table->string('requested_by', 100); // e.g. "INDIVIDUAL", "MEDSCREEN CLINIC", "PSA"
+
+            // Patient Demographics Snapshot (Symmetric with core user schema)
+            $table->string('patient_first_name', 60);
+            $table->string('patient_middle_name', 60)->nullable(); // Nullable per PSA guidelines
+            $table->string('patient_last_name', 60);
+            $table->string('patient_name', 255); // Composite full display name
+            $table->unsignedTinyInteger('age');  // Constrained to unsigned byte
+            $table->enum('sex', ['Male', 'Female']);
+
+            // Address Snapshot (PSGC API Compatible)
+            $table->string('patient_street', 150);
+            $table->string('patient_barangay', 100);
+            $table->string('patient_city', 100);       // City or Municipality
+            $table->string('patient_province', 100);
+            $table->string('patient_address', 255);    // Composite full address
 
             $table->timestamps();
         });
@@ -39,19 +43,32 @@ return new class extends Migration
         // 2. Stores multiple clinical scan files attached to a single record
         Schema::create('laboratory_history_scans', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('history_record_id')->constrained('laboratory_history_records')->onDelete('cascade');
-            $table->string('label'); // e.g., 'Hematology Report'
-            $table->string('file_path');
-            $table->string('certificate_no')->nullable(); // FIXED: Added optional certificate number for historical scans
+
+            $table->foreignId('history_record_id')
+                ->constrained('laboratory_history_records')
+                ->onDelete('cascade');
+
+            $table->string('label', 100);        // e.g. "Hematology Report", "Urinalysis Scans"
+            $table->string('file_path', 255);
+            $table->string('certificate_no', 50)->nullable()->index(); // Indexed for public verification searches
+
             $table->timestamps();
         });
 
         // 3. Stores multiple procedure badges tagged to a single record
         Schema::create('laboratory_history_procedures', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('history_record_id')->constrained('laboratory_history_records')->onDelete('cascade');
-            $table->string('procedure_name'); // e.g., 'WBC Count'
+
+            $table->foreignId('history_record_id')
+                ->constrained('laboratory_history_records')
+                ->onDelete('cascade');
+
+            $table->string('procedure_name', 100); // e.g. "WBC Count", "Fecalysis"
+
             $table->timestamps();
+
+            // Compound unique constraint prevents duplicate procedures on the same archival record
+            $table->unique(['history_record_id', 'procedure_name'], 'history_procedure_unique');
         });
     }
 

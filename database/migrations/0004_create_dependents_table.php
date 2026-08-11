@@ -9,31 +9,39 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up(): void {
+    public function up(): void
+    {
         Schema::create('dependents', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
             
-            // Split Name Fields (1NF Atomic) [159]
-            $table->string('first_name');
-            $table->string('middle_name')->nullable();
-            $table->string('last_name');
-            
+            // Foreign Key linking directly to the parent user
+            $table->foreignId('user_id')
+                ->constrained('users')
+                ->onDelete('cascade');
+
+            // 1. Split Name Fields (1NF Atomic) with strict boundaries
+            $table->string('first_name', 60);
+            $table->string('middle_name', 60)->nullable(); // Nullable per PSA standards
+            $table->string('last_name', 60);
+            $table->string('suffix', 10)->nullable(); // Added for minor suffixes (e.g. JR., III)
+
+            // 2. Minor Profile Details
             $table->date('birthdate');
-            $table->string('sex');
-            $table->string('phone')->nullable();
-            $table->string('relationship'); // e.g. Son, Daughter, Parent, Spouse [159]
-            
-            // Split Address Fields (3NF Atomic - PSGC API Compatible) [159]
-            $table->string('street');
-            $table->string('barangay');
-            $table->string('city');
-            $table->string('province');
+            $table->enum('sex', ['Male', 'Female']);
+            $table->string('phone', 11)->nullable(); // Nullable but constrained if provided
+            $table->enum('relationship', ['SON', 'DAUGHTER']); // Enforces minor-only policy
+
+            // 3. Split Address Fields (3NF Atomic - PSGC API Compatible)
+            $table->string('street', 150);
+            $table->string('barangay', 100);
+            $table->string('city', 100);       // City or Municipality
+            $table->string('province', 100);
 
             $table->timestamps();
 
-            // AUDIT & DATA RETENTION: SoftDeletes (25-year retention for minor records)
-            $table->softDeletes(); // Adds 'deleted_at' column for compliant deactivations
+            // AUDIT & DATA RETENTION COMPLIANCE [102]
+            // Retains minor records safely for medical deactivations
+            $table->softDeletes(); 
         });
     }
 

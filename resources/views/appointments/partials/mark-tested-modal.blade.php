@@ -12,14 +12,20 @@
             @method('PATCH')
             
             <!-- Hidden action triggers: progresses to tested or retest -->
-            <input type="hidden" name="action" id="action_{{ $app->id }}" value="{{ $isAlreadyTested ? 'retest' : 'tested' }}">
+            <input type="hidden" name="action" id="action_{{ $app->id }}" value="{{ $isAlreadyTested ? 'retest' : 'tested' }}"> 
 
             <div class="modal-header border-secondary bg-secondary bg-opacity-10 py-3 d-flex flex-column align-items-stretch">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="modal-title text-accent fw-bold uppercase small m-0" id="modal_title_{{ $app->id }}">
                         <i class="bi bi-shield-check-fill me-2 fs-5"></i>{{ $isAlreadyTested ? 'Clinical Retest Request Hub' : 'Clinical Sampling & Verification Hub' }}
                     </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <div class="d-flex gap-2 align-items-center ms-auto">
+                        {{-- Distinctive Solid-Style Reset Button matching Resubmit modal layout --}}
+                        <button type="button" class="btn btn-sm btn-warning text-dark fw-extrabold py-1.5 px-3 d-flex align-items-center gap-1.5 shadow" style="font-size: 0.725rem; border-radius: 6px; letter-spacing: 0.5px; border: 1px solid #d39e00;" onclick="resetMarkTestedForm('{{ $app->id }}')">
+                            <i class="bi bi-arrow-counterclockwise fs-6"></i> RESET EDITS
+                        </button>
+                        <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
                 </div>
 
                 <!-- MAIN WORKFLOW TABS (Hidden entirely if already tested) -->
@@ -61,20 +67,24 @@
                 <div class="modal-step-pane-{{ $app->id }}" id="modal-pane-1-{{ $app->id }}">
                     <h6 class="text-accent mb-3 small fw-bold uppercase border-bottom border-secondary border-opacity-10 pb-2">1. Demographics Snapshot</h6>
                     <div class="row g-3">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="small text-secondary fw-bold mb-1 uppercase">First Name</label>
                             <input type="text" name="patient_first_name" class="form-control py-2 uppercase fw-bold" value="{{ $app->patient_first_name }}" required>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Middle Name</label>
                             <input type="text" name="patient_middle_name" class="form-control py-2 uppercase fw-bold" value="{{ $app->patient_middle_name ?? 'N/A' }}">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Last Name</label>
                             <input type="text" name="patient_last_name" class="form-control py-2 uppercase fw-bold" value="{{ $app->patient_last_name }}" required>
                         </div>
+                        <div class="col-md-3">
+                            <label class="small text-secondary fw-bold mb-1 uppercase">Suffix (Opt.)</label>
+                            <input type="text" name="patient_suffix" id="modal_suffix_{{ $app->id }}" list="suffix_options" class="form-control py-2 uppercase fw-bold" value="{{ $app->patient_suffix }}">
+                        </div>
                         <div class="col-md-6">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">Birthdate</label>
+                            <label class="small text-secondary fw-bold mb-1">Birthdate</label>
                             <input type="date" name="patient_birthdate" id="bday_{{ $app->id }}" class="form-control py-3" value="{{ $app->patient_birthdate ? $app->patient_birthdate->format('Y-m-d') : '' }}" required max="{{ date('Y-m-d') }}" onchange="calculateModalAge({{ $app->id }})">
                             <small class="text-muted mt-1 d-block">Age calculated on site: <span id="age_val_{{ $app->id }}" class="fw-bold text-accent">{{ $app->patient_age }}</span> Years Old</small>
                         </div>
@@ -87,7 +97,11 @@
                         </div>
                         <div class="col-md-3">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Contact Phone</label>
-                            <input type="text" name="patient_phone" class="form-control py-2" value="{{ $app->patient_phone }}" required>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text border-secondary bg-secondary bg-opacity-25 text-main fw-bold">09</span>
+                                <input type="text" id="modal_phone_display_{{ $app->id }}" class="form-control py-2 shadow-none" placeholder="171234567" maxlength="9" oninput="this.value = this.value.replace(/[^0-9]/g, ''); syncModalPhone('{{ $app->id }}');" required>
+                            </div>
+                            <input type="hidden" name="patient_phone" id="modal_in_phone_{{ $app->id }}" value="{{ $app->patient_phone }}">
                         </div>
                     </div>
                 </div>
@@ -137,7 +151,7 @@
                                         <div class="form-check p-2 rounded test-checkbox-item border border-secondary border-opacity-10 bg-secondary bg-opacity-5">
                                             <input class="form-check-input ms-0 me-2 test-checkbox-{{ $app->id }}" type="checkbox" name="service_ids[]" value="{{ $s->id }}" id="chk_{{ $app->id }}_{{ $s->id }}" data-name="{{ strtoupper($s->name) }}" data-price="{{ $s->price }}" {{ in_array($s->id, $linkedTests) ? 'checked' : '' }} onchange="calculateModalTotal({{ $app->id }})">
                                             <label class="form-check-label text-main smaller" for="chk_{{ $app->id }}_{{ $s->id }}">
-                                                {{ strtoupper($s->name) }} (₱{{ number_format($s->price, 2) }})
+                                                {{ strtoupper($s->name) }} ( {{ number_format($s->price, 2) }})
                                             </label>
                                         </div>
                                     </div>
@@ -155,7 +169,7 @@
                             </div>
                             <div class="d-flex justify-content-between p-2.5 rounded bg-secondary bg-opacity-10 mt-2">
                                 <span class="fw-bold uppercase small text-secondary">Estimated Bill:</span>
-                                <span class="text-accent fw-bold fs-6">₱<span id="lbl_total_{{ $app->id }}">{{ number_format($app->totalPrice(), 2) }}</span></span>
+                                <span class="text-accent fw-bold fs-6"> <span id="lbl_total_{{ $app->id }}">{{ number_format($app->totalPrice(), 2) }}</span></span>
                             </div>
                         </div>
                     </div>
@@ -168,7 +182,7 @@
                         <h6 class="text-accent mb-3 small fw-bold uppercase border-bottom border-secondary border-opacity-10 pb-2">4. Processing Parameters</h6>
                         <div class="row g-3 align-items-center">
                             <div class="col-md-4">
-                                <label class="small text-secondary fw-bold mb-1 uppercase">Confirmed Price (₱)</label>
+                                <label class="small text-secondary fw-bold mb-1 uppercase">Confirmed Price (PHP)</label>
                                 <input type="number" step="0.01" name="payment_amount" id="val_total_{{ $app->id }}" class="form-control py-2 fw-bold text-accent" value="{{ $app->payment_amount ?? $app->totalPrice() }}" required min="0">
                             </div>
                             <div class="col-md-4">
@@ -244,416 +258,544 @@
 </div>
 
 <script>
-    (function() {
-        const appId = {{ $app->id }};
-        const savedProv = "{{ $app->patient_province }}";
-        const savedCity = "{{ $app->patient_city }}";
-        const savedBrgy = "{{ $app->patient_barangay }}";
+(function() {
+    const appId = {{ $app->id }};
+    const savedProv = "{{ $app->patient_province }}";
+    const savedCity = "{{ $app->patient_city }}";
+    const savedBrgy = "{{ $app->patient_barangay }}";
 
-        document.addEventListener('DOMContentLoaded', async () => {
-            const modalEl = document.getElementById(`testModal${appId}`);
-            if (modalEl) {
-                modalEl.addEventListener('show.bs.modal', async () => {
-                    await fetchModalProvinces(appId, savedProv, savedCity, savedBrgy);
-                    calculateModalTotal(appId);
+    document.addEventListener('DOMContentLoaded', async () => {
+        const modalEl = document.getElementById(`testModal${appId}`);
+        if (modalEl) {
+            modalEl.addEventListener('show.bs.modal', async () => {
+                await fetchModalProvinces(appId, savedProv, savedCity, savedBrgy);
+                calculateModalTotal(appId);
 
-                    // Dynamic initialization check if the appointment status is already tested
-                    @if($isAlreadyTested)
-                        setModalMainAction(appId, 'retest');
-                    @endif
-                });
-            }
-        });
-    })();
+                // Initialize phone display prefix on load safely
+                let phoneVal = '{{ $app->patient_phone }}'.trim();
+                if (phoneVal.startsWith('+639')) phoneVal = '09' + phoneVal.substring(4);
+                if (phoneVal.startsWith('639')) phoneVal = '09' + phoneVal.substring(3);
+                const displayInput = document.getElementById(`modal_phone_display_${appId}`);
+                const hiddenInput = document.getElementById(`modal_in_phone_${appId}`);
+                if (displayInput && hiddenInput) {
+                    if (phoneVal.startsWith('09') && phoneVal.length === 11) {
+                        displayInput.value = phoneVal.substring(2);
+                        hiddenInput.value = phoneVal;
+                    } else {
+                        displayInput.value = phoneVal;
+                        hiddenInput.value = phoneVal;
+                    }
+                }
 
-    // 1. CHANNELS TAB CONTROLLER
-    function setModalMainAction(appId, action) {
-        document.getElementById(`action_${appId}`).value = action;
-        const testPane = document.getElementById(`tested_process_fields_${appId}`);
-        const retestPane = document.getElementById(`retest_process_fields_${appId}`);
-        const submitBtn = document.getElementById(`modal_submit_btn_${appId}`);
-        const selectRetest = document.getElementById(`retest_reason_select_${appId}`);
+                // Dynamic initialization check if the appointment status is already tested
+                @if($isAlreadyTested)
+                    setModalMainAction(appId, 'retest');
+                @endif
+            });
+        }
+    });
+})();
 
-        if (action === 'tested') {
-            testPane.classList.remove('d-none');
-            retestPane.classList.add('d-none');
-            submitBtn.innerText = "APPROVE & RECORD SAMPLING";
-            submitBtn.className = "btn-custom btn-accent py-2 px-4 fw-bold uppercase";
-            selectRetest.removeAttribute('required');
+function syncModalPhone(appId) {
+    const displayInput = document.getElementById(`modal_phone_display_${appId}`);
+    const hiddenInput = document.getElementById(`modal_in_phone_${appId}`);
+    if (displayInput && hiddenInput) {
+        hiddenInput.value = displayInput.value ? '09' + displayInput.value : '';
+    }
+}
+
+/**
+ * Reverts all edited fields inside the clinical mark-tested modal back to originally saved server values
+ */
+window.resetMarkTestedForm = async function(appId) {
+    if (!confirm('Revert all changes back to originally saved values?')) return;
+
+    const form = document.getElementById(`markTestedForm_${appId}`);
+    
+    // Reset standard demographics
+    form.querySelector('[name="patient_first_name"]').value = '{{ $app->patient_first_name }}';
+    form.querySelector('[name="patient_middle_name"]').value = '{{ $app->patient_middle_name ?? "N/A" }}';
+    form.querySelector('[name="patient_last_name"]').value = '{{ $app->patient_last_name }}';
+    
+    const suffixInput = document.getElementById(`modal_suffix_${appId}`);
+    if (suffixInput) suffixInput.value = '{{ $app->patient_suffix }}';
+
+    form.querySelector('[name="patient_sex"]').value = '{{ $app->patient_sex }}';
+    form.querySelector('[name="patient_birthdate"]').value = '{{ $app->patient_birthdate ? $app->patient_birthdate->format("Y-m-d") : "" }}';
+
+    // Recalculate age snapshot display
+    calculateModalAge(appId);
+
+    // Reset phone view display
+    let originalPhone = '{{ $app->patient_phone }}'.trim();
+    if (originalPhone.startsWith('+639')) originalPhone = '09' + originalPhone.substring(4);
+    if (originalPhone.startsWith('639')) originalPhone = '09' + originalPhone.substring(3);
+    const displayInput = document.getElementById(`modal_phone_display_${appId}`);
+    const hiddenInput = document.getElementById(`modal_in_phone_${appId}`);
+    if (displayInput && hiddenInput) {
+        if (originalPhone.startsWith('09') && originalPhone.length === 11) {
+            displayInput.value = originalPhone.substring(2);
+            hiddenInput.value = originalPhone;
         } else {
-            testPane.classList.add('d-none');
-            retestPane.classList.remove('d-none');
-            submitBtn.innerText = "CONFIRM RETEST EXCEPTION";
-            submitBtn.className = "btn-custom btn-outline-danger py-2 px-4 fw-bold uppercase";
-            selectRetest.setAttribute('required', 'required');
+            displayInput.value = originalPhone;
+            hiddenInput.value = originalPhone;
         }
     }
 
-    // 2. MODAL STEPPER NAVIGATION
-    function switchModalSubTab(appId, step) {
-        // Toggle Active Nav Classes
-        document.querySelectorAll(`.modal-sub-tab-btn-${appId}`).forEach((btn, idx) => {
-            if (idx + 1 === step) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
-        });
+    // Reset cascading address layers using fixed json static endpoints
+    await fetchModalProvinces(appId, '{{ $app->patient_province }}', '{{ $app->patient_city }}', '{{ $app->patient_barangay }}');
+    form.querySelector('[name="patient_street"]').value = '{{ $app->patient_street }}';
 
-        // Toggle Pane Visibility
-        document.querySelectorAll(`.modal-step-pane-${appId}`).forEach((pane, idx) => {
-            if (idx + 1 === step) {
-                pane.classList.remove('d-none');
-            } else {
-                pane.classList.add('d-none');
-            }
-        });
+    // Reset tests checklist
+    const originalTests = @json($linkedTests);
+    document.querySelectorAll(`.test-checkbox-${appId}`).forEach(cb => {
+        cb.checked = originalTests.includes(parseInt(cb.value));
+    });
+    calculateModalTotal(appId);
+
+    // Reset processing estimations
+    const estHours = document.getElementById(`est_hours_${appId}`);
+    if (estHours) {
+        estHours.value = '{{ $app->result_estimated_at ? Carbon\Carbon::parse($app->tested_at)->diffInHours($app->result_estimated_at) : "0" }}';
+    }
+    const estMins = document.getElementById(`est_mins_${appId}`);
+    if (estMins) {
+        estMins.value = '{{ $app->result_estimated_at ? (Carbon\Carbon::parse($app->tested_at)->diffInMinutes($app->result_estimated_at) % 60) : "0" }}';
+    }
+    
+    const payAmount = document.getElementById(`val_total_${appId}`);
+    if (payAmount) {
+        payAmount.value = '{{ $app->payment_amount ?? $app->totalPrice() }}';
     }
 
-    // 3. DYNAMIC AGE DETECTOR
-    function calculateModalAge(appId) {
-        const bdayInput = document.getElementById(`bday_${appId}`).value;
-        if (!bdayInput) return;
-        const bday = new Date(bdayInput);
-        const today = new Date();
-        let age = today.getFullYear() - bday.getFullYear();
-        const m = today.getMonth() - bday.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < bday.getDate())) {
-            age--;
-        }
-        document.getElementById(`age_val_${appId}`).innerText = age;
+    // Reset workflow selection triggers
+    @if($isAlreadyTested)
+        setModalMainAction(appId, 'retest');
+    @else
+        setModalMainAction(appId, 'tested');
+    @endif
+
+    // Switch view back to first tab
+    switchModalSubTab(appId, 1);
+}
+
+// 1. CHANNELS TAB CONTROLLER
+function setModalMainAction(appId, action) {
+    document.getElementById(`action_${appId}`).value = action;
+    const testPane = document.getElementById(`tested_process_fields_${appId}`);
+    const retestPane = document.getElementById(`retest_process_fields_${appId}`);
+    const submitBtn = document.getElementById(`modal_submit_btn_${appId}`);
+    const selectRetest = document.getElementById(`retest_reason_select_${appId}`);
+
+    if (action === 'tested') {
+        testPane.classList.remove('d-none');
+        retestPane.classList.add('d-none');
+        submitBtn.innerText = "APPROVE & RECORD SAMPLING";
+        submitBtn.className = "btn-custom btn-accent py-2 px-4 fw-bold uppercase";
+        selectRetest.removeAttribute('required');
+    } else {
+        testPane.classList.add('d-none');
+        retestPane.classList.remove('d-none');
+        submitBtn.innerText = "CONFIRM RETEST EXCEPTION";
+        submitBtn.className = "btn-custom btn-outline-danger py-2 px-4 fw-bold uppercase";
+        selectRetest.setAttribute('required', 'required');
     }
+}
 
-    // 4. MULTI-SELECT BILL COMPILER WITH EMBEDDED LISTING
-    function calculateModalTotal(appId) {
-        let sum = 0;
-        const listContainer = document.getElementById(`modal_selected_tests_list_${appId}`);
-        listContainer.innerHTML = '';
-
-        document.querySelectorAll(`.test-checkbox-${appId}:checked`).forEach(cb => {
-            const price = parseFloat(cb.dataset.price || 0);
-            sum += price;
-            
-            listContainer.innerHTML += `
-                <div class="d-flex justify-content-between align-items-center mb-1 py-1 border-bottom border-secondary border-opacity-5">
-                    <span class="small text-main font-semibold" style="font-size:0.75rem;"><i class="bi bi-check2 text-accent me-1.5"></i>${cb.dataset.name}</span>
-                    <span class="small text-accent" style="font-size:0.75rem;">₱${price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-            `;
-        });
-
-        if (listContainer.innerHTML === '') {
-            listContainer.innerHTML = '<div class="text-center py-4 text-muted small italic">No tests selected yet.</div>';
-        }
-
-        document.getElementById(`lbl_total_${appId}`).innerText = sum.toLocaleString(undefined, { minimumFractionDigits: 2 });
-        document.getElementById(`val_total_${appId}`).value = sum;
-    }
-
-    // 5. DIAGNOSTICS SEARCH FILTER
-    function filterModalTests(appId) {
-        const query = document.getElementById(`test_search_${appId}`).value.toUpperCase();
-        document.querySelectorAll(`.modal-test-item-${appId}`).forEach(item => {
-            const name = item.dataset.name || '';
-            item.style.display = name.includes(query) ? '' : 'none';
-        });
-    }
-
-    // 6. TOGGLE CUSTOM RETEST DETAILS
-    function toggleModalCustomRetest(appId, val) {
-        const wrapper = document.getElementById(`retest_custom_reason_wrapper_${appId}`);
-        const textarea = document.getElementById(`retest_custom_reason_${appId}`);
-
-        if (val === 'Others') {
-            wrapper.classList.remove('d-none');
-            textarea.setAttribute('required', 'required');
-            textarea.focus();
+// 2. MODAL STEPPER NAVIGATION
+function switchModalSubTab(appId, step) {
+    // Toggle Active Nav Classes
+    document.querySelectorAll(`.modal-sub-tab-btn-${appId}`).forEach((btn, idx) => {
+        if (idx + 1 === step) {
+            btn.classList.add('active');
         } else {
-            wrapper.classList.add('d-none');
-            textarea.removeAttribute('required');
+            btn.classList.remove('active');
+        }
+    });
+
+    // Toggle Pane Visibility
+    document.querySelectorAll(`.modal-step-pane-${appId}`).forEach((pane, idx) => {
+        if (idx + 1 === step) {
+            pane.classList.remove('d-none');
+        } else {
+            pane.classList.add('d-none');
+        }
+    });
+}
+
+// 3. DYNAMIC AGE DETECTOR
+function calculateModalAge(appId) {
+    const bdayInput = document.getElementById(`bday_${appId}`).value;
+    if (!bdayInput) return;
+    const bday = new Date(bdayInput);
+    const today = new Date();
+    let age = today.getFullYear() - bday.getFullYear();
+    const m = today.getMonth() - bday.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < bday.getDate())) {
+        age--;
+    }
+    document.getElementById(`age_val_${appId}`).innerText = age;
+}
+
+// 4. MULTI-SELECT BILL COMPILER WITH EMBEDDED LISTING
+function calculateModalTotal(appId) {
+    let sum = 0;
+    const listContainer = document.getElementById(`modal_selected_tests_list_${appId}`);
+    listContainer.innerHTML = '';
+
+    document.querySelectorAll(`.test-checkbox-${appId}:checked`).forEach(cb => {
+        const price = parseFloat(cb.dataset.price || 0);
+        sum += price;
+        
+        listContainer.innerHTML += `
+            <div class="d-flex justify-content-between align-items-center mb-1 py-1 border-bottom border-secondary border-opacity-5">
+                <span class="small text-main font-semibold" style="font-size:0.75rem;"><i class="bi bi-check2 text-accent me-1.5"></i>${cb.dataset.name}</span>
+                <span class="small text-accent" style="font-size:0.75rem;"> ${price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+        `;
+    });
+
+    if (listContainer.innerHTML === '') {
+        listContainer.innerHTML = '<div class="text-center py-4 text-muted small italic">No tests selected yet.</div>';
+    }
+
+    document.getElementById(`lbl_total_${appId}`).innerText = sum.toLocaleString(undefined, { minimumFractionDigits: 2 });
+    document.getElementById(`val_total_${appId}`).value = sum;
+}
+
+// 5. DIAGNOSTICS SEARCH FILTER
+function filterModalTests(appId) {
+    const query = document.getElementById(`test_search_${appId}`).value.toUpperCase();
+    document.querySelectorAll(`.modal-test-item-${appId}`).forEach(item => {
+        const name = item.dataset.name || '';
+        item.style.display = name.includes(query) ? '' : 'none';
+    });
+}
+
+// 6. TOGGLE CUSTOM RETEST DETAILS
+function toggleModalCustomRetest(appId, val) {
+    const wrapper = document.getElementById(`retest_custom_reason_wrapper_${appId}`);
+    const textarea = document.getElementById(`retest_custom_reason_${appId}`);
+
+    if (val === 'Others') {
+        wrapper.classList.remove('d-none');
+        textarea.setAttribute('required', 'required');
+        textarea.focus();
+    } else {
+        wrapper.classList.add('d-none');
+        textarea.removeAttribute('required');
+    }
+}
+
+// 7. CLIENT-SIDE VALIDATION EXCEPTION CHECKER
+function validateModalForm(appId, event) {
+    const form = document.getElementById(`markTestedForm_${appId}`);
+    const action = document.getElementById(`action_${appId}`).value;
+    let errors = [];
+
+    // Tab 1: Validate Demographics
+    const firstName = form.querySelector('[name="patient_first_name"]').value.trim();
+    const lastName = form.querySelector('[name="patient_last_name"]').value.trim();
+    const birthdate = form.querySelector('[name="patient_birthdate"]').value;
+
+    if (!firstName) errors.push("First Name is missing on Tab 1.");
+    if (!lastName) errors.push("Last Name is missing on Tab 1.");
+    
+    // Birthdate & Age Rules validation matching user policy guidelines
+    if (!birthdate) {
+        errors.push("Birthdate is missing on Tab 1.");
+    } else {
+        const age = Math.floor((new Date() - new Date(birthdate)) / (1000 * 60 * 60 * 24 * 365.25));
+        const isDependent = @json($app->dependent_id !== null);
+        if (age < 0) {
+            errors.push("Birthdate cannot be in the future.");
+        } else if (isDependent) {
+            if (age >= 18) {
+                errors.push("Dependents must be minors (under 18 years of age).");
+            }
+        } else {
+            if (age < 18) {
+                errors.push("You must be at least 18 years old to book a personal appointment.");
+            }
         }
     }
 
-    // 7. CLIENT-SIDE VALIDATION EXCEPTION CHECKER
-    function validateModalForm(appId, event) {
-        const form = document.getElementById(`markTestedForm_${appId}`);
-        const action = document.getElementById(`action_${appId}`).value;
-        let errors = [];
-
-        // Tab 1: Validate Demographics
-        const firstName = form.querySelector('[name="patient_first_name"]').value.trim();
-        const lastName = form.querySelector('[name="patient_last_name"]').value.trim();
-        const birthdate = form.querySelector('[name="patient_birthdate"]').value;
-        const phone = form.querySelector('[name="patient_phone"]').value.trim();
-
-        if (!firstName) errors.push("First Name is missing on Tab 1.");
-        if (!lastName) errors.push("Last Name is missing on Tab 1.");
-        if (!birthdate) errors.push("Birthdate is missing on Tab 1.");
-        if (!phone) errors.push("Contact Phone is missing on Tab 1.");
-
-        // Tab 2: Validate Address
-        const prov = form.querySelector('#prov_' + appId).value;
-        const city = form.querySelector('#city_' + appId).value;
-        const brgy = form.querySelector('#brgy_' + appId).value;
-        const street = form.querySelector('[name="patient_street"]').value.trim();
-
-        if (!prov) errors.push("Province selection is missing on Tab 2.");
-        if (!city) errors.push("City/Municipality selection is missing on Tab 2.");
-        if (!brgy) errors.push("Barangay selection is missing on Tab 2.");
-        if (!street) errors.push("Street Address is missing on Tab 2.");
-
-        // Tab 3: Validate Tests Checklist
-        const checkedTests = form.querySelectorAll(`.test-checkbox-${appId}:checked`);
-        if (checkedTests.length === 0) {
-            errors.push("At least one diagnostic test must be checked on Tab 3.");
-        }
-
-        // Tab 4: Validate Workflow Parameters
-        if (action === 'tested') {
-            const payAmount = form.querySelector('[name="payment_amount"]').value;
-            if (!payAmount || parseFloat(payAmount) < 0) {
-                errors.push("Confirmed Collection Amount must be a valid positive number on Tab 4.");
-            }
-        } else if (action === 'retest') {
-            const reason = document.getElementById(`retest_reason_select_${appId}`).value;
-            if (!reason) {
-                errors.push("Please select a valid return justification on Tab 4.");
-            } else if (reason === 'Others') {
-                const customReason = document.getElementById(`retest_custom_reason_${appId}`).value.trim();
-                if (!customReason || customReason.length < 5) {
-                    errors.push("Custom Retest Reason is required (min 5 characters) on Tab 4.");
-                }
-            }
-        }
-
-        if (errors.length > 0) {
-            event.preventDefault();
-            event.stopPropagation();
-
-            let errorHtml = '<ul class="mb-0 ps-3 text-danger">';
-            errors.forEach(err => {
-                errorHtml += `<li class="mb-1 small font-semibold">${err}</li>`;
-            });
-            errorHtml += '</ul>';
-
-            document.getElementById(`modal_validation_error_msg_${appId}`).innerHTML = errorHtml;
-            
-            // Trigger local validation modal
-            const errModalEl = document.getElementById(`modalValidationError_${appId}`);
-            const errModal = new bootstrap.Modal(errModalEl);
-            errModal.show();
-
-            return false;
-        }
-
-        // Convert option codes to their text labels before submit to preserve high contrast display text in database
-        compileModalAddress(appId);
-        return true;
+    // Contact Phone validation
+    const phone = document.getElementById(`modal_in_phone_${appId}`).value;
+    const displayPhone = document.getElementById(`modal_phone_display_${appId}`).value;
+    const phoneRegex = /^09\d{9}$/;
+    if (!displayPhone) {
+        errors.push("Contact Phone is missing on Tab 1.");
+    } else if (!phoneRegex.test(phone)) {
+        errors.push("Phone number must start with 09 and contain exactly 11 digits.");
     }
 
-    // 8. COMPILE ADDRESS VALUES ON SUBMIT
-    function compileModalAddress(appId) {
-        const prov = document.getElementById(`prov_${appId}`);
-        const city = document.getElementById(`city_${appId}`);
-        const brgy = document.getElementById(`brgy_${appId}`);
+    // Tab 2: Validate Address
+    const prov = form.querySelector('#prov_' + appId).value;
+    const city = form.querySelector('#city_' + appId).value;
+    const brgy = form.querySelector('#brgy_' + appId).value;
+    const street = form.querySelector('[name="patient_street"]').value.trim();
 
-        if (prov && city && brgy) {
-            const provName = prov.options[prov.selectedIndex]?.text || '';
-            const cityName = city.options[city.selectedIndex]?.text || '';
-            const brgyName = brgy.options[brgy.selectedIndex]?.text || '';
+    if (!prov) errors.push("Province selection is missing on Tab 2.");
+    if (!city) errors.push("City/Municipality selection is missing on Tab 2.");
+    if (!brgy) errors.push("Barangay selection is missing on Tab 2.");
+    if (!street) errors.push("Street Address is missing on Tab 2.");
 
-            if (provName && !provName.includes('Select') &&
-                cityName && !cityName.includes('Select') &&
-                brgyName && !brgyName.includes('Select')) {
-                prov.options[prov.selectedIndex].value = provName;
-                city.options[city.selectedIndex].value = cityName;
-                brgy.options[brgy.selectedIndex].value = brgyName;
+    // Tab 3: Validate Tests Checklist
+    const checkedTests = form.querySelectorAll(`.test-checkbox-${appId}:checked`);
+    if (checkedTests.length === 0) {
+        errors.push("At least one diagnostic test must be checked on Tab 3.");
+    }
+
+    // Tab 4: Validate Workflow Parameters
+    if (action === 'tested') {
+        const payAmount = form.querySelector('[name="payment_amount"]').value;
+        if (!payAmount || parseFloat(payAmount) < 0) {
+            errors.push("Confirmed Collection Amount must be a valid positive number on Tab 4.");
+        }
+    } else if (action === 'retest') {
+        const reason = document.getElementById(`retest_reason_select_${appId}`).value;
+        if (!reason) {
+            errors.push("Please select a valid return justification on Tab 4.");
+        } else if (reason === 'Others') {
+            const customReason = document.getElementById(`retest_custom_reason_${appId}`).value.trim();
+            if (!customReason || customReason.length < 5) {
+                errors.push("Custom Retest Reason is required (min 5 characters) on Tab 4.");
             }
         }
     }
 
-    // 9. PSGC CASCADING ENGINE
-    async function fetchModalProvinces(appId, savedProv, savedCity, savedBrgy) {
-        const provSel = document.getElementById(`prov_${appId}`);
-        if (provSel && provSel.options.length > 1) return; // Prevent double load
-        try {
-            const res = await fetch('https://psgc.gitlab.io/api/provinces/');
-            const data = await res.json();
-            provSel.innerHTML = '<option value="">Select Province</option>';
-            data.sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
-                provSel.innerHTML += `<option value="${p.code}">${p.name}</option>`;
-            });
+    if (errors.length > 0) {
+        event.preventDefault();
+        event.stopPropagation();
 
-            if (savedProv) {
-                // FIXED: Support matching by either text or numeric code format safely
-                let provOpt = Array.from(provSel.options).find(opt => 
-                    opt.text.toUpperCase() === savedProv.toUpperCase() || 
-                    opt.value === savedProv
-                );
-                if (provOpt) {
-                    provSel.value = provOpt.value;
-                    await fetchModalCities(appId, provOpt.value, savedCity, savedBrgy);
-                }
-            }
-        } catch (e) {
-            console.error("Provinces fetch failed:", e);
-        }
+        let errorHtml = '<ul class="mb-0 ps-3 text-danger">';
+        errors.forEach(err => {
+            errorHtml += `<li class="mb-1 small font-semibold">${err}</li>`;
+        });
+        errorHtml += '</ul>';
+
+        document.getElementById(`modal_validation_error_msg_${appId}`).innerHTML = errorHtml;
+        
+        // Trigger local validation modal
+        const errModalEl = document.getElementById(`modalValidationError_${appId}`);
+        const errModal = new bootstrap.Modal(errModalEl);
+        errModal.show();
+
+        return false;
     }
 
-    async function fetchModalCities(appId, provCode, savedCity = '', savedBrgy = '') {
-        const citySel = document.getElementById(`city_${appId}`);
-        const brgySel = document.getElementById(`brgy_${appId}`);
-        if (!citySel || !brgySel) return;
+    // Convert option codes to their text labels before submit to preserve high contrast display text in database
+    compileModalAddress(appId);
+    return true;
+}
 
-        citySel.disabled = true;
-        brgySel.disabled = true;
-        citySel.innerHTML = '<option value="">Loading Cities...</option>';
+// 8. COMPILE ADDRESS VALUES ON SUBMIT
+function compileModalAddress(appId) {
+    const prov = document.getElementById(`prov_${appId}`);
+    const city = document.getElementById(`city_${appId}`);
+    const brgy = document.getElementById(`brgy_${appId}`);
 
-        try {
-            const res = await fetch(`https://psgc.gitlab.io/api/provinces/${provCode}/cities-municipalities/`);
-            const data = await res.json();
-            citySel.innerHTML = '<option value="">Select City</option>';
-            data.sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
-                citySel.innerHTML += `<option value="${c.code}">${c.name}</option>`;
-            });
-            citySel.disabled = false;
+    if (prov && city && brgy) {
+        const provName = prov.options[prov.selectedIndex]?.text || '';
+        const cityName = city.options[city.selectedIndex]?.text || '';
+        const brgyName = brgy.options[brgy.selectedIndex]?.text || '';
 
-            if (savedCity) {
-                // FIXED: Support matching by either text or numeric code format safely
-                let cityOpt = Array.from(citySel.options).find(opt => 
-                    opt.text.toUpperCase() === savedCity.toUpperCase() || 
-                    opt.value === savedCity
-                );
-                if (cityOpt) {
-                    citySel.value = cityOpt.value;
-                    await fetchModalBarangays(appId, cityOpt.value, savedBrgy);
-                }
-            }
-        } catch (e) {
-            console.error("Cities fetch failed:", e);
+        if (provName && !provName.includes('Select') &&
+            cityName && !cityName.includes('Select') &&
+            brgyName && !brgyName.includes('Select')) {
+            prov.options[prov.selectedIndex].value = provName;
+            city.options[city.selectedIndex].value = cityName;
+            brgy.options[brgy.selectedIndex].value = brgyName;
         }
     }
+}
 
-    async function fetchModalBarangays(appId, cityCode, savedBrgy = '') {
-        const brgySel = document.getElementById(`brgy_${appId}`);
-        if (!brgySel) return;
+// 9. PSGC CASCADING ENGINE
+async function fetchModalProvinces(appId, savedProv, savedCity, savedBrgy) {
+    const provSel = document.getElementById(`prov_${appId}`);
+    if (provSel && provSel.options.length > 1) return; // Prevent double load
+    try {
+        // FIXED: Requests standardize static JSON routes to prevent trailing slash redirect parse blocks
+        const res = await fetch('https://psgc.gitlab.io/api/provinces.json');
+        const data = await res.json();
+        provSel.innerHTML = '<option value="">Select Province</option>';
+        data.sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
+            provSel.innerHTML += `<option value="${p.code}">${p.name}</option>`;
+        });
 
-        brgySel.disabled = true;
-        brgySel.innerHTML = '<option value="">Loading Barangays...</option>';
-
-        try {
-            const res = await fetch(`https://psgc.gitlab.io/api/cities-municipalities/${cityCode}/barangays/`);
-            const data = await res.json();
-            brgySel.innerHTML = '<option value="">Select Barangay</option>';
-            data.sort((a, b) => a.name.localeCompare(b.name)).forEach(b => {
-                brgySel.innerHTML += `<option value="${b.name}">${b.name}</option>`;
-            });
-            brgySel.disabled = false;
-
-            if (savedBrgy) {
-                // FIXED: Support matching by either text or numeric code format safely
-                let brgyOpt = Array.from(brgySel.options).find(opt => 
-                    opt.text.toUpperCase() === savedBrgy.toUpperCase() || 
-                    opt.value === savedBrgy
-                );
-                if (brgyOpt) {
-                    brgySel.value = brgyOpt.value;
-                }
+        if (savedProv) {
+            // FIXED: Support matching by either text or numeric code format safely
+            let provOpt = Array.from(provSel.options).find(opt => 
+                opt.text.toUpperCase() === savedProv.toUpperCase() || 
+                opt.value === savedProv
+            );
+            if (provOpt) {
+                provSel.value = provOpt.value;
+                await fetchModalCities(appId, provOpt.value, savedCity, savedBrgy);
             }
-        } catch (e) {
-            console.error("Barangays fetch failed:", e);
         }
+    } catch (e) {
+        console.error("Provinces fetch failed:", e);
     }
+}
+
+async function fetchModalCities(appId, provCode, savedCity = '', savedBrgy = '') {
+    const citySel = document.getElementById(`city_${appId}`);
+    const brgySel = document.getElementById(`brgy_${appId}`);
+    if (!citySel || !brgySel) return;
+
+    citySel.disabled = true;
+    brgySel.disabled = true;
+    citySel.innerHTML = '<option value="">Loading Cities...</option>';
+
+    try {
+        // FIXED: standard static JSON routes
+        const res = await fetch(`https://psgc.gitlab.io/api/provinces/${provCode}/cities-municipalities.json`);
+        const data = await res.json();
+        citySel.innerHTML = '<option value="">Select City</option>';
+        data.sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
+            citySel.innerHTML += `<option value="${c.code}">${c.name}</option>`;
+        });
+        citySel.disabled = false;
+
+        if (savedCity) {
+            // FIXED: Support matching by either text or numeric code format safely
+            let cityOpt = Array.from(citySel.options).find(opt => 
+                opt.text.toUpperCase() === savedCity.toUpperCase() || 
+                opt.value === savedCity
+            );
+            if (cityOpt) {
+                citySel.value = cityOpt.value;
+                await fetchModalBarangays(appId, cityOpt.value, savedBrgy);
+            }
+        }
+    } catch (e) {
+        console.error("Cities fetch failed:", e);
+    }
+}
+
+async function fetchModalBarangays(appId, cityCode, savedBrgy = '') {
+    const brgySel = document.getElementById(`brgy_${appId}`);
+    if (!brgySel) return;
+
+    brgySel.disabled = true;
+    brgySel.innerHTML = '<option value="">Loading Barangays...</option>';
+
+    try {
+        // FIXED: standard static JSON routes
+        const res = await fetch(`https://psgc.gitlab.io/api/cities-municipalities/${cityCode}/barangays.json`);
+        const data = await res.json();
+        brgySel.innerHTML = '<option value="">Select Barangay</option>';
+        data.sort((a, b) => a.name.localeCompare(b.name)).forEach(b => {
+            brgySel.innerHTML += `<option value="${b.name}">${b.name}</option>`;
+        });
+        brgySel.disabled = false;
+
+        if (savedBrgy) {
+            // FIXED: Support matching by either text or numeric code format safely
+            let brgyOpt = Array.from(brgySel.options).find(opt => 
+                opt.text.toUpperCase() === savedBrgy.toUpperCase() || 
+                opt.value === savedBrgy
+            );
+            if (brgyOpt) {
+                brgySel.value = brgyOpt.value;
+            }
+        }
+    } catch (e) {
+        console.error("Barangays fetch failed:", e);
+    }
+}
 </script>
 
 <style>
-    /* Fixed backdrop positioning bug caused by CSS transforms/stacking context in table lists */
-    #testModal{{ $app->id }}.show {
-        background-color: rgba(0, 0, 0, 0.6) !important;
-        backdrop-filter: blur(4px);
-    }
-    #modalValidationError_{{ $app->id }}.show {
-        background-color: rgba(0, 0, 0, 0.5) !important;
-        backdrop-filter: blur(2px);
-    }
+/* Fixed backdrop positioning bug caused by CSS transforms/stacking context in table lists */
+#testModal{{ $app->id }}.show {
+    background-color: rgba(0, 0, 0, 0.6) !important;
+    backdrop-filter: blur(4px);
+}
+#modalValidationError_{{ $app->id }}.show {
+    background-color: rgba(0, 0, 0, 0.5) !important;
+    backdrop-filter: blur(2px);
+}
 
-    /* Oxford Blue & Shamrock Green Stepper / Checkbox High-Contrast Theming */
-    
-    /* Main Navigation Tab overrides */
-    #mainTab_{{ $app->id }} .nav-link {
-        color: var(--text-muted) !important;
-        border: 1px solid transparent !important;
-        background-color: transparent !important;
-        transition: all 0.2s ease-in-out;
-    }
-    #mainTab_{{ $app->id }} .nav-link:hover {
-        color: var(--text-main) !important;
-        border-color: var(--border-color) !important;
-    }
-    #mainTab_{{ $app->id }} .nav-link.active {
-        color: var(--brand-accent) !important;
-        background-color: rgba(25, 211, 140, 0.05) !important;
-        border-color: var(--border-color) !important;
-        border-bottom-color: transparent !important;
-    }
-    #mainTab_{{ $app->id }} .nav-link.active[onclick*="retest"] {
-        color: #ffc107 !important;
-        background-color: rgba(255, 193, 7, 0.05) !important;
-    }
+/* Oxford Blue & Shamrock Green Stepper / Checkbox High-Contrast Theming */
 
-    /* Sub-Tabs (Pills) styling */
-    .modal-sub-tab-btn-{{ $app->id }} {
-        color: var(--text-muted) !important;
-        border: 1.5px solid var(--border-color) !important;
-        background-color: var(--bg-card) !important;
-        font-weight: 600;
-        transition: all 0.2s ease-in-out;
-    }
-    .modal-sub-tab-btn-{{ $app->id }}:hover {
-        color: var(--text-main) !important;
-        border-color: var(--brand-accent) !important;
-    }
-    .modal-sub-tab-btn-{{ $app->id }}.active {
-        background-color: var(--brand-accent) !important;
-        color: #1c232d !important;
-        border-color: var(--brand-accent) !important;
-        font-weight: 700;
-        box-shadow: 0 0 10px rgba(25, 211, 140, 0.2);
-    }
+/* Main Navigation Tab overrides */
+#mainTab_{{ $app->id }} .nav-link {
+    color: var(--text-muted) !important;
+    border: 1px solid transparent !important;
+    background-color: transparent !important;
+    transition: all 0.2s ease-in-out;
+}
+#mainTab_{{ $app->id }} .nav-link:hover {
+    color: var(--text-main) !important;
+    border-color: var(--border-color) !important;
+}
+#mainTab_{{ $app->id }} .nav-link.active {
+    color: var(--brand-accent) !important;
+    background-color: rgba(25, 211, 140, 0.05) !important;
+    border-color: var(--border-color) !important;
+    border-bottom-color: transparent !important;
+}
+#mainTab_{{ $app->id }} .nav-link.active[onclick*="retest"] {
+    color: #ffc107 !important;
+    background-color: rgba(255, 193, 7, 0.05) !important;
+}
 
-    /* Test Checklist Container High-Contrast Mapping */
-    .test-checkbox-item {
-        background-color: var(--bg-card) !important;
-        border: 1.5px solid var(--border-color) !important;
-        color: var(--text-main) !important;
-        border-radius: 8px;
-        padding: 10px 12px;
-        transition: all 0.2s ease-in-out;
-    }
-    .test-checkbox-item label {
-        color: var(--text-main) !important;
-        font-weight: 500;
-        cursor: pointer;
-    }
-    .test-checkbox-item:hover {
-        border-color: var(--brand-accent) !important;
-        background-color: rgba(25, 211, 140, 0.03) !important;
-    }
-    /* Selected state: mapped text color to high-contrast theme variable */
-    .test-checkbox-item:has(input:checked) {
-        background-color: rgba(25, 211, 140, 0.08) !important;
-        border-color: var(--brand-accent) !important;
-        box-shadow: 0 0 8px rgba(25, 211, 140, 0.15);
-    }
-    .test-checkbox-item:has(input:checked) label {
-        color: var(--text-main) !important;
-        font-weight: 700;
-    }
+/* Sub-Tabs (Pills) styling */
+.modal-sub-tab-btn-{{ $app->id }} {
+    color: var(--text-muted) !important;
+    border: 1.5px solid var(--border-color) !important;
+    background-color: var(--bg-card) !important;
+    font-weight: 600;
+    transition: all 0.2s ease-in-out;
+}
+.modal-sub-tab-btn-{{ $app->id }}:hover {
+    color: var(--text-main) !important;
+    border-color: var(--brand-accent) !important;
+}
+.modal-sub-tab-btn-{{ $app->id }}.active {
+    background-color: var(--brand-accent) !important;
+    color: #1c232d !important;
+    border-color: var(--brand-accent) !important;
+    font-weight: 700;
+    box-shadow: 0 0 10px rgba(25, 211, 140, 0.2);
+}
 
-    /* Selected List High Contrast Display box */
-    #modal_selected_tests_list_{{ $app->id }} {
-        background-color: var(--bg-card) !important;
-        border: 1.5px solid var(--border-color) !important;
-        color: var(--text-main) !important;
-    }
+/* Test Checklist Container High-Contrast Mapping */
+.test-checkbox-item {
+    background-color: var(--bg-card) !important;
+    border: 1.5px solid var(--border-color) !important;
+    color: var(--text-main) !important;
+    border-radius: 8px;
+    padding: 10px 12px;
+    transition: all 0.2s ease-in-out;
+}
+.test-checkbox-item label {
+    color: var(--text-main) !important;
+    font-weight: 500;
+    cursor: pointer;
+}
+.test-checkbox-item:hover {
+    border-color: var(--brand-accent) !important;
+    background-color: rgba(25, 211, 140, 0.03) !important;
+}
+/* Selected state: mapped text color to high-contrast theme variable */
+.test-checkbox-item:has(input:checked) {
+    background-color: rgba(25, 211, 140, 0.08) !important;
+    border-color: var(--brand-accent) !important;
+    box-shadow: 0 0 8px rgba(25, 211, 140, 0.15);
+}
+.test-checkbox-item:has(input:checked) label {
+    color: var(--text-main) !important;
+    font-weight: 700;
+}
+
+/* Selected List High Contrast Display box */
+#modal_selected_tests_list_{{ $app->id }} {
+    background-color: var(--bg-card) !important;
+    border: 1.5px solid var(--border-color) !important;
+    color: var(--text-main) !important;
+}
 </style>

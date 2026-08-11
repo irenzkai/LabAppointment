@@ -27,10 +27,9 @@ use App\Http\Controllers\Workstation\{
 | 1. PUBLIC ROUTES
 |--------------------------------------------------------------------------
 */
-
 Route::get('/', function () { 
     return view('welcome'); 
-});
+}); 
 
 Route::get('/services', [ServiceController::class, 'index'])->name('services.index');
 
@@ -71,38 +70,29 @@ Route::prefix('compliance')->group(function () {
 | 2. SHARED AUTHENTICATED ROUTES (All Roles)
 |--------------------------------------------------------------------------
 */
+// Verified Auth Group - Core clinical and system functions requiring verified email
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-// Basic Auth Group - Accessible to unverified users (e.g., Profile management, logging out, polling status)
-Route::middleware('auth')->group(function () {
+    // Profile Management (Locked behind verified email to prevent clinical data manipulation)
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/password/change', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // Email verification status polling endpoint for auto-proceed flow
-    Route::get('/api/verification-status', function () {
-        return response()->json([
-            'verified' => auth()->user() ? auth()->user()->hasVerifiedEmail() : false
-        ]);
-    })->name('verification.status');
-});
-
-// Verified Auth Group - Core clinical and system functions requiring verified email
-Route::middleware(['auth', 'verified'])->group(function () {
-    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-
-    // Appointments Index
+    // Appointments Index & Wizard
     Route::get('/appointments', [AppointmentController::class, 'index'])->name('appointments.index');
-
-    // Appointment Wizard (5-Page Booking Flow)
     Route::get('/appointments/create', [AppointmentController::class, 'create'])->name('appointments.create');
-
+    
     // Resubmit logic for Patients
     Route::put('/appointments/{appointment}', [AppointmentController::class, 'update'])->name('appointments.update');
     Route::post('/appointments/{appointment}/resubmit-batch', [ResultController::class, 'resubmitBatch'])->name('appointments.resubmit-batch');
-
-    // Shared & Patient-accessible Cancellation Action Route [15, 290]
+    
+    // Shared & Patient-accessible Cancellation Action Route
     Route::post('/appointments/{appointment}/cancel', [AppointmentController::class, 'cancel'])->name('appointments.cancel');
+
+    // API Slot Occupancy Checker for Step 4 of the Wizard
+    Route::get('/api/check-slots', [AppointmentConfigController::class, 'checkOccupancy'])->name('appointments.check-slots');
 
     // Notifications
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
@@ -131,7 +121,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 | 3. PATIENT SPECIFIC ROUTES (Role: user)
 |--------------------------------------------------------------------------
 */
-
 Route::middleware(['auth', 'role:user', 'verified'])->group(function () {
     // Dependent Management
     Route::post('/dependents', [DependentController::class, 'store'])->name('dependents.store');
@@ -162,9 +151,7 @@ Route::middleware(['auth', 'role:user', 'verified'])->group(function () {
 | 4. CLINICAL PERSONNEL ROUTES (Role: staff, lab_tech, admin)
 |--------------------------------------------------------------------------
 */
-
 Route::middleware(['auth', 'role:staff,lab_tech,admin', 'verified'])->group(function () {
-
     // Clinical Workflow Transitions & Manual Payment Verifications
     Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus'])->name('appointments.status');
     Route::patch('/appointments/{appointment}/mark-tested', [AppointmentController::class, 'markTested'])->name('appointments.tested');
@@ -256,7 +243,6 @@ Route::middleware(['auth', 'role:staff,lab_tech,admin', 'verified'])->group(func
 | 5. SYSTEM ADMIN ONLY (Role: admin)
 |--------------------------------------------------------------------------
 */
-
 Route::middleware(['auth', 'role:admin', 'verified'])->group(function () {
     // Audit Logs
     Route::get('/admin/audit-logs', [AdminController::class, 'viewLogs'])->name('admin.logs');
@@ -265,13 +251,5 @@ Route::middleware(['auth', 'role:admin', 'verified'])->group(function () {
     Route::put('/admin/users/{user}', [AdminController::class, 'updateUser'])->name('admin.users.update');
 });
 
-/*
-|--------------------------------------------------------------------------
-| 6. API HELPERS
-|--------------------------------------------------------------------------
-*/
-
-// API Helper (Used by Appointment Wizard for AJAX slot fetching)
-Route::get('/api/check-slots', [AppointmentConfigController::class, 'checkOccupancy']);
-
+// Load the compiled auth configuration file
 require __DIR__.'/auth.php';

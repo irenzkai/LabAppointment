@@ -44,6 +44,18 @@ class LoginRequest extends FormRequest
         if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
 
+            // Check if there is a soft-deleted (deactivated) user matching the email and correct password [126]
+            $user = \App\Models\User::onlyTrashed()->where('email', $this->email)->first();
+            if ($user && \Illuminate\Support\Facades\Hash::check($this->password, $user->password)) {
+                // Store the deactivated user's ID securely in the session [122]
+                session()->put('reactivate_user_id', $user->id);
+                
+                // Throw a custom validation exception to redirect cleanly
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'deactivated' => 'Your account is currently deactivated. You must reactivate it to log in.',
+                ]);
+            }
+
             throw ValidationException::withMessages([
                 'email' => trans('auth.failed'),
             ]);

@@ -13,49 +13,51 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            
-            // 1. Split Name Fields (1NF Atomic) [154]
-            $table->string('first_name');
-            $table->string('middle_name')->nullable();
-            $table->string('last_name');
 
-            // 2. Profile Details [154]
+            // 1. Split Name Fields (1NF Atomic) with strict limits
+            $table->string('first_name', 60);
+            $table->string('middle_name', 60)->nullable(); // Nullable per PSA guidelines
+            $table->string('last_name', 60);
+            $table->string('suffix', 10)->nullable(); // Aligned with the newly introduced suffix field
+
+            // 2. Profile Details
             $table->date('birthdate');
-            $table->string('sex'); // Male/Female
+            $table->enum('sex', ['Male', 'Female']); // PSA Standard binary classification
 
-            // 3. Split Address Fields (3NF Atomic - PSGC API Compatible) [154]
-            $table->string('street');
-            $table->string('barangay');
-            $table->string('city');
-            $table->string('province');
+            // 3. Split Address Fields (3NF Atomic - PSGC API Compatible)
+            $table->string('street', 150);
+            $table->string('barangay', 100);
+            $table->string('city', 100);       // City or Municipality
+            $table->string('province', 100);
 
-            // 4. Contact & Security [154]
-            $table->string('email')->unique();
-            $table->string('phone');
-            $table->string('password');
+            // 4. Contact & Security
+            $table->string('email', 191)->unique(); // Constrained unique index limit
+            $table->string('phone', 11);            // Strictly 11-digit PH mobile format (09XXXXXXXXX)
+            $table->string('password', 255);
 
-            // 5. System Flags [154]
-            $table->string('role')->default('user'); // user, staff, lab_tech, admin
+            // 5. System Flags & Permissions
+            $table->enum('role', ['user', 'staff', 'lab_tech', 'admin'])->default('user');
             $table->boolean('is_active')->default(true);
             $table->timestamp('email_verified_at')->nullable();
-            
-            // 6. AUDIT & DATA RETENTION COMPLIANCE [102]
-            $table->boolean('password_change_required')->default(false); // Flag to force password reset on next login
-            $table->softDeletes(); // Adds 'deleted_at' column for 10-year compliant deactivations
+            $table->timestamp('phone_verified_at')->nullable();
+
+            // 6. Audit & Data Retention Compliance [102]
+            $table->boolean('password_change_required')->default(false); // Force temporary password updates
+            $table->softDeletes(); // Compliant deactivations
 
             $table->rememberToken();
             $table->timestamps();
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {
-            $table->string('email')->primary();
-            $table->string('token');
+            $table->string('email', 191)->primary();
+            $table->string('token', 255);
             $table->timestamp('created_at')->nullable();
         });
 
         Schema::create('sessions', function (Blueprint $table) {
-            $table->string('id')->primary();
-            $table->foreignId('user_id')->nullable()->index();
+            $table->string('id', 191)->primary();
+            $table->foreignId('user_id')->nullable()->index()->constrained('users')->onDelete('cascade');
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
             $table->longText('payload');
@@ -68,8 +70,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('users');
     }
 };

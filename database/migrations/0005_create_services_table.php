@@ -13,19 +13,24 @@ return new class extends Migration
     {
         Schema::create('services', function (Blueprint $table) {
             $table->id();
-            $table->string('name'); // service name [160]
-            $table->decimal('price', 8, 2); // service price [160]
-            $table->text('description'); // service description [160]
-            $table->text('preparation'); // preparation requirement [160]
             
-            $table->unsignedInteger('estimated_time')->nullable();
-            $table->string('category')->default('individual'); // individual, package [160]
-            $table->string('gender_restriction')->default('both'); // male, female, both [160]
-            $table->boolean('is_available')->default(true); // availability toggle [160]
+            // 1. Core Clinical Service Identifiers
+            $table->string('name', 100)->unique(); // Prevents duplicate test creations
+            $table->decimal('price', 8, 2);        // Standard PHP (Philippine Peso) representation
+            $table->text('description');           // Detailed examination scope
+            $table->text('preparation');           // Prep guidelines (e.g. "Fasting required")
+
+            // 2. Operational parameters
+            $table->unsignedInteger('estimated_time')->nullable(); // Duration in minutes
+            $table->enum('category', ['individual', 'package'])->default('individual');
+            $table->enum('gender_restriction', ['male', 'female', 'both'])->default('both');
+            $table->boolean('is_available')->default(true); // Availability toggle
+
             $table->timestamps();
 
-            // AUDIT & DATA RETENTION: SoftDeletes (Re-activation archive, no expiry) [102]
-            $table->softDeletes(); // Adds 'deleted_at' column for compliant deactivations
+            // AUDIT & DATA RETENTION COMPLIANCE [102]
+            // Preserves service catalog integrity for historical appointments
+            $table->softDeletes(); 
         });
     }
 

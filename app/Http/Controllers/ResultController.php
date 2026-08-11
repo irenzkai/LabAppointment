@@ -306,7 +306,8 @@ class ResultController extends Controller
             'patient_first_name' => 'required|string|max:255',
             'patient_middle_name' => 'nullable|string|max:255',
             'patient_last_name' => 'required|string|max:255',
-            'patient_phone' => 'required|string|max:20',
+            'patient_suffix' => 'nullable|string|max:10|regex:/^[a-zA-Z0-9\s.]+$/u',
+            'patient_phone' => 'required|string|regex:/^09\d{9}$/',
             'patient_sex' => 'required|string|in:Male,Female',
             'patient_birthdate' => 'required|date|before_or_equal:today',
             'patient_street' => 'required|string|max:255',
@@ -314,6 +315,7 @@ class ResultController extends Controller
             'patient_city' => 'required|string|max:255',
             'patient_province' => 'required|string|max:255',
             'service_ids' => 'required|array|min:1',
+            'payment_amount' => 'required|numeric|min:0',
             'reason' => 'required|string|min:5',
         ]);
 
@@ -321,12 +323,18 @@ class ResultController extends Controller
         $mName = ($request->patient_middle_name && strtoupper($request->patient_middle_name) !== 'N/A') 
             ? strtoupper(trim($request->patient_middle_name)) : 'N/A';
         $lName = strtoupper(trim($request->patient_last_name));
+        $suffix = $request->filled('patient_suffix') ? strtoupper(trim($request->patient_suffix)) : '';
+
         $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
+        if (!empty($suffix)) {
+            $displayName .= " {$suffix}";
+        }
 
         $appointment->update([
             'patient_first_name' => $fName,
             'patient_middle_name' => $mName,
             'patient_last_name' => $lName,
+            'patient_suffix' => $suffix ?: null,
             'patient_name' => $displayName,
             'patient_phone' => $request->patient_phone,
             'patient_sex' => $request->patient_sex,
@@ -335,6 +343,7 @@ class ResultController extends Controller
             'patient_barangay' => strtoupper(trim($request->patient_barangay)),
             'patient_city' => strtoupper(trim($request->patient_city)),
             'patient_province' => strtoupper(trim($request->patient_province)),
+            'payment_amount' => $request->payment_amount,
         ]);
 
         // Sync the edited services requested for the appointment
@@ -408,7 +417,6 @@ class ResultController extends Controller
 
         $res = $appointment->result()->firstOrCreate(['appointment_id' => $appointment->id]);
 
-        // Dynamically capture and stream custom worksheet uploads cleanly
         if (str_starts_with($type, 'custom_')) {
             $customId = str_replace('custom_', '', $type);
             $customRes = CustomWorkstationResult::findOrFail($customId);
@@ -704,29 +712,29 @@ class ResultController extends Controller
                 ->subject('Your Medical Results are Ready - Medscreen')
                 ->html("
                 <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
-                    <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
-                        <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
-                    </div>
-                    <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
-                        <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$patientFirstName},</h3>
-                        <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Your secure, password-protected clinical results have been successfully released. Please find the encrypted PDF documents attached to this email.</p>
-                        <div style='background-color: #f8fafc; border-left: 4px solid #19D38C; padding: 20px; margin: 30px 0; border-radius: 6px;'>
-                            <strong style='color: #1c232d; display: block; margin-bottom: 8px; font-size: 16px;'>PDF Decryption Password:</strong>
-                            <span style='font-size: 14px; color: #4a5568; line-height: 1.5;'>
-                                Your files are secured using your personal password pattern:<br>
-                                <strong style='color: #15b376; font-size: 15px;'>MMDDYYYY + Capitalized Initials</strong><br>
-                                <span style='color: #718096; font-size: 12px; display: block; margin-top: 6px;'>Example: For birthdate October 24, 2005 & initials JDC, the password is <strong>10242005JDC</strong></span>
-                            </span>
-                        </div>
-                        " . (($hasAccount || $isForward) ? "" : "
-                        <div style='border: 1.5px dashed #19D38C; background-color: rgba(25, 211, 140, 0.03); padding: 25px; text-align: center; border-radius: 8px; margin: 30px 0;'>
-                            <h4 style='margin-top: 0; color: #1c232d; font-size: 18px;'>Activate Your Permanent Portal</h4>
-                            <p style='font-size: 14px; color: #4a5568; margin-bottom: 20px; line-height: 1.5;'>A temporary profile has been registered for you. Click below to secure your credentials and access your lifetime clinical history logs.</p>
-                            <a href='{$promoUrl}' style='display: inline-block; background-color: #19D38C; color: #1C232D; font-weight: bold; text-decoration: none; padding: 12px 30px; border-radius: 6px;'>ACTIVATE PROFILE</a>
-                        </div>
-                        ") . "
-                        <p style='margin-top: 30px; line-height: 1.6; color: #4a5568; font-size: 15px;'>Best regards,<br><strong>Medscreen Diagnostic Laboratory</strong></p>
-                    </div>
+                <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
+                <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
+                </div>
+                <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
+                <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$patientFirstName},</h3>
+                <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Your secure, password-protected clinical results have been successfully released. Please find the encrypted PDF documents attached to this email.</p>
+                <div style='background-color: #f8fafc; border-left: 4px solid #19D38C; padding: 20px; margin: 30px 0; border-radius: 6px;'>
+                <strong style='color: #1c232d; display: block; margin-bottom: 8px; font-size: 16px;'>PDF Decryption Password:</strong>
+                <span style='font-size: 14px; color: #4a5568; line-height: 1.5;'>
+                Your files are secured using your personal password pattern:<br>
+                <strong style='color: #15b376; font-size: 15px;'>MMDDYYYY + Capitalized Initials</strong><br>
+                <span style='color: #718096; font-size: 12px; display: block; margin-top: 6px;'>Example: For birthdate October 24, 2005 & initials JDC, the password is <strong>10242005JDC</strong></span>
+                </span>
+                </div>
+                " . (($hasAccount || $isForward) ? "" : "
+                <div style='border: 1.5px dashed #19D38C; background-color: rgba(25, 211, 140, 0.03); padding: 25px; text-align: center; border-radius: 8px; margin: 30px 0;'>
+                <h4 style='margin-top: 0; color: #1c232d; font-size: 18px;'>Activate Your Permanent Portal</h4>
+                <p style='font-size: 14px; color: #4a5568; margin-bottom: 20px; line-height: 1.5;'>A temporary profile has been registered for you. Click below to secure your credentials and access your lifetime clinical history logs.</p>
+                <a href='{$promoUrl}' style='display: inline-block; background-color: #19D38C; color: #1C232D; font-weight: bold; text-decoration: none; padding: 12px 30px; border-radius: 6px;'>ACTIVATE PROFILE</a>
+                </div>
+                ") . "
+                <p style='margin-top: 30px; line-height: 1.6; color: #4a5568; font-size: 15px;'>Best regards,<br><strong>Medscreen Diagnostic Laboratory</strong></p>
+                </div>
                 </div>
                 ");
 

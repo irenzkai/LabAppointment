@@ -22,7 +22,13 @@
                 <h5 class="modal-title text-accent fw-bold uppercase small m-0">
                     Resubmit Appointment #{{ $app->id }}
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <div class="d-flex gap-2 align-items-center ms-auto">
+                    {{-- Noticeable Solid-Style Reset Button with Shadow and Border Details --}}
+                    <button type="button" class="btn btn-sm btn-warning text-dark fw-extrabold py-1.5 px-3 d-flex align-items-center gap-1.5 shadow" style="font-size: 0.725rem; border-radius: 6px; letter-spacing: 0.5px; border: 1px solid #d39e00;" onclick="resetResubmitForm('{{$app->id}}')">
+                        <i class="bi bi-arrow-counterclockwise fs-6"></i>  RESET EDITS
+                    </button>
+                    <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
             </div>
 
             <div class="modal-body p-4 text-start text-main" style="max-height: 70vh; overflow-y: auto; background-color: var(--bg-card);">
@@ -30,7 +36,7 @@
                 {{-- Expiration Resubmit Warnings --}}
                 @if($app->isExpired())
                     <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded mb-4">
-                        <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+                        <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i> 
                         <strong>Rescheduling Notice:</strong> This expired appointment is currently inactive. Resubmitting with a new schedule will reactivate this record on your dashboard.
                     </div>
                 @endif
@@ -83,21 +89,29 @@
                     <div class="res-step-pane" id="res-step-1-{{$app->id}}">
                         <h6 class="text-accent fw-bold mb-3 small uppercase">1. Correct Patient Demographics</h6>
                         <div class="row g-3">
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="smaller text-secondary fw-bold mb-1 uppercase">First Name</label>
-                                <input type="text" name="patient_first_name" class="form-control" value="{{ old('patient_first_name', $app->patient_first_name) }}" required>
+                                <input type="text" name="patient_first_name" class="form-control uppercase" value="{{ old('patient_first_name', $app->patient_first_name) }}" required>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="smaller text-secondary fw-bold mb-1 uppercase">Middle Name</label>
-                                <input type="text" name="patient_middle_name" class="form-control" value="{{ old('patient_middle_name', $app->patient_middle_name) }}">
+                                <input type="text" name="patient_middle_name" class="form-control uppercase" value="{{ old('patient_middle_name', $app->patient_middle_name === 'N/A' ? '' : $app->patient_middle_name) }}">
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="smaller text-secondary fw-bold mb-1 uppercase">Last Name</label>
-                                <input type="text" name="patient_last_name" class="form-control" value="{{ old('patient_last_name', $app->patient_last_name) }}" required>
+                                <input type="text" name="patient_last_name" class="form-control uppercase" value="{{ old('patient_last_name', $app->patient_last_name) }}" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Suffix (Opt.)</label>
+                                <input type="text" name="patient_suffix" id="res_suffix_{{ $app->id }}" list="suffix_options" class="form-control uppercase" value="{{ old('patient_suffix', $app->patient_suffix) }}">
                             </div>
                             <div class="col-md-6">
                                 <label class="smaller text-secondary fw-bold mb-1 uppercase">Contact Number</label>
-                                <input type="text" name="patient_phone" class="form-control" value="{{ old('patient_phone', $app->patient_phone) }}" required>
+                                <div class="input-group">
+                                    <span class="input-group-text border-secondary bg-secondary bg-opacity-25 text-main fw-bold">09</span>
+                                    <input type="text" id="res_phone_display_{{ $app->id }}" class="form-control py-3 shadow-none" placeholder="171234567" maxlength="9" oninput="this.value = this.value.replace(/[^0-9]/g, ''); syncResPhone('{{ $app->id }}');" required>
+                                </div>
+                                <input type="hidden" name="patient_phone" id="res_in_phone_{{ $app->id }}" value="{{ old('patient_phone', $app->patient_phone) }}">
                             </div>
                             <div class="col-md-3">
                                 <label class="smaller text-secondary fw-bold mb-1 uppercase">Sex</label>
@@ -150,13 +164,13 @@
                             @else
                                 <div class="col-md-6">
                                     <label class="smaller text-secondary fw-bold mb-1 uppercase">Province</label>
-                                    <select id="res_province_{{$app->id}}" class="form-select" onchange="fetchResCities('{{$app->id}}', this.value)" required>
+                                    <select id="res_province_{{$app->id}}" class="form-select" onchange="fetchResCities('{{$app->id}}', this.value, '', '')" required>
                                         <option value="">Loading Provinces...</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="smaller text-secondary fw-bold mb-1 uppercase">City / Municipality</label>
-                                    <select id="res_city_{{$app->id}}" class="form-select" onchange="fetchResBarangays('{{$app->id}}', this.value)" disabled required>
+                                    <select id="res_city_{{$app->id}}" class="form-select" onchange="fetchResBarangays('{{$app->id}}', this.value, '')" disabled required>
                                         <option value="">Select Province First</option>
                                     </select>
                                 </div>
@@ -238,7 +252,6 @@
                             <div class="mb-2">
                                 <h6 class="text-accent fw-bold mb-3 small uppercase">5. Settle Payment Method</h6>
                                 @if($app->status === 'returned' && $app->payment_status === 'paid')
-                                    {{-- normal returned with confirmed payment --}}
                                     <div class="alert alert-clinical border-success bg-success bg-opacity-10 text-success p-3 rounded mb-2">
                                         <i class="bi bi-patch-check-fill me-2 fs-5"></i>
                                         <strong>Payment Locked (PAID)</strong>: This appointment has been verified as paid. Your payment details are locked and cannot be modified.
@@ -246,7 +259,6 @@
                                     <input type="hidden" name="payment_method" value="{{ $app->payment_method }}">
                                 @else
                                     @if($app->status === 'returned')
-                                        {{-- normal returned with unconfirmed payment --}}
                                         <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded mb-3">
                                             <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
                                             <strong>Important Note</strong>: Changes to your payment method or receipt in this area will not be eligible for a refund. For refunds, cancel your appointment instead.
@@ -314,7 +326,7 @@
                                     <div id="res_receipt_container_{{$app->id}}" class="mb-3 d-none animate-fade-in">
                                         <label class="smaller text-secondary fw-bold mb-1 uppercase">Upload New Proof of Payment / Receipt</label>
                                         <input type="file" name="payment_receipt" id="res_receipt_input_{{$app->id}}" class="form-control mb-2" accept="image/*, application/pdf" onchange="handleFileChange(this, '{{$app->id}}', 'receipt')">
-                                        {{-- Hide the "Existing receipt" alert if they are returning from a canceled, refunded, or invalid state, mandating a new file upload --}}
+                                        
                                         <div id="existing_receipt_container_{{$app->id}}" class="d-flex align-items-center gap-2 mt-2 bg-light bg-opacity-5 p-2.5 rounded border border-secondary border-opacity-10 @if(!$app->payment_receipt || in_array($app->status, ['canceled']) || in_array($app->payment_status, ['invalid', 'refunded'])) d-none @endif">
                                             <span id="receipt_label_{{$app->id}}" class="text-accent small"><i class="bi bi-file-earmark-check"></i> Existing Receipt on Server</span>
                                             <div class="ms-auto d-flex gap-1.5">
@@ -336,8 +348,8 @@
                             <button type="button" id="res_submit_btn_{{$app->id}}" class="btn-custom btn-accent px-4 fw-bold" onclick="handleResSubmit('{{$app->id}}')">Submit Resubmission</button>
                         </div>
                     </div>
-
                 </div>
+
             </div>
         </form>
     </div>
@@ -374,12 +386,19 @@
     </div>
 </div>
 
-{{-- Non-Duplicate Scripts block utilizing the standard @once container --}}
 @once
-@push('scripts')
-<script>
+    @push('scripts')
+    <script>
     let activeRemovalType_global = null;
     let activeRemovalAppId_global = null;
+
+    function syncResPhone(appId) {
+        const displayInput = document.getElementById(`res_phone_display_${appId}`);
+        const hiddenInput = document.getElementById(`res_in_phone_${appId}`);
+        if (displayInput && hiddenInput) {
+            hiddenInput.value = displayInput.value ? '09' + displayInput.value : '';
+        }
+    }
 
     /**
      * Controls horizontal tab wizard navigation
@@ -458,9 +477,6 @@
         });
     }
 
-    /**
-     * Triggers dynamic confirmation overlays cleanly inside the modal body without z-index scroll traps
-     */
     function promptFileRemoval(appId, type) {
         activeRemovalType_global = type;
         activeRemovalAppId_global = appId;
@@ -503,16 +519,12 @@
             const fileInput = document.getElementById(`res_receipt_input_${appId}`);
             if (fileInput) {
                 fileInput.value = '';
-                // Since old verified receipt is discarded, require a new upload for cashless resubmission
-                fileInput.setAttribute('required', 'required'); 
+                fileInput.setAttribute('required', 'required');
             }
         }
         cancelFileRemoval(appId);
     }
 
-    /**
-     * Dynamically displays new uploaded files with full viewing and custom removals
-     */
     function handleFileChange(input, appId, type) {
         const file = input.files[0];
         if (!file) return;
@@ -582,16 +594,52 @@
         // 1. Demographics check (Step 1)
         const firstName = document.querySelector(`.resubmit-modal#resubmitModal${appId} [name="patient_first_name"]`).value.trim();
         const lastName = document.querySelector(`.resubmit-modal#resubmitModal${appId} [name="patient_last_name"]`).value.trim();
-        const phone = document.querySelector(`.resubmit-modal#resubmitModal${appId} [name="patient_phone"]`).value.trim();
         const birthdate = document.querySelector(`.resubmit-modal#resubmitModal${appId} [name="patient_birthdate"]`).value;
 
         if (!firstName) errors.push("First Name is required on Step 1.");
         if (!lastName) errors.push("Last Name is required on Step 1.");
-        if (!phone) errors.push("Contact Number is required on Step 1.");
-        if (!birthdate) errors.push("Birthdate is required on Step 1.");
+
+        // Birthdate & Age Rules validation
+        if (!birthdate) {
+            errors.push("Birthdate is required on Step 1.");
+        } else {
+            const age = Math.floor((new Date() - new Date(birthdate)) / (1000 * 60 * 60 * 24 * 365.25));
+            const isDependent = document.getElementById(`res_suffix_${appId}`) !== null && 
+                                (document.getElementById(`res_province_${appId}`) === null || 
+                                 document.getElementById(`res_province_${appId}`).offsetParent !== null);
+                                 
+            // Note: Dependents must be minors, while self/personal must be 18+
+            if (age < 0) {
+                errors.push("Birthdate cannot be in the future.");
+            } else if (document.getElementById(`res_province_${appId}`) === null) {
+                // If address dropdowns are absent, it's a batch/bulk group list row. Skip age check.
+            } else {
+                const isDependentApp = window.resubmitModalIsDependent && window.resubmitModalIsDependent[appId];
+                if (isDependentApp) {
+                    if (age >= 18) {
+                        errors.push("Dependents must be minors (under 18 years of age).");
+                    }
+                } else {
+                    if (age < 18) {
+                        errors.push("You must be at least 18 years old to book a personal appointment.");
+                    }
+                }
+            }
+        }
+
+        // Contact Phone Check
+        const phone = document.getElementById(`res_in_phone_${appId}`).value;
+        const displayPhone = document.getElementById(`res_phone_display_${appId}`).value;
+        const phoneRegex = /^09\d{9}$/;
+        if (!displayPhone) {
+            errors.push("Contact Number is required on Step 1.");
+        } else if (!phoneRegex.test(phone)) {
+            errors.push("Phone number must start with 09 and contain exactly 11 digits.");
+        }
 
         // 2. Address check (Step 2)
-        const isBulk = document.querySelector(`.resubmit-modal#resubmitModal${appId} [name="patient_street"]`) !== null && document.getElementById(`res_province_${appId}`) === null;
+        const isBulk = document.querySelector(`.resubmit-modal#resubmitModal${appId} [name="patient_street"]`) !== null && 
+                       document.getElementById(`res_province_${appId}`) === null;
         if (isBulk) {
             const street = document.querySelector(`.resubmit-modal#resubmitModal${appId} [name="patient_street"]`).value.trim();
             if (!street) errors.push("Home Address is required on Step 2.");
@@ -690,16 +738,21 @@
         if (provSel.options.length > 1) return; // Prevent double-fetching if already loaded
 
         try {
-            const res = await fetch(`https://psgc.gitlab.io/api/provinces/`);
+            // FIXED: Standardize request routes to explicit static JSON targets to resolve CORS and text/html error blocks on GitLab pages
+            const res = await fetch(`https://psgc.gitlab.io/api/provinces.json`);
             const data = await res.json();
-            
+
             provSel.innerHTML = '<option value="">Select Province</option>';
             data.sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
                 provSel.innerHTML += `<option value="${p.code}">${p.name}</option>`;
             });
 
             if (savedProv) {
-                let provOpt = Array.from(provSel.options).find(opt => opt.text.toUpperCase() === savedProv.toUpperCase());
+                // FIXED: Support matching by either text or numeric code format safely
+                let provOpt = Array.from(provSel.options).find(opt => 
+                    opt.text.toUpperCase() === savedProv.toUpperCase() || 
+                    opt.value === savedProv
+                );
                 if (provOpt) {
                     provSel.value = provOpt.value;
                     await fetchResCities(appId, provOpt.value, savedCity, savedBrgy);
@@ -720,7 +773,8 @@
         citySel.innerHTML = '<option value="">Loading Cities...</option>';
 
         try {
-            const res = await fetch(`https://psgc.gitlab.io/api/provinces/${provCode}/cities-municipalities/`);
+            // FIXED: standard JSON static targets
+            const res = await fetch(`https://psgc.gitlab.io/api/provinces/${provCode}/cities-municipalities.json`);
             const data = await res.json();
 
             citySel.innerHTML = '<option value="">Select City</option>';
@@ -730,14 +784,18 @@
             citySel.disabled = false;
 
             if (savedCity) {
-                let cityOpt = Array.from(citySel.options).find(opt => opt.text.toUpperCase() === savedCity.toUpperCase());
+                // FIXED: Support matching by either text or numeric code format safely
+                let cityOpt = Array.from(citySel.options).find(opt => 
+                    opt.text.toUpperCase() === savedCity.toUpperCase() || 
+                    opt.value === savedCity
+                );
                 if (cityOpt) {
                     citySel.value = cityOpt.value;
                     await fetchResBarangays(appId, cityOpt.value, savedBrgy);
                 }
             }
         } catch (e) {
-            console.error("Resubmit city fetch failed:", e);
+            console.error("Edit dependent city fetch failed:", e);
         }
     }
 
@@ -749,7 +807,8 @@
         brgySel.innerHTML = '<option value="">Loading Barangays...</option>';
 
         try {
-            const res = await fetch(`https://psgc.gitlab.io/api/cities-municipalities/${cityCode}/barangays/`);
+            // FIXED: standard JSON static targets
+            const res = await fetch(`https://psgc.gitlab.io/api/cities-municipalities/${cityCode}/barangays.json`);
             const data = await res.json();
 
             brgySel.innerHTML = '<option value="">Select Barangay</option>';
@@ -759,13 +818,17 @@
             brgySel.disabled = false;
 
             if (savedBrgy) {
-                let brgyOpt = Array.from(brgySel.options).find(opt => opt.text.toUpperCase() === savedBrgy.toUpperCase());
+                // FIXED: Support matching by either text or numeric code format safely
+                let brgyOpt = Array.from(brgySel.options).find(opt => 
+                    opt.text.toUpperCase() === savedBrgy.toUpperCase() || 
+                    opt.value === savedBrgy
+                );
                 if (brgyOpt) {
                     brgySel.value = brgyOpt.value;
                 }
             }
         } catch (e) {
-            console.error("Resubmit barangay fetch failed:", e);
+            console.error("Edit dependent barangay fetch failed:", e);
         }
     }
 
@@ -810,12 +873,12 @@
                 if (date === todayLocal) {
                     const leadTimeMs = (parseInt(config.lead_time_hours) || 0) * 3600 * 1000;
                     const cutoffTime = now.getTime() + leadTimeMs;
-                    const slotDate = new Date(`${date} ${tStr}`);
+                    const slotDate = new Date(`${date}T${tStr}`);
                     isPast = slotDate.getTime() < cutoffTime;
                 }
 
                 if (!isFull && !isLunch && !isPast) {
-                    let disp = start.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                    let disp = start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                     let selectedAttr = (savedSlot === tStr) ? 'selected' : '';
                     html += `<option value="${tStr}" ${selectedAttr}>${disp}</option>`;
                     availableCount++;
@@ -852,7 +915,7 @@
         const receiptInput = document.getElementById(`res_receipt_input_${appId}`);
         const qrSection = document.getElementById(`res_qr_section_${appId}`);
         const qrImage = document.getElementById(`res_selected_provider_qr_${appId}`);
-        const qrLabel = document.getElementById(`res_selected_provider_name_{{$app->id}}`);
+        const qrLabel = document.getElementById(`res_selected_provider_name_${appId}`);
         const radios = document.querySelectorAll(`.res-provider-radio-${appId}`);
 
         if (payCashless && payCashless.checked) {
@@ -865,7 +928,7 @@
                 if (qrLabel && activeRadio.dataset.name) qrLabel.innerText = activeRadio.dataset.name;
                 if (qrSection) qrSection.classList.remove('d-none');
                 if (receiptContainer) receiptContainer.classList.remove('d-none');
-                
+
                 // If there's an existing receipt already loaded, it bypasses the required validation checks
                 const existingReceipt = document.getElementById(`existing_receipt_container_${appId}`);
                 const isReceiptRemoved = document.getElementById(`remove_receipt_${appId}`).value === '1';
@@ -916,38 +979,116 @@
             }
         }
     }
-</script>
-@endpush
+
+    /**
+     * Reverts all edited fields inside the resubmit modal to originally saved server values
+     */
+    window.resetResubmitForm = async function(appId) {
+        if (!confirm('Revert all changes back to originally saved values?')) return;
+
+        // Reset text/simple values
+        document.querySelector(`.resubmit-modal#resubmitModal${appId} [name="patient_first_name"]`).value = '{{ $app->patient_first_name }}';
+        document.querySelector(`.resubmit-modal#resubmitModal${appId} [name="patient_middle_name"]`).value = '{{ $app->patient_middle_name === "N/A" ? "" : $app->patient_middle_name }}';
+        document.querySelector(`.resubmit-modal#resubmitModal${appId} [name="patient_last_name"]`).value = '{{ $app->patient_last_name }}';
+        
+        const suffixInput = document.getElementById(`res_suffix_${appId}`);
+        if (suffixInput) suffixInput.value = '{{ $app->patient_suffix }}';
+
+        document.querySelector(`.resubmit-modal#resubmitModal${appId} [name="patient_sex"]`).value = '{{ $app->patient_sex }}';
+        document.querySelector(`.resubmit-modal#resubmitModal${appId} [name="patient_birthdate"]`).value = '{{ $app->patient_birthdate ? $app->patient_birthdate->format("Y-m-d") : "" }}';
+
+        // Reset phone display parameters
+        let originalPhone = '{{ $app->patient_phone }}'.trim();
+        if (originalPhone.startsWith('+639')) originalPhone = '09' + originalPhone.substring(4);
+        if (originalPhone.startsWith('639')) originalPhone = '09' + originalPhone.substring(3);
+        const displayInput = document.getElementById(`res_phone_display_${appId}`);
+        const hiddenInput = document.getElementById(`res_in_phone_${appId}`);
+        if (displayInput && hiddenInput) {
+            if (originalPhone.startsWith('09') && originalPhone.length === 11) {
+                displayInput.value = originalPhone.substring(2);
+                hiddenInput.value = originalPhone;
+            } else {
+                displayInput.value = originalPhone;
+                hiddenInput.value = originalPhone;
+            }
+        }
+
+        // Reset cascading address layers
+        @if(!$app->batch_id)
+            await initResAddress(appId, '{{ $app->patient_province }}', '{{ $app->patient_city }}', '{{ $app->patient_barangay }}');
+            document.getElementById(`res_street_${appId}`).value = '{{ $app->patient_street }}';
+        @else
+            document.querySelector(`.resubmit-modal#resubmitModal${appId} [name="patient_street"]`).value = '{{ $app->patient_street }}';
+        @endif
+
+        // Reset tests checklist
+        const originalTests = @json($linkedTests);
+        document.querySelectorAll(`#res_test_list_${appId} .test-checkbox`).forEach(cb => {
+            cb.checked = originalTests.includes(parseInt(cb.value));
+        });
+        updateSelectedTestsSummary(appId);
+
+        // Reset scheduled values
+        document.getElementById(`res_date_${appId}`).value = '{{ $app->appointment_date ? $app->appointment_date->format("Y-m-d") : "" }}';
+        await fetchResTimeSlots(appId, '{{ $app->appointment_date ? $app->appointment_date->format("Y-m-d") : "" }}', '{{ $app->time_slot }}');
+
+        // Reset file preview states
+        cancelFileRemoval(appId);
+
+        // Default navigation view back to first tab
+        goToResStep(appId, 1);
+    }
+    </script>
+    @endpush
 @endonce
 
 {{-- Non-Duplicate Instance Initialization Listeners --}}
 @push('scripts')
 <script>
-    (function() {
-        const appId = '{{ $app->id }}';
-        
-        function initResubmitModalInstance() {
-            const modalEl = document.getElementById(`resubmitModal${appId}`);
-            if (modalEl) {
-                modalEl.addEventListener('show.bs.modal', async () => {
-                    // Initialize default first step on open
-                    goToResStep(appId, 1);
-                    updateSelectedTestsSummary(appId);
-                    
-                    @if(!$app->batch_id)
-                        await initResAddress(appId, '{{ $app->patient_province }}', '{{ $app->patient_city }}', '{{ $app->patient_barangay }}');
-                        toggleResPaymentFields(appId);
-                    @endif
-                    await fetchResTimeSlots(appId, '{{ $app->appointment_date ? $app->appointment_date->format("Y-m-d") : "" }}', '{{ $app->time_slot }}');
-                });
-            }
-        }
+(function() {
+    const appId = '{{ $app->id }}';
 
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initResubmitModalInstance);
-        } else {
-            initResubmitModalInstance();
+    window.resubmitModalIsDependent = window.resubmitModalIsDependent || {};
+    window.resubmitModalIsDependent[appId] = @json($app->dependent_id !== null);
+
+    function initResubmitModalInstance() {
+        const modalEl = document.getElementById(`resubmitModal${appId}`);
+        if (modalEl) {
+            modalEl.addEventListener('show.bs.modal', async () => {
+                // Initialize default first step on open
+                goToResStep(appId, 1);
+                updateSelectedTestsSummary(appId);
+
+                // Initialize phone display prefix on load safely
+                let phoneVal = '{{ $app->patient_phone }}'.trim();
+                if (phoneVal.startsWith('+639')) phoneVal = '09' + phoneVal.substring(4);
+                if (phoneVal.startsWith('639')) phoneVal = '09' + phoneVal.substring(3);
+                const displayInput = document.getElementById(`res_phone_display_${appId}`);
+                const hiddenInput = document.getElementById(`res_in_phone_${appId}`);
+                if (displayInput && hiddenInput) {
+                    if (phoneVal.startsWith('09') && phoneVal.length === 11) {
+                        displayInput.value = phoneVal.substring(2);
+                        hiddenInput.value = phoneVal;
+                    } else {
+                        displayInput.value = phoneVal;
+                        hiddenInput.value = phoneVal;
+                    }
+                }
+
+                @if(!$app->batch_id)
+                    await initResAddress(appId, '{{ $app->patient_province }}', '{{ $app->patient_city }}', '{{ $app->patient_barangay }}');
+                    toggleResPaymentFields(appId);
+                @endif
+                await fetchResTimeSlots(appId, '{{ $app->appointment_date ? $app->appointment_date->format("Y-m-d") : "" }}', '{{ $app->time_slot }}');
+            });
         }
-    })();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initResubmitModalInstance);
+    } else {
+        initResubmitModalInstance();
+    }
+})();
 </script>
 @endpush

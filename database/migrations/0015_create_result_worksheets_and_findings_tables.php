@@ -11,86 +11,113 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // 1. Normalized Laboratory Test Parameters Table
+        // 1. Normalized Laboratory Test Parameters Table (1NF Atomic)
         Schema::create('appointment_lab_results', function (Blueprint $table) {
             $table->id();
+            
             $table->foreignId('appointment_result_id')
-                  ->constrained('appointment_results')
-                  ->onDelete('cascade');
-            $table->string('parameter_name'); // e.g., 'WBC Count', 'Hemoglobin'
-            $table->string('observed_value');
-            $table->string('reference_range')->nullable();
+                ->constrained('appointment_results')
+                ->onDelete('cascade');
+
+            $table->string('parameter_name', 100); // e.g. "WBC Count", "Hemoglobin", "Urine pH"
+            $table->string('observed_value', 50);  // e.g. "12.5", "Negative", "Yellow"
+            $table->string('reference_range', 100)->nullable(); // e.g. "5-10 x 10^9/L"
+            
             $table->timestamps();
         });
 
-        // 2. Normalized Laboratory Details (Worksheet)
+        // 2. Normalized Laboratory Details Worksheet (1-to-1 with results folder)
         Schema::create('appointment_lab_details', function (Blueprint $table) {
             $table->id();
+
             $table->foreignId('appointment_result_id')
-                  ->constrained('appointment_results')
-                  ->onDelete('cascade');
-            $table->string('case_no')->nullable()->unique();
-            $table->string('status')->default('pending'); // pending, encoding, encoded, verified, returned
-            $table->string('scan_path')->nullable(); // lab_scan
-            $table->text('return_reason')->nullable(); // lab_return_reason
-            $table->string('released_by_name')->nullable();
-            $table->string('released_by_license')->nullable();
-            $table->string('validated_by_name')->nullable();
-            $table->string('validated_by_license')->nullable();
-            $table->string('validated_by_name_2')->nullable();
-            $table->string('validated_by_license_2')->nullable();
+                ->unique() // Restricts to strict 1-to-1 mapping
+                ->constrained('appointment_results')
+                ->onDelete('cascade');
+
+            $table->string('case_no', 50)->nullable()->unique(); // Unique laboratory case tracking serial
+            $table->enum('status', ['pending', 'encoding', 'encoded', 'verified', 'returned'])->default('pending');
+            $table->string('scan_path', 255)->nullable();        // Laboratory report PDF/Image scan
+            $table->text('return_reason')->nullable();           // Verification rejection notes
+
+            // Clinical Signatories & PRC Licenses (DOH Compliant)
+            $table->string('released_by_name', 100)->nullable();      // Medical Technologist 1
+            $table->string('released_by_license', 30)->nullable();    // MT PRC License
+            $table->string('validated_by_name', 100)->nullable();     // Medical Technologist 2/QC
+            $table->string('validated_by_license', 30)->nullable();   // MT PRC License 2
+            $table->string('validated_by_name_2', 100)->nullable();   // Pathologist
+            $table->string('validated_by_license_2', 30)->nullable(); // Pathologist PRC/DOH License
+            
             $table->timestamps();
         });
 
-        // 3. Normalized Medical Certificate Details (Worksheet)
+        // 3. Normalized Medical Certificate Details Worksheet (1-to-1 with results folder)
         Schema::create('appointment_med_certs', function (Blueprint $table) {
             $table->id();
+
             $table->foreignId('appointment_result_id')
-                  ->constrained('appointment_results')
-                  ->onDelete('cascade');
-            $table->string('cert_no')->nullable()->unique();
-            $table->string('status')->default('pending'); // pending, encoding, encoded, verified, returned
-            $table->string('scan_path')->nullable(); // med_cert_scan
-            $table->text('return_reason')->nullable(); // med_return_reason
+                ->unique() // Restricts to strict 1-to-1 mapping
+                ->constrained('appointment_results')
+                ->onDelete('cascade');
+
+            $table->string('cert_no', 50)->nullable()->unique(); // Unique medical certificate ID
+            $table->enum('status', ['pending', 'encoding', 'encoded', 'verified', 'returned'])->default('pending');
+            $table->string('scan_path', 255)->nullable();        // MedCert PDF scan override
+            $table->text('return_reason')->nullable();
+            
             $table->date('date_of_issue')->nullable();
             $table->text('findings')->nullable();
             $table->text('remarks')->nullable();
-            $table->string('issued_to')->nullable();
-            $table->string('physician_name')->nullable();
-            $table->string('physician_license')->nullable();
+            $table->string('issued_to', 100)->nullable();         // Patient full name override fallback
+
+            // Clinical Signatory & PRC License (DOH Compliant)
+            $table->string('physician_name', 100)->nullable();    // Attending Physician
+            $table->string('physician_license', 30)->nullable();  // MD PRC License
+
             $table->timestamps();
         });
 
-        // 4. Normalized Radiology Details (Worksheet)
+        // 4. Normalized Radiology Details Worksheet (1-to-1 with results folder)
         Schema::create('appointment_radiology_reports', function (Blueprint $table) {
             $table->id();
+
             $table->foreignId('appointment_result_id')
-                  ->constrained('appointment_results')
-                  ->onDelete('cascade');
-            $table->string('case_no')->nullable()->unique();
-            $table->string('status')->default('pending'); // pending, encoding, encoded, verified, returned
-            $table->string('scan_path')->nullable(); // radio_scan
-            $table->string('xray_image')->nullable(); // FIXED: Added xray_image column natively in the worksheet table
-            $table->text('return_reason')->nullable(); // radio_return_reason
+                ->unique() // Restricts to strict 1-to-1 mapping
+                ->constrained('appointment_results')
+                ->onDelete('cascade');
+
+            $table->string('case_no', 50)->nullable()->unique(); // Unique radiologic case ID
+            $table->enum('status', ['pending', 'encoding', 'encoded', 'verified', 'returned'])->default('pending');
+            $table->string('scan_path', 255)->nullable();        // Radiology report PDF scan override
+            $table->string('xray_image', 255)->nullable();       // Mandatory raw patient X-Ray image
+            $table->text('return_reason')->nullable();
+
             $table->date('date_of_exam')->nullable();
-            $table->string('technique')->nullable();
+            $table->string('technique', 150)->nullable();         // e.g. "CHEST PA"
             $table->text('findings')->nullable();
             $table->text('impression')->nullable();
-            $table->string('radiologist_name')->nullable();
-            $table->string('radiologist_license')->nullable();
+
+            // Clinical Signatory & PRC License (DOH Compliant)
+            $table->string('radiologist_name', 100)->nullable();   // Radiologist
+            $table->string('radiologist_license', 30)->nullable(); // Radiologist PRC/DOH License
+
             $table->timestamps();
         });
 
-        // 5. Normalized Drug Test Details (Worksheet)
+        // 5. Normalized Drug Test Details Worksheet (1-to-1 with results folder)
         Schema::create('appointment_drug_tests', function (Blueprint $table) {
             $table->id();
+
             $table->foreignId('appointment_result_id')
-                  ->constrained('appointment_results')
-                  ->onDelete('cascade');
-            $table->string('cert_no')->nullable()->unique();
-            $table->string('status')->default('pending'); // pending, encoding, encoded, verified, returned
-            $table->string('scan_path')->nullable(); // drug_test_scan
-            $table->text('return_reason')->nullable(); // drug_return_reason
+                ->unique() // Restricts to strict 1-to-1 mapping
+                ->constrained('appointment_results')
+                ->onDelete('cascade');
+
+            $table->string('cert_no', 50)->nullable()->unique(); // Unique DOH Drug Test Certificate number
+            $table->enum('status', ['pending', 'encoding', 'encoded', 'verified', 'returned'])->default('pending');
+            $table->string('scan_path', 255)->nullable();        // Official CCDT Certificate scan
+            $table->text('return_reason')->nullable();
+
             $table->timestamps();
         });
     }

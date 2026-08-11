@@ -3,21 +3,22 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes; // 1. Import SoftDeletes trait [93]
+use Illuminate\Database\Eloquent\SoftDeletes; // Import SoftDeletes trait [93]
 
 class Dependent extends Model
 {
-    use SoftDeletes; // 2. Use SoftDeletes trait [93]
+    use SoftDeletes; // Use SoftDeletes trait [93]
 
     /**
      * The attributes that are mass assignable.
-     * Normalized to 3NF: Decomposed name and address fields. [93]
+     * Normalized to 3NF: Decomposed name, suffix, and address fields [93]
      */
     protected $fillable = [
         'user_id', 
         'first_name',
         'middle_name',
         'last_name',
+        'suffix', // Added to support optional minor suffixes (e.g., JR, III)
         'birthdate', 
         'sex', 
         'phone', 
@@ -45,7 +46,14 @@ class Dependent extends Model
      */
     public function getNameAttribute()
     {
-        return $this->first_name . ($this->middle_name && strtoupper($this->middle_name) !== 'N/A' ? ' ' . $this->middle_name : '') . ' ' . $this->last_name;
+        $fullName = $this->first_name . ($this->middle_name && strtoupper($this->middle_name) !== 'N/A' ? ' ' . $this->middle_name : '') . ' ' . $this->last_name;
+        
+        // Append suffix if it exists on the model instance
+        if ($this->suffix) {
+            $fullName .= ' ' . $this->suffix;
+        }
+
+        return $fullName;
     }
 
     /**
@@ -61,7 +69,7 @@ class Dependent extends Model
     // =========================================================================
 
     /**
-     * Retrieve the parent user account associated with this dependent. [94]
+     * Retrieve the parent parent user account associated with this dependent. [94]
      */
     public function user() 
     {
