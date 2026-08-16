@@ -5,7 +5,6 @@
 @section('content')
 @php
     $res = $appointment->result;
-    // FIXED: Changed lab_status to radio_status to prevent getting locked in REVIEW MODE [338]
     $status = $res->radio_status ?? 'pending';
 
     // UI Logic States
@@ -35,7 +34,6 @@
     $showPreview = $isReadonly || $hasReportScan;
 @endphp
 
-{{-- FIXED: Changed container-fluid to container to restore alignment with the header layout --}}
 <div class="container text-start animate-page pt-4" id="radio-workstation-root">
 
     {{-- 1. HEADER SECTION --}}
@@ -79,57 +77,102 @@
     @endif
 
     {{-- 3. CORE SAVE FORM --}}
-    <form id="radioForm" action="{{ $isReadonly ? route('workstation.verify', [$appointment->id, 'radio']) : route('workstation.radiology.save', $appointment->id) }}" method="POST" enctype="multipart/form-data">
+    <form id="radioForm" action="{{ $isReadonly ? route('workstation.verify', [$appointment->id, 'radio']) : route('workstation.radiology.save', $appointment->id) }}" method="POST" enctype="multipart/form-data" novalidate>
         @csrf
         <input type="hidden" name="clear_scan" id="clear_scan_field" value="0">
         <div class="row g-4">
 
             {{-- SIDEBAR: METADATA & CLINICAL SIGNATORIES --}}
-            {{-- FIXED: Kept the sidebar container always visible in verification mode to house the readonly Case No --}}
             <div class="col-md-4" id="sidebar-container">
                 <div class="card p-3 border-secondary bg-card mb-3 shadow-sm" id="sidebar-card" style="background-color: var(--bg-card); color: var(--text-main);">
                     <h6 class="text-accent mb-3 small fw-bold uppercase">Radiology Metadata</h6>
 
+                    {{-- Case # Field (Always Required & Always Visible) --}}
                     <div class="mb-3">
-                        <label class="smaller text-secondary fw-bold mb-1 uppercase">Case #</label>
-                        {{-- FIXED: Dynamically applies readonly based on the workstation mode --}}
-                        <input type="text" name="case_no" id="case_no_field" class="form-control" value="{{ $res->radio_data['metadata']['case_no'] ?? ($res->radio_data['case_no'] ?? '') }}" placeholder="Enter Case ID" {{ $isReadonly ? 'readonly' : 'required' }}>
+                        <label class="smaller text-secondary fw-bold mb-1 uppercase">Case # / Cert No.</label>
+                        <input type="text" name="case_no" id="case_no_field" class="form-control @error('case_no') is-invalid @enderror" value="{{ old('case_no', $res->radio_data['metadata']['case_no'] ?? ($res->radiologyReport?->case_no ?? '')) }}" placeholder="Enter Case ID" {{ $isReadonly ? 'readonly' : 'required' }}>
+                        <div class="invalid-feedback d-none" id="err_case_no"></div>
+                        @error('case_no')
+                            <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                        @enderror
                     </div>
 
-                    {{-- FIXED: Hides optional metadata snap fields if we are in verification mode OR if a scan is active --}}
+                    {{-- READ-ONLY PATIENT PROFILE SNAPSHOT CARD WITH EDIT LINK --}}
+                    <div class="mb-3 p-3 rounded border border-secondary border-opacity-10" style="background-color: rgba(0,0,0,0.02);">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-secondary smaller fw-bold uppercase">Patient Profile</small>
+                            @if(!$isReadonly && auth()->user()->isEmployee())
+                                <a href="{{ route('appointments.edit-details', $appointment->id) }}?from=radio" class="btn btn-sm btn-outline-accent py-0.5 px-2 smaller uppercase fw-bold" style="font-size: 0.68rem;" title="Edit Patient Details">
+                                    <i class="bi bi-pencil-square me-1"></i>Edit Details
+                                </a>
+                            @endif
+                        </div>
+                        <div class="text-main fw-bold small mb-1">{{ strtoupper($appointment->patient_name) }}</div>
+                        <div class="text-secondary smaller mb-1">{{ $appointment->patient_age }} YRS / {{ strtoupper($appointment->patient_sex) }}</div>
+                        <div class="text-muted smaller text-break" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
+
+                        {{-- Hidden snapshot payloads for backend backwards-compatibility --}}
+                        <input type="hidden" name="radio_data[metadata][name]" value="{{ strtoupper($appointment->patient_name) }}">
+                        <input type="hidden" name="radio_data[metadata][address]" value="{{ $appointment->patient_address }}">
+                        <input type="hidden" name="radio_data[metadata][age_sex]" value="{{ $appointment->patient_age }} / {{ strtoupper($appointment->patient_sex) }}">
+                    </div>
+
+                    {{-- OPTIONAL MANUAL METADATA & SIGNATORIES (Hidden when file/scan is inputted) --}}
                     <div id="sidebar-manual-fields" class="{{ $isReadonly || $hasReportScan ? 'd-none' : '' }}">
+                        {{-- Date of Exam --}}
                         <div class="mb-3">
-                            <label class="smaller text-secondary fw-bold mb-1 uppercase">Patient Name</label>
-                            <input type="text" name="radio_data[metadata][name]" class="form-control" value="{{ $res->radio_data['metadata']['name'] ?? strtoupper($appointment->patient_name) }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
+                            <label class="smaller text-secondary fw-bold mb-1 uppercase">Date of Exam</label>
+                            <input type="date" name="radio_data[metadata][date]" id="radio_meta_date" class="form-control @error('radio_data.metadata.date') is-invalid @enderror" value="{{ old('radio_data.metadata.date', isset($res->radio_data['metadata']['date']) ? \Carbon\Carbon::parse($res->radio_data['metadata']['date'])->format('Y-m-d') : $testedDate) }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
+                            <div class="invalid-feedback d-none" id="err_radio_meta_date"></div>
+                            @error('radio_data.metadata.date')
+                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                            @enderror
                         </div>
 
+                        {{-- Technique / Examination Editable Dropdown --}}
                         <div class="mb-3">
-                            <label class="smaller text-secondary fw-bold mb-1 uppercase">Address</label>
-                            <input type="text" name="radio_data[metadata][address]" class="form-control" value="{{ $res->radio_data['metadata']['address'] ?? $appointment->patient_address }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
+                            <label class="smaller text-secondary fw-bold mb-1 uppercase">Technique / Examination</label>
+                            <input type="text" name="radio_data[technique]" id="technique_field" list="technique_options" class="form-control uppercase @error('radio_data.technique') is-invalid @enderror" placeholder="Select or type technique..." value="{{ old('radio_data.technique', $res->radio_data['technique'] ?? ($res->radiologyReport?->technique ?? '')) }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
+                            <datalist id="technique_options">
+                                <option value="CHEST PA">
+                                <option value="CHEST AP / LATERAL">
+                                <option value="CHEST PA / LATERAL">
+                                <option value="ABDOMEN PLAIN (KUB)">
+                                <option value="SKULL AP / LATERAL">
+                                <option value="CERVICAL SPINE AP / LATERAL">
+                                <option value="LUMBOSACRAL SPINE AP / LATERAL">
+                                <option value="UPPER EXTREMITY">
+                                <option value="LOWER EXTREMITY">
+                                <option value="PELVIS AP">
+                            </datalist>
+                            <div class="invalid-feedback d-none" id="err_technique"></div>
+                            @error('radio_data.technique')
+                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                            @enderror
                         </div>
 
-                        <div class="row g-2 mb-3">
-                            <div class="col-6">
-                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Date</label>
-                                <input type="date" name="radio_data[metadata][date]" class="form-control" value="{{ isset($res->radio_data['metadata']['date']) ? \Carbon\Carbon::parse($res->radio_data['metadata']['date'])->format('Y-m-d') : $testedDate }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
-                            </div>
-                            <div class="col-6">
-                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Age/Sex</label>
-                                <input type="text" name="radio_data[metadata][age_sex]" class="form-control" value="{{ $res->radio_data['metadata']['age_sex'] ?? ($appointment->patient_age.' / '.$appointment->patient_sex) }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
-                            </div>
-                        </div>
-
+                        {{-- Radiologist Signatory (Blank on Default) --}}
                         <h6 class="text-accent mb-3 small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3">Manual Signatory (PDF)</h6>
-                        <div class="mb-4 border border-secondary border-opacity-10 p-2.5 rounded" style="background-color: rgba(0,0,0,0.015);">
-                            <input type="text" name="radio_data[sig][name]" class="form-control mb-1" placeholder="Radiologist Name" value="{{ $res->radio_data['sig']['name'] ?? '' }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
-                            <input type="text" name="radio_data[sig][lic]" class="form-control" placeholder="License / Position" value="{{ $res->radio_data['sig']['lic'] ?? '' }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
+                        <div class="mb-3 border border-secondary border-opacity-10 p-2.5 rounded" style="background-color: rgba(0,0,0,0.015);">
+                            <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">Radiologist Name</label>
+                            <input type="text" name="radio_data[sig][name]" id="sig_radio_name" class="form-control mb-1 @error('radio_data.sig.name') is-invalid @enderror" placeholder="Radiologist Name" value="{{ old('radio_data.sig.name', $res->radio_data['sig']['name'] ?? ($res->radiologyReport?->radiologist_name ?? '')) }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
+                            <div class="invalid-feedback d-none mb-1" id="err_sig_radio_name"></div>
+                            @error('radio_data.sig.name')
+                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                            @enderror
+
+                            <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">License / PRC No.</label>
+                            <input type="text" name="radio_data[sig][lic]" id="sig_radio_lic" class="form-control @error('radio_data.sig.lic') is-invalid @enderror" placeholder="License / Position" value="{{ old('radio_data.sig.lic', $res->radio_data['sig']['lic'] ?? ($res->radiologyReport?->radiologist_license ?? '')) }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
+                            <div class="invalid-feedback d-none" id="err_sig_radio_lic"></div>
+                            @error('radio_data.sig.lic')
+                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                            @enderror
                         </div>
                     </div>
                 </div>
             </div>
 
             {{-- MAIN WORKSTATION PANEL --}}
-            {{-- FIXED: Locked at col-md-8 to sit side-by-side with the sidebar housing the readonly Case No --}}
             <div class="col-md-8" id="main-panel-container">
 
                 {{-- Prominent Dual-Column Upload Control Center --}}
@@ -140,7 +183,11 @@
                             <div class="card p-3 h-100 text-center" style="background-color: rgba(220, 53, 69, 0.02); border: 2px dashed rgba(220, 53, 69, 0.25) !important; border-radius: 12px;">
                                 <h6 class="text-danger fw-bold mb-1 uppercase"><i class="bi bi-camera-fill me-2 fs-5"></i>Patient X-Ray Scan (Required)</h6>
                                 <p class="text-secondary small mb-3">Select the raw patient chest radiologic snapshot file.</p>
-                                <input type="file" name="xray_image" id="xray_input" class="form-control form-control-sm" onchange="previewXray(this)" {{ !$hasXray ? 'required' : '' }}>
+                                <input type="file" name="xray_image" id="xray_input" class="form-control form-control-sm @error('xray_image') is-invalid @enderror" onchange="previewXray(this)" {{ !$hasXray ? 'required' : '' }}>
+                                <div class="invalid-feedback d-none" id="err_xray_image"></div>
+                                @error('xray_image')
+                                    <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                                @enderror
                                 @if($hasXray)
                                     <p class="text-success smaller mt-2 mb-0 fw-bold"><i class="bi bi-check-circle-fill me-1"></i> X-Ray File Cached on Server</p>
                                 @endif
@@ -152,8 +199,11 @@
                             <div class="card p-3 h-100 text-center" style="background-color: rgba(255, 193, 7, 0.02); border: 2px dashed rgba(255, 193, 7, 0.25) !important; border-radius: 12px;">
                                 <h6 class="text-warning fw-bold mb-1 uppercase"><i class="bi bi-file-earmark-arrow-up-fill me-2 fs-5"></i>Report PDF Scan (Optional)</h6>
                                 <p class="text-secondary small mb-3">Uploading a scanned report hides the manual text fields below.</p>
-                                <input type="file" name="radio_scan" id="report_scan_input" class="form-control form-control-sm" onchange="toggleScanPriority(this)">
-                                <input type="hidden" name="clear_scan" id="clear_scan_field" value="0">
+                                <input type="file" name="radio_scan" id="report_scan_input" class="form-control form-control-sm @error('radio_scan') is-invalid @enderror" onchange="toggleScanPriority(this)">
+                                <div class="invalid-feedback d-none" id="err_radio_scan"></div>
+                                @error('radio_scan')
+                                    <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                                @enderror
                                 @if($hasReportScan)
                                     <p class="text-warning smaller mt-2 mb-0 fw-bold"><i class="bi bi-eye-fill me-1"></i> PDF Scan Override Active</p>
                                 @endif
@@ -193,15 +243,23 @@
                     @if(!$isReadonly)
                         <div id="manual-panel" class="card p-4 border-secondary bg-card shadow-lg {{ $hasReportScan ? 'd-none' : '' }}">
                             <h6 class="border-bottom border-secondary border-opacity-25 pb-2 mb-3 uppercase small fw-bold" style="color: var(--text-main);">Manual Findings Entry</h6>
-                            
+
                             <div class="mb-4">
                                 <label class="text-secondary smaller fw-bold mb-1 uppercase">Findings</label>
-                                <textarea name="radio_data[findings]" id="findings_field" class="form-control p-3" rows="10" placeholder="Type findings..." {{ $hasReportScan ? 'disabled' : 'required' }}>{{ $res->radio_data['findings'] ?? '' }}</textarea>
+                                <textarea name="radio_data[findings]" id="findings_field" class="form-control p-3 @error('radio_data.findings') is-invalid @enderror" rows="10" placeholder="Type findings..." {{ $hasReportScan ? 'disabled' : 'required' }}>{{ old('radio_data.findings', $res->radio_data['findings'] ?? ($res->radiologyReport?->findings ?? '')) }}</textarea>
+                                <div class="invalid-feedback d-none" id="err_findings"></div>
+                                @error('radio_data.findings')
+                                    <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                                @enderror
                             </div>
 
                             <div>
                                 <label class="text-secondary smaller fw-bold mb-1 uppercase">Impression</label>
-                                <input type="text" name="radio_data[impression]" id="impression_field" class="form-control py-3 fw-bold" value="{{ $res->radio_data['impression'] ?? '' }}" placeholder="Final clinical impression" {{ $hasReportScan ? 'disabled' : 'required' }}>
+                                <input type="text" name="radio_data[impression]" id="impression_field" class="form-control py-3 fw-bold @error('radio_data.impression') is-invalid @enderror" value="{{ old('radio_data.impression', $res->radio_data['impression'] ?? ($res->radiologyReport?->impression ?? '')) }}" placeholder="Final clinical impression" {{ $hasReportScan ? 'disabled' : 'required' }}>
+                                <div class="invalid-feedback d-none" id="err_impression"></div>
+                                @error('radio_data.impression')
+                                    <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                                @enderror
                             </div>
                         </div>
                     @endif
@@ -217,7 +275,7 @@
                                 @endif
                             </span>
                             @if(!$isReadonly)
-                                <button type="button" class="btn btn-sm btn-dark fw-bold px-3" onclick="removeScan()">REMOVE & RESTORE SIDEBAR</button>
+                                <button type="button" class="btn btn-sm btn-dark fw-bold px-3" onclick="removeScan()">REMOVE & RESTORE FORM</button>
                             @endif
                         </div>
                         <div class="card border-warning border-top-0 rounded-0 rounded-bottom overflow-hidden shadow bg-card p-3 text-center d-flex justify-content-center align-items-center" style="min-height: 500px;">
@@ -310,57 +368,35 @@
     </div>
 </div>
 
-{{-- MULTI-FORMAT LIGHTBOX OVERLAY WITH SECURE PREVIEW GATES --}}
-<div id="qr_lightbox" class="d-none fixed inset-0 w-100 h-100 d-flex align-items-center justify-content-center" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 3000; background-color: rgba(0, 0, 0, 0.85); cursor: zoom-out;" onclick="closeQRLightbox(event)">
-    <div class="text-center p-3 animate-fade-in w-100 h-100 d-flex flex-column align-items-center justify-content-center" style="max-width: 95vw; max-height: 95vh;">
-        
-        {{-- Floating File Canvas --}}
-        <div id="lightbox_viewer_container" class="position-relative d-flex align-items-center justify-content-center bg-white rounded p-2 border border-secondary shadow-lg" style="max-width: 85vw; max-height: 80vh; overflow: auto; min-width: 300px; min-height: 300px;">
-            <!-- Render Image Scan -->
-            <img src="" id="lightbox_qr_img" alt="Zoomed Asset" class="img-fluid rounded transition-all" style="max-height: 75vh; max-width: 80vw; object-fit: contain; transform: scale(1); transform-origin: center; cursor: grab;">
-            
-            <!-- Render PDF Document Scan -->
-            <iframe id="lightbox_pdf_viewer" class="d-none rounded" style="width: 80vw; height: 75vh; border: none;"></iframe>
-        </div>
-
-        {{-- Interactive Document Control Toolbar --}}
-        <div id="lightbox_zoom_controls" class="mt-3 d-flex gap-3 align-items-center bg-dark bg-opacity-75 px-4 py-2 rounded-pill border border-secondary">
-            <button type="button" class="btn btn-sm btn-outline-light rounded-circle px-2.5 py-1" onclick="zoomImage(-0.15, event)" title="Zoom Out"><i class="bi bi-zoom-out"></i></button>
-            <span id="zoom_percent" class="text-white small fw-bold">100%</span>
-            <button type="button" class="btn btn-sm btn-outline-light rounded-circle px-2.5 py-1" onclick="zoomImage(0.15, event)" title="Zoom In"><i class="bi bi-zoom-in"></i></button>
-            <button type="button" class="btn btn-sm btn-outline-light rounded-circle px-2.5 py-1" onclick="toggleFullscreen(event)" title="Toggle Fullscreen"><i class="bi bi-fullscreen" id="fullscreen_icon"></i></button>
-            <button type="button" class="btn btn-sm btn-outline-danger rounded-circle px-2.5 py-1" onclick="resetZoom(event)" title="Reset Zoom"><i class="bi bi-arrow-counterclockwise"></i></button>
-        </div>
-
-        <p class="text-white-50 mt-3 small mb-0"><i class="bi bi-x-circle me-1"></i> Click anywhere on the dark overlay boundary to close preview</p>
-    </div>
-</div>
+{{-- MULTI-FORMAT LIGHTBOX OVERLAY --}}
+@include('layouts.partials.lightbox-overlay')
 
 @push('scripts')
 <script>
-let currentScale = 1;
-let translateX = 0;
-let translateY = 0;
-let isDragging = false;
-let startX, startY;
+// Universal Global Lightbox Zoom Helper
+window.zoomQR = function(fileSrc) {
+    if (!fileSrc) return;
+    if (typeof window.openFilePreview === 'function') {
+        window.openFilePreview(fileSrc, 'Radiology Asset Preview');
+    } else if (typeof window.zoomFile === 'function') {
+        window.zoomFile(fileSrc);
+    }
+};
 
 // Setup and teardown required status on all manual input elements depending on current layout mode
 function setManualFieldsRequired(required) {
     const fields = [
         document.getElementById('case_no_field'), // Standalone case_no (Always Required)
-        document.querySelector('input[name="radio_data[metadata][date]"]'),
-        document.querySelector('input[name="radio_data[metadata][name]"]'),
-        document.querySelector('input[name="radio_data[metadata][address]"]'),
-        document.querySelector('input[name="radio_data[metadata][age_sex]"]'),
-        document.querySelector('input[name="radio_data[sig][name]"]'),
-        document.querySelector('input[name="radio_data[sig][lic]"]'),
+        document.getElementById('radio_meta_date'),
+        document.getElementById('technique_field'),
+        document.getElementById('sig_radio_name'),
+        document.getElementById('sig_radio_lic'),
         document.getElementById('findings_field'),
         document.getElementById('impression_field')
     ];
 
     fields.forEach(field => {
         if (field) {
-            // case_no is always required and enabled!
             if (field.id === 'case_no_field') {
                 field.setAttribute('required', 'required');
                 field.removeAttribute('disabled');
@@ -402,7 +438,6 @@ function previewXray(input) {
             document.getElementById('xray_input').removeAttribute('required');
             document.getElementById('xray-viewer-card').classList.remove('d-none');
 
-            // Hide the file input area once chosen
             if (document.getElementById('xray-image-upload-box')) {
                 document.getElementById('xray-image-upload-box').classList.add('d-none');
             }
@@ -412,7 +447,6 @@ function previewXray(input) {
 }
 window.previewXray = previewXray;
 
-// FIXED: Defensively updated script references with robust element existence checks [377]
 function removeXray() {
     const xrayInput = document.getElementById('xray_input');
     if (xrayInput) {
@@ -491,19 +525,15 @@ function toggleScanPriority(input) {
             const manualPanel = document.getElementById('manual-panel');
             if (manualPanel) manualPanel.classList.add('d-none');
 
-            // FIXED: Hide only the optional manual fields inside the sidebar, keep Case # visible [340]
             const sidebarContainer = document.getElementById('sidebar-manual-fields');
             if (sidebarContainer) sidebarContainer.classList.add('d-none');
 
             setManualFieldsRequired(false);
 
-            // Only hide the optional report scan box
             if (document.getElementById('report-scan-upload-box')) {
                 document.getElementById('report-scan-upload-box').classList.add('d-none');
             }
             document.getElementById('scan-preview-zone').classList.remove('d-none');
-            
-            // FIXED: Maintains side-by-side grid structure (prevents wrap-around shifts)
             document.getElementById('main-panel-container').className = 'col-md-8';
         };
         reader.readAsDataURL(file);
@@ -511,7 +541,6 @@ function toggleScanPriority(input) {
 }
 window.toggleScanPriority = toggleScanPriority;
 
-// FIXED: Defensively updated script references with robust element existence checks [377]
 function removeScan() {
     const scanInput = document.getElementById('report_scan_input');
     if (scanInput) scanInput.value = "";
@@ -537,19 +566,16 @@ function removeScan() {
     const manualPanel = document.getElementById('manual-panel');
     if (manualPanel) manualPanel.classList.remove('d-none');
 
-    // FIXED: Restores optional manual entry fields nested within the sidebar completely
     const sidebarContainer = document.getElementById('sidebar-manual-fields');
     if (sidebarContainer) sidebarContainer.classList.remove('d-none');
 
     setManualFieldsRequired(true);
 
-    // Restore the optional report scan upload box
     if (document.getElementById('report-scan-upload-box')) {
         document.getElementById('report-scan-upload-box').classList.remove('d-none');
     }
     document.getElementById('scan-preview-zone').classList.add('d-none');
-    
-    // FIXED: Maintains side-by-side grid structure (prevents wrap-around shifts)
+
     document.getElementById('main-panel-container').className = 'col-md-8';
 }
 window.removeScan = removeScan;
@@ -574,120 +600,6 @@ function viewReportFullscreen() {
 }
 window.viewReportFullscreen = viewReportFullscreen;
 
-function zoomImage(amount, event) {
-    if (event) event.stopPropagation();
-
-    currentScale += amount;
-    currentScale = Math.max(0.5, Math.min(3, currentScale));
-
-    const img = document.getElementById('lightbox_qr_img');
-    if (img) {
-        img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${currentScale})`;
-        img.style.cursor = currentScale > 1 ? 'grab' : 'default';
-    }
-
-    const percentEl = document.getElementById('zoom_percent');
-    if (percentEl) {
-        percentEl.innerText = `${Math.round(currentScale * 100)}%`;
-    }
-}
-window.zoomImage = zoomImage;
-
-function resetZoom(event) {
-    if (event) event.stopPropagation();
-
-    currentScale = 1;
-    translateX = 0;
-    translateY = 0;
-    isDragging = false;
-
-    const img = document.getElementById('lightbox_qr_img');
-    if (img) {
-        img.style.transform = 'translate(0px, 0px) scale(1)';
-        img.style.cursor = 'default';
-    }
-
-    const percentEl = document.getElementById('zoom_percent');
-    if (percentEl) {
-        percentEl.innerText = '100%';
-    }
-}
-window.resetZoom = resetZoom;
-
-function zoomFile(fileSrc) {
-    if (!fileSrc) return;
-
-    const isPdf = fileSrc.toLowerCase().endsWith('.pdf') || fileSrc.startsWith('data:application/pdf');
-    const img = document.getElementById('lightbox_qr_img');
-    const iframe = document.getElementById('lightbox_pdf_viewer');
-    const controls = document.getElementById('lightbox_zoom_controls');
-
-    resetZoom();
-
-    if (isPdf) {
-        img.classList.add('d-none');
-        controls.classList.add('d-none');
-        iframe.src = fileSrc;
-        iframe.classList.remove('d-none');
-    } else {
-        iframe.classList.add('d-none');
-        iframe.src = '';
-        img.src = fileSrc;
-        img.classList.remove('d-none');
-        controls.classList.remove('d-none');
-    }
-
-    document.getElementById('qr_lightbox').classList.remove('d-none');
-    document.getElementById('qr_lightbox').classList.add('d-flex');
-}
-window.zoomQR = zoomFile;
-
-function closeQRLightbox(event) {
-    if (event) {
-        const container = document.getElementById('lightbox_viewer_container');
-        const controls = document.getElementById('lightbox_zoom_controls');
-        if (container.contains(event.target) || (controls && controls.contains(event.target))) {
-            return;
-        }
-    }
-    document.getElementById('qr_lightbox').classList.add('d-none');
-    document.getElementById('qr_lightbox').classList.remove('d-flex');
-
-    if (document.fullscreenElement) {
-        document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
-    }
-    resetZoom();
-}
-window.closeQRLightbox = closeQRLightbox;
-
-function toggleFullscreen(event) {
-    if (event) event.stopPropagation();
-
-    const container = document.getElementById('lightbox_viewer_container');
-    const icon = document.getElementById('fullscreen_icon');
-
-    if (!document.fullscreenElement) {
-        container.requestFullscreen().then(() => {
-            if (icon) {
-                icon.classList.remove('bi-fullscreen');
-                icon.classList.add('bi-fullscreen-exit');
-            }
-        }).catch(err => {
-            console.error("Error attempting to enable fullscreen mode:", err);
-        });
-    } else {
-        document.exitFullscreen().then(() => {
-            if (icon) {
-                icon.classList.remove('bi-fullscreen-exit');
-                icon.classList.add('bi-fullscreen');
-            }
-        }).catch(err => {
-            console.error("Error attempting to exit fullscreen mode:", err);
-        });
-    }
-}
-window.toggleFullscreen = toggleFullscreen;
-
 document.addEventListener('DOMContentLoaded', () => {
     // Initial setup on page load
     if ("{{ $hasReportScan ? '1' : '0' }}" === "1") {
@@ -698,8 +610,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (sidebarContainer) sidebarContainer.classList.add('d-none');
 
         setManualFieldsRequired(false);
-        
-        // FIXED: Maintains side-by-side grid structure (prevents wrap-around shifts)
         document.getElementById('main-panel-container').className = 'col-md-8';
     } else {
         setManualFieldsRequired(true);
@@ -740,77 +650,105 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Draggable canvas functionality for zoomed-in images
-    const img = document.getElementById('lightbox_qr_img');
-    if (img) {
-        img.addEventListener('mousedown', (e) => {
-            if (currentScale > 1) {
-                isDragging = true;
-                img.style.cursor = 'grabbing';
-                startX = e.clientX;
-                startY = e.clientY;
+    // MAIN FORM SUBMIT GATEWAY: Enforces validation with inline error highlights
+    const mainForm = document.getElementById('radioForm');
+    if (mainForm) {
+        mainForm.addEventListener('submit', function(e) {
+            let isValid = true;
+            let firstInvalid = null;
+
+            // Flush previous error states
+            document.querySelectorAll('#radioForm .is-invalid').forEach(el => el.classList.remove('is-invalid'));
+            document.querySelectorAll('#radioForm .invalid-feedback').forEach(el => {
+                el.classList.add('d-none');
+                el.innerText = '';
+            });
+
+            function markInvalid(input, errId, msg) {
+                if (!input) return;
+                input.classList.add('is-invalid');
+                const errDiv = document.getElementById(errId);
+                if (errDiv) {
+                    errDiv.innerText = msg;
+                    errDiv.classList.remove('d-none');
+                    errDiv.classList.add('d-block');
+                }
+                isValid = false;
+                if (!firstInvalid) firstInvalid = input;
+            }
+
+            const manualPanel = document.getElementById('manual-panel');
+            const isManualMode = manualPanel && !manualPanel.classList.contains('d-none');
+
+            // 1. Case # Validation (Always required)
+            const caseNo = document.getElementById('case_no_field');
+            if (caseNo && !caseNo.value.trim()) {
+                markInvalid(caseNo, 'err_case_no', 'Case Number is required.');
+            }
+
+            // 2. Patient X-Ray Image File Check (Always required if not already uploaded)
+            const xrayInput = document.getElementById('xray_input');
+            const hasExistingXray = "{{ $hasXray ? '1' : '0' }}" === "1";
+            if (!hasExistingXray && xrayInput && (!xrayInput.files || xrayInput.files.length === 0)) {
+                markInvalid(xrayInput, 'err_xray_image', 'Patient X-Ray image file is required.');
+            }
+
+            // 3. Validate Manual Mode Fields
+            if (isManualMode) {
+                const date = document.getElementById('radio_meta_date');
+                if (date && !date.value) markInvalid(date, 'err_radio_meta_date', 'Date of exam is required.');
+
+                const technique = document.getElementById('technique_field');
+                if (technique && !technique.value.trim()) markInvalid(technique, 'err_technique', 'Radiologic technique is required.');
+
+                const relName = document.getElementById('sig_radio_name');
+                if (relName && !relName.value.trim()) markInvalid(relName, 'err_sig_radio_name', 'Radiologist Name is required.');
+
+                const relLic = document.getElementById('sig_radio_lic');
+                if (relLic && !relLic.value.trim()) markInvalid(relLic, 'err_sig_radio_lic', 'Radiologist License/PRC No. is required.');
+
+                const findings = document.getElementById('findings_field');
+                if (findings && !findings.value.trim()) markInvalid(findings, 'err_findings', 'Findings are required.');
+
+                const impression = document.getElementById('impression_field');
+                if (impression && !impression.value.trim()) markInvalid(impression, 'err_impression', 'Impression is required.');
+            } else {
+                // Scan mode: scan file must be present
+                const scanInput = document.getElementById('report_scan_input');
+                const hasExistingScan = "{{ $hasReportScan ? '1' : '0' }}" === "1";
+                if (!hasExistingScan && scanInput && (!scanInput.files || scanInput.files.length === 0)) {
+                    markInvalid(scanInput, 'err_radio_scan', 'A completed radiology report scan file is required.');
+                }
+            }
+
+            if (!isValid) {
                 e.preventDefault();
+                e.stopPropagation();
+                if (firstInvalid) {
+                    firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    firstInvalid.focus();
+                }
+                return false;
             }
-        });
-
-        window.addEventListener('mousemove', (e) => {
-            if (isDragging && currentScale > 1) {
-                const dx = e.clientX - startX;
-                const dy = e.clientY - startY;
-                translateX += dx;
-                translateY += dy;
-                startX = e.clientX;
-                startY = e.clientY;
-                img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${currentScale})`;
-            }
-        });
-
-        window.addEventListener('mouseup', () => {
-            isDragging = false;
-            if (img) img.style.cursor = currentScale > 1 ? 'grab' : 'default';
-        });
-
-        // Mobile touch swipe gestures
-        img.addEventListener('touchstart', (e) => {
-            if (currentScale > 1 && e.touches.length === 1) {
-                isDragging = true;
-                startX = e.touches[0].clientX;
-                startY = e.touches[0].clientY;
-            }
-        }, { passive: true });
-
-        img.addEventListener('touchmove', (e) => {
-            if (isDragging && currentScale > 1 && e.touches.length === 1) {
-                const dx = e.touches[0].clientX - startX;
-                const dy = e.touches[0].clientY - startY;
-                translateX += dx;
-                translateY += dy;
-                startX = e.touches[0].clientX;
-                startY = e.touches[0].clientY;
-                img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${currentScale})`;
-            }
-        }, { passive: true });
-
-        img.addEventListener('touchend', () => {
-            isDragging = false;
         });
     }
 
-    // Fullscreen wheel-to-zoom mapping
-    const container = document.getElementById('lightbox_viewer_container');
-    if (container) {
-        container.addEventListener('wheel', (e) => {
-            if (document.fullscreenElement) {
-                e.preventDefault();
-                const amount = e.deltaY < 0 ? 0.15 : -0.15;
-                zoomImage(amount);
+    // Dismiss errors on input change
+    document.querySelectorAll('#radioForm input, #radioForm select, #radioForm textarea').forEach(input => {
+        input.addEventListener('input', () => {
+            input.classList.remove('is-invalid');
+            let errDiv = document.getElementById('err_' + input.id) || document.getElementById('err_' + input.name.replace(/\[|\]/g, '_'));
+            if (errDiv) {
+                errDiv.classList.add('d-none');
+                errDiv.classList.remove('d-block');
             }
-        }, { passive: false });
-    }
+        });
+    });
 });
 </script>
 @endpush
 
+@push('styles')
 <style>
 #radio-workstation-root .form-control,
 #radio-workstation-root .form-select,
@@ -850,4 +788,9 @@ document.addEventListener('DOMContentLoaded', () => {
     background: rgba(0, 0, 0, 0.6);
     transition: opacity 0.22s ease-in-out;
 }
+#radio-workstation-root .is-invalid {
+    border-color: #ff4d4d !important;
+    box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.15) !important;
+}
 </style>
+@endpush

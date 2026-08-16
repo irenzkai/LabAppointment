@@ -1,7 +1,7 @@
 @php
-    // Defensive initialization to resolve IDE and static analysis undefined variable warnings
-    $selectedTypes = $selectedTypes ?? $autoReportTypes ?? [];
-    $isReadonly = $isReadonly ?? false;
+// Defensive initialization to resolve IDE and static analysis undefined variable warnings
+$selectedTypes = $selectedTypes ?? $autoReportTypes ?? [];
+$isReadonly = $isReadonly ?? false;
 @endphp
 
 {{-- B. UNIFIED ADD WORKSTATION MODAL (Prevents adding existing worksheets) --}}
@@ -46,9 +46,27 @@
                     <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Certificate/Reference No.</label>
                     <input type="text" name="cert_no" id="add_cert_no" class="form-control" placeholder="Enter reference tracking ID">
                 </div>
+                
+                {{-- Scan File Upload with View & Remove Capabilities --}}
                 <div class="mb-4 text-start">
                     <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Scan File Upload</label>
-                    <input type="file" name="scan_file" id="add_scan_file" class="form-control" accept="image/*, application/pdf">
+                    
+                    <div id="add_scan_input_wrapper">
+                        <input type="file" name="scan_file" id="add_scan_file" class="form-control" accept="image/*, application/pdf" onchange="handleAddScanUpload(this)">
+                    </div>
+
+                    {{-- File Preview Card --}}
+                    <div id="add_scan_preview_container" class="d-none mt-2 p-2.5 rounded border border-secondary border-opacity-10" style="background-color: rgba(25, 211, 140, 0.03);">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span class="small text-accent fw-bold text-truncate pe-2" id="add_scan_file_label">
+                                <i class="bi bi-file-earmark-check-fill me-1"></i>Selected File
+                            </span>
+                            <div class="d-flex gap-1.5 flex-shrink-0">
+                                <button type="button" class="btn btn-sm btn-outline-accent py-1 px-2.5 fw-bold" id="btn_view_add_scan" style="font-size: 0.75rem;">View</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger py-1 px-2.5 fw-bold" onclick="removeAddScanUpload()" style="font-size: 0.75rem;">Remove</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -63,31 +81,77 @@
 
 @push('scripts')
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const selectElement = document.getElementById('add_workstation_type');
-        const customContainer = document.getElementById('custom_fields_container');
+let addScanLocalData = null;
 
-        if (selectElement && customContainer) {
-            selectElement.addEventListener('change', function() {
-                const type = this.value;
-                const customInputs = customContainer.querySelectorAll('input');
-                
-                if (type === 'custom') {
-                    customContainer.classList.remove('d-none');
-                    customInputs.forEach(input => {
-                        input.setAttribute('required', 'required');
-                        input.disabled = false;
-                    });
-                } else {
-                    customContainer.classList.add('d-none');
-                    customInputs.forEach(input => {
-                        input.removeAttribute('required');
-                        input.disabled = true;
-                        input.value = ''; // Reset input value to prevent stale data
-                    });
+function handleAddScanUpload(input) {
+    const file = input.files[0];
+    const inputWrapper = document.getElementById('add_scan_input_wrapper');
+    const previewContainer = document.getElementById('add_scan_preview_container');
+    const label = document.getElementById('add_scan_file_label');
+    const viewBtn = document.getElementById('btn_view_add_scan');
+
+    if (!file) {
+        removeAddScanUpload();
+        return;
+    }
+
+    if (inputWrapper) inputWrapper.classList.add('d-none');
+    if (previewContainer) previewContainer.classList.remove('d-none');
+    if (label) label.innerHTML = `<i class="bi bi-file-earmark-check-fill me-1"></i>${file.name}`;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        addScanLocalData = e.target.result;
+        if (viewBtn) {
+            viewBtn.onclick = function() {
+                if (typeof openFilePreview === 'function') {
+                    openFilePreview(addScanLocalData, file.name);
+                } else if (typeof window.zoomQR === 'function') {
+                    window.zoomQR(addScanLocalData);
                 }
-            });
+            };
         }
-    });
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeAddScanUpload() {
+    const input = document.getElementById('add_scan_file');
+    const inputWrapper = document.getElementById('add_scan_input_wrapper');
+    const previewContainer = document.getElementById('add_scan_preview_container');
+    
+    if (input) input.value = '';
+    if (inputWrapper) inputWrapper.classList.remove('d-none');
+    if (previewContainer) previewContainer.classList.add('d-none');
+    addScanLocalData = null;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const selectElement = document.getElementById('add_workstation_type');
+    const customContainer = document.getElementById('custom_fields_container');
+
+    if (selectElement && customContainer) {
+        selectElement.addEventListener('change', function() {
+            const type = this.value;
+            const customInputs = customContainer.querySelectorAll('input:not([type="file"])');
+            
+            if (type === 'custom') {
+                customContainer.classList.remove('d-none');
+                customInputs.forEach(input => {
+                    input.setAttribute('required', 'required');
+                    input.disabled = false;
+                });
+            } else {
+                customContainer.classList.add('d-none');
+                customInputs.forEach(input => {
+                    input.removeAttribute('required');
+                    input.disabled = true;
+                    input.value = ''; // Reset input value to prevent stale data
+                });
+                removeAddScanUpload();
+            }
+        });
+    }
+});
 </script>
 @endpush

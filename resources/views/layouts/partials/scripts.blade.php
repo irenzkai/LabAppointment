@@ -36,7 +36,7 @@ function updateLiveClock() {
     const clockEl = document.getElementById('live-clock'); 
     if (!clockEl) return;
     
-    const now = new Date();
+    const now = new Date(); 
     clockEl.innerText = now.toLocaleTimeString('en-US', { 
         hour12: true, 
         hour: '2-digit', 
@@ -86,13 +86,12 @@ function setupPasswordToggle(inputId, toggleId) {
 /**
  * 5. LOCAL TIMESTAMP CONVERTER
  * Converts UTC strings from the database into the user's local device time.
- * FIXED: Uses CSS variables to automatically adjust contrast in both light and dark mode themes.
  */
 function convertTimestamps() {
     document.querySelectorAll('.local-time-trigger').forEach(el => {
         const utcStr = el.dataset.utc; 
         if (!utcStr) return;
-
+        
         const dateObj = new Date(utcStr);
         const localDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
         const localTime = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -131,21 +130,197 @@ function promptAccess(id, type, mode, isHistory = false) {
     accessModal.show();
 }
 
+/**
+ * 7. UNIFIED PSGC ADDRESS CASCADING ENGINE
+ * Global helper to manage Province -> City -> Barangay PSGC fetches across forms.
+ */
+window.initUnifiedAddressCascade = async function(config) {
+    const {
+        provEl,
+        cityEl,
+        brgyEl,
+        streetEl,
+        savedProv,
+        savedCity,
+        savedBrgy,
+        onCompiled
+    } = config;
+
+    if (!provEl || !cityEl || !brgyEl) return;
+
+    const PSGC_BASE = 'https://psgc.gitlab.io/api';
+
+    function normalizeName(str) {
+        if (!str) return '';
+        return str.toString().toUpperCase()
+            .replace(/\b(CITY|MUNICIPALITY|PROVINCE) OF\b/g, '')
+            .replace(/[^A-Z0-9]/g, '')
+            .trim();
+    }
+
+    function matchOption(select, value) {
+        if (!select || !value) return null;
+        const targetNorm = normalizeName(value);
+        const targetRaw = value.toString().trim().toUpperCase();
+
+        return Array.from(select.options).find(opt => {
+            if (opt.value.toString().trim().toUpperCase() === targetRaw) return true;
+            if (opt.text.toString().trim().toUpperCase() === targetRaw) return true;
+            if (opt.dataset.code === targetRaw) return true;
+            const optNorm = normalizeName(opt.text);
+            return optNorm && optNorm === targetNorm;
+        });
+    }
+
+    // Load Provinces
+    provEl.innerHTML = '<option value="">Loading Provinces...</option>';
+    try {
+        let res = await fetch(`${PSGC_BASE}/provinces.json`);
+        if (!res.ok) res = await fetch(`${PSGC_BASE}/provinces/`);
+        const provinces = await res.json();
+
+        provEl.innerHTML = '<option value="">Select Province</option>';
+        provinces.sort((a,b) => a.name.localeCompare(b.name)).forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.name;
+            opt.dataset.code = p.code;
+            opt.textContent = p.name;
+            provEl.appendChild(opt);
+        });
+        provEl.disabled = false;
+    } catch (e) {
+        console.error('PSGC Provinces Error:', e);
+        if (savedProv) {
+            provEl.innerHTML = `<option value="${savedProv}" selected>${savedProv}</option>`;
+        }
+    }
+
+    async function loadCities(provCode, targetCity) {
+        cityEl.disabled = true;
+        brgyEl.disabled = true;
+        cityEl.innerHTML = '<option value="">Loading Cities...</option>';
+        brgyEl.innerHTML = '<option value="">Select City First</option>';
+
+        if (!provCode) {
+            cityEl.innerHTML = '<option value="">Select Province First</option>';
+            return;
+        }
+
+        try {
+            let res = await fetch(`${PSGC_BASE}/provinces/${provCode}/cities-municipalities.json`);
+            if (!res.ok) res = await fetch(`${PSGC_BASE}/provinces/${provCode}/cities-municipalities/`);
+            const cities = await res.json();
+
+            cityEl.innerHTML = '<option value="">Select City</option>';
+            cities.sort((a,b) => a.name.localeCompare(b.name)).forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.name;
+                opt.dataset.code = c.code;
+                opt.textContent = c.name;
+                cityEl.appendChild(opt);
+            });
+            cityEl.disabled = false;
+
+            if (targetCity) {
+                const matched = matchOption(cityEl, targetCity);
+                if (matched) {
+                    cityEl.value = matched.value;
+                    await loadBarangays(matched.dataset.code, savedBrgy);
+                }
+            }
+        } catch (e) {
+            console.error('PSGC Cities Error:', e);
+            if (targetCity) {
+                cityEl.innerHTML = `<option value="${targetCity}" selected>${targetCity}</option>`;
+                cityEl.disabled = false;
+            }
+        }
+    }
+
+    async function loadBarangays(cityCode, targetBrgy) {
+        brgyEl.disabled = true;
+        brgyEl.innerHTML = '<option value="">Loading Barangays...</option>';
+
+        if (!cityCode) {
+            brgyEl.innerHTML = '<option value="">Select City First</option>';
+            return;
+        }
+
+        try {
+            let res = await fetch(`${PSGC_BASE}/cities-municipalities/${cityCode}/barangays.json`);
+            if (!res.ok) res = await fetch(`${PSGC_BASE}/cities-municipalities/${cityCode}/barangays/`);
+            const barangays = await res.json();
+
+            brgyEl.innerHTML = '<option value="">Select Barangay</option>';
+            barangays.sort((a,b) => a.name.localeCompare(b.name)).forEach(b => {
+                const opt = document.createElement('option');
+                opt.value = b.name;
+                opt.dataset.code = b.code;
+                opt.textContent = b.name;
+                brgyEl.appendChild(opt);
+            });
+            brgyEl.disabled = false;
+
+            if (targetBrgy) {
+                const matched = matchOption(brgyEl, targetBrgy);
+                if (matched) {
+                    brgyEl.value = matched.value;
+                }
+            }
+        } catch (e) {
+            console.error('PSGC Barangays Error:', e);
+            if (targetBrgy) {
+                brgyEl.innerHTML = `<option value="${targetBrgy}" selected>${targetBrgy}</option>`;
+                brgyEl.disabled = false;
+            }
+        }
+    }
+
+    provEl.addEventListener('change', function() {
+        const selectedOpt = provEl.options[provEl.selectedIndex];
+        const code = selectedOpt?.dataset.code;
+        loadCities(code, null);
+        if (onCompiled) onCompiled();
+    });
+
+    cityEl.addEventListener('change', function() {
+        const selectedOpt = cityEl.options[cityEl.selectedIndex];
+        const code = selectedOpt?.dataset.code;
+        loadBarangays(code, null);
+        if (onCompiled) onCompiled();
+    });
+
+    brgyEl.addEventListener('change', function() {
+        if (onCompiled) onCompiled();
+    });
+
+    if (streetEl) {
+        streetEl.addEventListener('input', function() {
+            if (onCompiled) onCompiled();
+        });
+    }
+
+    if (savedProv) {
+        const matchedProv = matchOption(provEl, savedProv);
+        if (matchedProv) {
+            provEl.value = matchedProv.value;
+            await loadCities(matchedProv.dataset.code, savedCity);
+        }
+    }
+};
+
 // Run conversion and initializations on DOM load
 document.addEventListener('DOMContentLoaded', () => {
     convertTimestamps();
 
     // 8. AUTO-HIDE DISMISSABLE CLINICAL ALERTS Smoothly after 10 seconds
     document.querySelectorAll('.alert-clinical').forEach(alert => {
-        // FIXED: Only auto-hide alerts containing a close button to prevent standard Safety Notices from fading
         if (alert.querySelector('.btn-close')) {
             setTimeout(() => {
-                // Apply inline transition rules for a complete, fluid exit path
                 alert.style.transition = 'opacity 0.8s ease-out, transform 0.8s ease-out, padding 0.5s ease-out, margin 0.5s ease-out, height 0.5s ease-out';
                 alert.style.opacity = '0';
                 alert.style.transform = 'translateY(-10px)';
                 
-                // Collapse spatial metrics immediately after opacity fades out
                 setTimeout(() => { 
                     alert.style.height = '0';
                     alert.style.paddingTop = '0';
@@ -153,299 +328,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     alert.style.marginTop = '0';
                     alert.style.marginBottom = '0';
                     
-                    // Safely remove the element from the DOM once all spatial transitions conclude
                     setTimeout(() => {
                         alert.remove();
                     }, 500);
                 }, 800);
-            }, 10000); // 10-second delay threshold before initiating exit
+            }, 10000);
         }
     });
-});
-
-/**
- * 7. REAL-TIME BROADCAST LISTENER
- */
-const currentUserId = "{{ auth()->check() ? auth()->id() : '' }}";
-if (currentUserId) {
-    // Initialize Pusher Client Connection
-    const pusher = new Pusher("{{ env('PUSHER_APP_KEY') }}", {
-        cluster: "{{ env('PUSHER_APP_CLUSTER') }}"
-    });
-
-    // Subscribe to the public notifications channel
-    const channel = pusher.subscribe('user-notifications');
-
-    // Bind the custom notification event
-    channel.bind('notification.created', function(data) {
-        // Ensure payload contains data and is targeted to this user session
-        if (data && data.data && data.data.user_id == currentUserId) {
-            
-            // A. Update unread notification bell badge 
-            const badge = document.getElementById('notif-badge');
-            if (badge) {
-                let currentCount = parseInt(badge.innerText) || 0;
-                currentCount++;
-                badge.innerText = currentCount;
-                badge.style.display = 'inline-block';
-            }
-
-            // B. Remove empty list state placeholder if visible
-            const placeholder = document.getElementById('no-notifs-placeholder');
-            if (placeholder) {
-                placeholder.remove();
-            }
-
-            // C. Prepend the new notification item into dropdown list
-            const listContainer = document.getElementById('notif-list-container');
-            if (listContainer) {
-                const newCardHTML = `
-                <li>
-                    <a class="dropdown-item p-3 border-bottom border-secondary border-opacity-25 bg-dark border-start border-4 border-accent" href="#" style="opacity: 0; transition: opacity 0.5s ease-in-out;">
-                        <div class="fw-bold fs-x-small text-accent mb-1 uppercase">${data.data.title}</div>
-                        <div class="text-wrap small text-white-50">${data.data.message}</div>
-                        <div class="mt-2 text-muted" style="font-size: 0.65rem;">Just now</div>
-                    </a>
-                </li>`;
-                listContainer.insertAdjacentHTML('afterbegin', newCardHTML);
-                
-                // Execute subtle CSS fade-in
-                const newElement = listContainer.querySelector('a');
-                setTimeout(() => {
-                    newElement.style.opacity = '1';
-                }, 50);
-            }
-        }
-    });
-}
-
-/**
- * 9. GLOBAL MULTI-FORMAT LIGHTBOX CONTROLLER
- * Explicitly exposes zoom, panning, and fullscreen features globally for all application files
- */
-window.currentScale = 1;
-window.translateX = 0;
-window.translateY = 0;
-window.isDragging = false;
-window.startX = 0;
-window.startY = 0;
-
-window.zoomImage = function(amount, event) {
-    if (event) event.stopPropagation();
-    window.currentScale = (window.currentScale || 1) + amount;
-    window.currentScale = Math.max(0.5, Math.min(3, window.currentScale));
-
-    const img = document.getElementById('lightbox_qr_img');
-    if (img) {
-        const tx = window.translateX || 0;
-        const ty = window.translateY || 0;
-        img.style.transform = `translate(${tx}px, ${ty}px) scale(${window.currentScale})`;
-        img.style.cursor = window.currentScale > 1 ? 'grab' : 'default';
-    }
-
-    const percentEl = document.getElementById('zoom_percent');
-    if (percentEl) {
-        percentEl.innerText = `${Math.round(window.currentScale * 100)}%`;
-    }
-};
-
-window.resetZoom = function(event) {
-    if (event) event.stopPropagation();
-    window.currentScale = 1;
-    window.translateX = 0;
-    window.translateY = 0;
-    window.isDragging = false;
-
-    const img = document.getElementById('lightbox_qr_img');
-    if (img) {
-        img.style.transform = 'translate(0px, 0px) scale(1)';
-        img.style.cursor = 'default';
-    }
-
-    const percentEl = document.getElementById('zoom_percent');
-    if (percentEl) {
-        percentEl.innerText = '100%';
-    }
-};
-
-window.closeQRLightbox = function(event) {
-    if (event) {
-        const container = document.getElementById('lightbox_viewer_container');
-        const controls = document.getElementById('lightbox_zoom_controls');
-        if (container && container.contains(event.target)) return;
-        if (controls && controls.contains(event.target)) return;
-    }
-    const lightbox = document.getElementById('qr_lightbox');
-    if (lightbox) {
-        lightbox.classList.add('d-none');
-        lightbox.classList.remove('d-flex');
-    }
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
-        const exitFS = document.exitFullscreen || document.webkitExitFullscreen;
-        if (exitFS) exitFS.call(document);
-    }
-    window.resetZoom();
-};
-
-window.toggleFullscreen = function(event) {
-    if (event) event.stopPropagation();
-
-    const container = document.getElementById('lightbox_viewer_container');
-    const icon = document.getElementById('fullscreen_icon');
-
-    if (!container) return;
-
-    // Cross-browser secure Fullscreen API matching (Resolves native fullscreen display issues)
-    const requestFS = container.requestFullscreen 
-        || container.webkitRequestFullscreen 
-        || container.mozRequestFullScreen 
-        || container.msRequestFullscreen;
-
-    const exitFS = document.exitFullscreen 
-        || document.webkitExitFullscreen 
-        || document.mozCancelFullScreen 
-        || document.msExitFullscreen;
-
-    if (!document.fullscreenElement && 
-        !document.webkitFullscreenElement && 
-        !document.mozFullScreenElement && 
-        !document.msFullscreenElement) {
-        
-        if (requestFS) {
-            requestFS.call(container).then(() => {
-                if (icon) {
-                    icon.classList.remove('bi-fullscreen');
-                    icon.classList.add('bi-fullscreen-exit');
-                }
-            }).catch(err => {
-                console.error("Error attempting to enable fullscreen mode:", err);
-            });
-        }
-    } else {
-        if (exitFS) {
-            exitFS.call(document).then(() => {
-                if (icon) {
-                    icon.classList.remove('bi-fullscreen-exit');
-                    icon.classList.add('bi-fullscreen');
-                }
-            }).catch(err => {
-                console.error("Error attempting to exit fullscreen mode:", err);
-            });
-        }
-    }
-};
-
-// Standard cross-browser fullscreen state event sync
-document.addEventListener('fullscreenchange', () => {
-    const icon = document.getElementById('fullscreen_icon');
-    if (icon) {
-        if (document.fullscreenElement) {
-            icon.classList.remove('bi-fullscreen');
-            icon.classList.add('bi-fullscreen-exit');
-        } else {
-            icon.classList.remove('bi-fullscreen-exit');
-            icon.classList.add('bi-fullscreen');
-        }
-    }
-});
-
-document.addEventListener('webkitfullscreenchange', () => {
-    const icon = document.getElementById('fullscreen_icon');
-    if (icon) {
-        if (document.webkitFullscreenElement) {
-            icon.classList.remove('bi-fullscreen');
-            icon.classList.add('bi-fullscreen-exit');
-        } else {
-            icon.classList.remove('bi-fullscreen-exit');
-            icon.classList.add('bi-fullscreen');
-        }
-    }
-});
-
-// Initialize dragging, wheel zoom, and standard dragging listeners defensively on load
-document.addEventListener('DOMContentLoaded', () => {
-    const img = document.getElementById('lightbox_qr_img');
-    const container = document.getElementById('lightbox_viewer_container');
-    const lightbox = document.getElementById('qr_lightbox');
-
-    if (container && lightbox) {
-        container.addEventListener('wheel', (e) => {
-            if (!lightbox.classList.contains('d-none')) {
-                e.preventDefault();
-                const amount = e.deltaY < 0 ? 0.15 : -0.15;
-                window.zoomImage(amount, e);
-            }
-        }, { passive: false });
-    }
-
-    /**
-     * Modern Pointer Events Drag-and-Pan Panning Engine (Directly bound to the container for secure fullscreen execution)
-     */
-    if (img && container) {
-        const updateCursor = () => {
-            const scale = window.currentScale || 1;
-            img.style.cursor = scale > 1 ? 'grab' : 'default';
-        };
-
-        img.addEventListener('pointerdown', (e) => {
-            const scale = window.currentScale || 1;
-            if (scale > 1) {
-                window.isDragging = true;
-                img.style.cursor = 'grabbing';
-                window.startX = e.clientX;
-                window.startY = e.clientY;
-                
-                // Binds focus to image so drag movements are captured on all coordinate spaces
-                img.setPointerCapture(e.pointerId);
-                
-                e.preventDefault();
-                e.stopPropagation();
-            }
-        });
-
-        container.addEventListener('pointermove', (e) => {
-            const scale = window.currentScale || 1;
-            if (window.isDragging && scale > 1) {
-                const dx = e.clientX - window.startX;
-                const dy = e.clientY - window.startY;
-                
-                window.translateX = (window.translateX || 0) + dx;
-                window.translateY = (window.translateY || 0) + dy;
-                
-                window.startX = e.clientX;
-                window.startY = e.clientY;
-                
-                img.style.transform = `translate(${window.translateX}px, ${window.translateY}px) scale(${scale})`;
-            }
-        });
-
-        const endDrag = (e) => {
-            if (window.isDragging) {
-                window.isDragging = false;
-                try {
-                    img.releasePointerCapture(e.pointerId);
-                } catch(err) {}
-                updateCursor();
-            }
-        };
-
-        container.addEventListener('pointerup', endDrag);
-        container.addEventListener('pointercancel', endDrag);
-        
-        // Window level fallback to support standard panning outside fullscreen
-        window.addEventListener('pointermove', (e) => {
-            const scale = window.currentScale || 1;
-            if (window.isDragging && scale > 1 && !document.fullscreenElement && !document.webkitFullscreenElement) {
-                const dx = e.clientX - window.startX;
-                const dy = e.clientY - window.startY;
-                window.translateX = (window.translateX || 0) + dx;
-                window.translateY = (window.translateY || 0) + dy;
-                window.startX = e.clientX;
-                window.startY = e.clientY;
-                img.style.transform = `translate(${window.translateX}px, ${window.translateY}px) scale(${scale})`;
-            }
-        });
-        window.addEventListener('pointerup', endDrag);
-    }
 });
 </script>

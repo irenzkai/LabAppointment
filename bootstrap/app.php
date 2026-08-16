@@ -13,8 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
-            // Register your force password reset middleware [112]
-            'force_password_change' => \App\Http\Middleware\ForcePasswordChange::class,
+            'force.password' => \App\Http\Middleware\ForcePasswordChange::class,
         ]);
         $middleware->trustProxies(at: '*');
     })

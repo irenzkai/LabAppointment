@@ -1,5 +1,7 @@
 @php
 // Determine badge color mappings based on clinical and expiration status
+$groupCount = $groupCount ?? 1;
+
 $statusPriority = [
     'expired' => 1,
     'returned' => 2,

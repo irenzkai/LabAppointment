@@ -27,7 +27,7 @@ class ImagingController extends Controller
         // This notifies the Hub that a technician is actively working on it.
         if (in_array($res->radio_status, ['pending', 'returned'])) {
             $res->update(['radio_status' => 'encoding']);
-            
+
             // Broadcast state update (updates "In Progress" badge on the Hub)
             event(new QueueUpdated());
         }
@@ -49,12 +49,35 @@ class ImagingController extends Controller
 
         // 1. Mandatory X-Ray Image Check (Always needed regardless of scan mode)
         if (!$res->xray_image && !$request->hasFile('xray_image')) {
-            return back()->with('error', 'Patient X-Ray image is mandatory.');
+            return back()->withErrors(['xray_image' => 'Patient X-Ray image file is mandatory.'])->withInput();
         }
 
-        // FIXED: Extract case_no and enforce global uniqueness validation across all files [153]
-        $request->validate([
+        // Extract case_no and enforce global uniqueness validation across all files
+        $rules = [
             'case_no' => 'required|string|max:255|unique:appointment_radiology_reports,case_no,' . ($res->radiologyReport?->id ?? 'NULL'),
+        ];
+
+        // Check if report PDF scan is being uploaded or already exists
+        $hasReportScan = ($res->radio_scan && $request->input('clear_scan') != '1') || $request->hasFile('radio_scan');
+
+        if (!$hasReportScan) {
+            $rules['radio_data.metadata.date'] = 'required|date';
+            $rules['radio_data.technique'] = 'required|string|max:255';
+            $rules['radio_data.findings'] = 'required|string';
+            $rules['radio_data.impression'] = 'required|string';
+            $rules['radio_data.sig.name'] = 'required|string|max:255';
+            $rules['radio_data.sig.lic'] = 'required|string|max:255';
+        }
+
+        $request->validate($rules, [
+            'case_no.required' => 'Case Number is required.',
+            'case_no.unique' => 'This Case Number is already in use by another radiology report.',
+            'radio_data.metadata.date.required' => 'Date of examination is required.',
+            'radio_data.technique.required' => 'Radiologic technique is required.',
+            'radio_data.findings.required' => 'Findings are required for manual report encoding.',
+            'radio_data.impression.required' => 'Impression is required for manual report encoding.',
+            'radio_data.sig.name.required' => 'Radiologist Name is required.',
+            'radio_data.sig.lic.required' => 'Radiologist License/PRC No. is required.',
         ]);
 
         // 2. Handle File Uploads via Trait (Cleans up old files automatically)
@@ -66,7 +89,7 @@ class ImagingController extends Controller
         $hasManualInput = !empty($request->input('radio_data.findings')) || !empty($request->input('radio_data.impression'));
 
         /**
-         * FIXED: Robust clearing mechanism. If the clear flag is set OR the technician 
+         * Robust clearing mechanism. If the clear flag is set OR the technician 
          * has submitted manual findings, automatically delete and clear the existing report scan.
          */
         if ($request->input('clear_scan') == '1' || $hasManualInput) {
@@ -80,7 +103,6 @@ class ImagingController extends Controller
 
         $res->refresh(); // Get updated scan path if just uploaded
         if ($res->radio_scan) {
-            // FIXED: Do not discard case_no when uploading a scanned copy [153]
             $radioData = [
                 'metadata' => [
                     'case_no' => $request->input('case_no'),
@@ -102,16 +124,16 @@ class ImagingController extends Controller
         $res->update([
             'radio_data' => $radioData,
             'radio_status' => 'encoded', // Ready for Hub validation
-            
+
             // HUB PROGRESS TRACKER: Record the account name that performed the encoding
             'radio_v1_by_name' => auth()->user()->name,
             'radio_v1_at' => now(),
             'radio_v1_by' => auth()->id(),
-            
+
             // CLINICAL SIGNATORY: Manually typed name/lic (if not in scan mode)
             'radio_sig_name' => $radioData['sig']['name'] ?? null,
             'radio_sig_lic' => $radioData['sig']['lic'] ?? null,
-            
+
             'radio_return_reason' => null // Clear correction instructions
         ]);
 
@@ -159,7 +181,7 @@ class ImagingController extends Controller
 
         $res = $appointment->result;
 
-        // FIXED: If clear_scan is '1', we enforce that a file is strictly required, blocking fileless resubmits [190]
+        // If clear_scan is '1', we enforce that a file is strictly required, blocking fileless resubmits
         $isScanCleared = ($request->input('clear_scan') == '1');
         $isScanRequired = !$res->drug_test_scan || $isScanCleared;
 
@@ -191,12 +213,12 @@ class ImagingController extends Controller
         $res->update([
             'drug_test_data' => $drugData,
             'drug_status' => 'encoded',
-            
+
             // Workstation Audit Columns for Drug Test
             'drug_v1_by_name' => auth()->user()->name,
             'drug_v1_at' => now(),
             'drug_v1_by' => auth()->id(),
-            
+
             'drug_return_reason' => null
         ]);
 

@@ -15,7 +15,8 @@ use App\Models\{
     AppointmentResult,
     CustomWorkstationResult,
     WorkstationAudit,
-    Service
+    Service,
+    AppointmentDrugTest
 };
 use App\Http\Controllers\Workstation\CustomWorksheetController;
 use App\Events\QueueUpdated;
@@ -64,7 +65,7 @@ class ResultController extends Controller
             $autoReportTypes = $res->included_reports;
         }
 
-        // Fetch all active diagnostic services for the Demographics/Services revision modal
+        // Fetch all active diagnostic services for the Demographics/Services revision
         $services = Service::where('is_available', true)->orderBy('name')->get();
 
         return view('appointments.encode', [
@@ -72,6 +73,18 @@ class ResultController extends Controller
             'autoReportTypes' => $autoReportTypes,
             'services' => $services
         ]);
+    }
+
+    /**
+     * EDIT DETAILS PAGE: Dedicated full-page view to revise patient identity, PSGC address, and medical services.
+     */
+    public function editDemographics(Appointment $appointment)
+    {
+        if (Gate::denies('isStaff')) abort(403);
+
+        $services = Service::where('is_available', true)->orderBy('name')->get();
+
+        return view('appointments.edit-details', compact('appointment', 'services'));
     }
 
     /**
@@ -91,7 +104,7 @@ class ResultController extends Controller
             "{$prefix}_v2_by_name" => $request->sig_name,
         ];
 
-        // Replaced non-whitelisted _verified_at and _verified_by with whitelisted _v2_at and _v2_by
+        // Whitelisted _v2_at and _v2_by timestamp updates
         if ($type === 'lab') {
             $updateData['lab_v2_at'] = now();
             $updateData['lab_v2_by'] = auth()->id();
@@ -126,7 +139,7 @@ class ResultController extends Controller
             "{$prefix}_return_reason" => $request->reason,
         ];
 
-        // Replaced non-whitelisted _verified_at and _verified_by with whitelisted _v2_at and _v2_by to allow clearing
+        // Replaced non-whitelisted columns with whitelisted _v2_at and _v2_by
         if ($type === 'lab') {
             $updateData['lab_v2_at'] = null;
             $updateData['lab_v2_by'] = null;
@@ -137,7 +150,7 @@ class ResultController extends Controller
 
         $appointment->result->update($updateData);
 
-        // FIXED: Dynamically unlock the overall patient folder if returned after final release has completed
+        // Dynamically unlock the overall patient folder if returned after final release has completed
         if ($appointment->status === 'released') {
             $appointment->update(['status' => 'encoded']);
         }
@@ -157,7 +170,6 @@ class ResultController extends Controller
     {
         if (Gate::denies('isStaff')) abort(403);
 
-        // Validate the audit justification reason
         $request->validate([
             'reason' => 'required|string|min:5'
         ]);
@@ -168,6 +180,7 @@ class ResultController extends Controller
         }
 
         $reports = $res->included_reports ?? [];
+
         if (($key = array_search($type, $reports)) !== false) {
             unset($reports[$key]);
             $res->included_reports = array_values($reports);
@@ -296,7 +309,7 @@ class ResultController extends Controller
     }
 
     /**
-     * REVISE DEMOGRAPHICS: Edits schedule and demographics details from the hub, with robust logging.
+     * REVISE DEMOGRAPHICS: Edits schedule and demographics details from the hub or dedicated edit page, with robust logging.
      */
     public function reviseDemographics(Request $request, Appointment $appointment)
     {
@@ -359,7 +372,28 @@ class ResultController extends Controller
 
         event(new QueueUpdated());
 
-        return back()->with('success', 'Patient details and services revised successfully.');
+        $from = $request->input('from');
+        $customId = $request->input('custom_id');
+
+        if ($from === 'radio' || $from === 'radiology') {
+            return redirect()->route('workstation.radiology', $appointment->id)
+                ->with('success', 'Patient details and services revised successfully.');
+        } elseif ($from === 'lab') {
+            return redirect()->route('workstation.lab', $appointment->id)
+                ->with('success', 'Patient details and services revised successfully.');
+        } elseif ($from === 'med_cert' || $from === 'medical') {
+            return redirect()->route('workstation.med_cert', $appointment->id)
+                ->with('success', 'Patient details and services revised successfully.');
+        } elseif ($from === 'drug') {
+            return redirect()->route('workstation.drug', $appointment->id)
+                ->with('success', 'Patient details and services revised successfully.');
+        } elseif ($from === 'custom' && $customId) {
+            return redirect()->route('workstation.custom', [$appointment->id, $customId])
+                ->with('success', 'Patient details and services revised successfully.');
+        }
+
+        return redirect()->route('appointments.encode', $appointment->id)
+            ->with('success', 'Patient details and services revised successfully.');
     }
 
     /**
@@ -400,15 +434,25 @@ class ResultController extends Controller
     {
         $user = Auth::user();
 
-        if ($appointment->batch_id && $user->id === $appointment->user_id && $appointment->patient_email !== $user->email) {
-            abort(403, 'Privacy Shield: Batch coordinators are restricted from viewing individual patient worksheets.');
-        }
+        // 1. Expanded ownership check: User is owner if user ID matches appointment user_id, 
+        // OR patient_email matches user's email, OR patient is a family dependent of the user.
+        $isOwner = ($user->id === $appointment->user_id)
+            || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email))
+            || ($appointment->dependent_id && $user->dependents()->where('id', $appointment->dependent_id)->exists());
 
-        $isOwner = $user->id === $appointment->user_id;
         $isStaff = $user->isEmployee();
 
-        if (!$isOwner && !$isStaff) abort(403);
+        // 2. Privacy Shield for Batch Coordinators: ONLY restricts viewing unreleased individual raw worksheets of other people.
+        // Once released, or if the user is the actual patient, access is permitted.
+        if ($appointment->status !== 'released' && $appointment->batch_id && $user->id === $appointment->user_id && strtolower($appointment->patient_email) !== strtolower($user->email)) {
+            abort(403, 'Privacy Shield: Batch coordinators are restricted from viewing individual patient worksheets prior to clinical release.');
+        }
 
+        if (!$isOwner && !$isStaff) {
+            abort(403, 'Unauthorized access: You do not have permission to view or download this clinical result.');
+        }
+
+        // 3. Staff members who are NOT the patient owner must pass the Reason-Gate
         if ($isStaff && !$isOwner) {
             if (!session()->has("access_granted_{$appointment->id}_{$type}")) {
                 return redirect()->route('appointments.index')->with('error', 'Clinical authorization required.');
@@ -468,7 +512,6 @@ class ResultController extends Controller
                 if ($ext === 'jpg' || $ext === 'jfif') $mimeType = 'image/jpeg';
                 $base64Image = 'data:' . $mimeType . ';base64,' . $imageData;
 
-                // Read S3/Supabase files in memory safely before parsing their layout dimensions
                 $dimensions = @getimagesizefromstring($fileContents);
                 $imgWidth = $dimensions[0] ?? null;
                 $imgHeight = $dimensions[1] ?? null;
@@ -526,7 +569,12 @@ class ResultController extends Controller
     public function forwardToEmail(Appointment $appointment)
     {
         $user = auth()->user();
-        if ($appointment->user_id !== $user->id) {
+
+        $isOwner = ($user->id === $appointment->user_id)
+            || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email))
+            || ($appointment->dependent_id && $user->dependents()->where('id', $appointment->dependent_id)->exists());
+
+        if (!$isOwner && !$user->isEmployee()) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -534,7 +582,7 @@ class ResultController extends Controller
             return back()->with('error', 'Results must be clinically released before they can be forwarded.');
         }
 
-        // Deliver results securely using background PDF compiler (bypassing portal activation banner)
+        // Deliver results securely using background PDF compiler
         self::deliverResult($appointment, true);
 
         return back()->with('success', "Pristine clinical results forwarded to your registered email: {$appointment->patient_email}.");
@@ -545,7 +593,7 @@ class ResultController extends Controller
      */
     public static function deliverResult(Appointment $appointment, $isForward = false)
     {
-        // Resolved dynamic snapshot fallback. If patient_email is empty/null, fall back to registered parent email
+        // Dynamic snapshot fallback. If patient_email is empty/null, fall back to registered parent email
         $email = $appointment->patient_email ?: ($appointment->user?->email);
         if (!$email) return;
 
@@ -633,7 +681,6 @@ class ResultController extends Controller
                 if ($ext === 'jpg' || $ext === 'jfif') $mimeType = 'image/jpeg';
                 $base64Image = 'data:' . $mimeType . ';base64,' . $imageData;
 
-                // Load image dimensions to support proportional A4 scale calculations
                 $dimensions = @getimagesizefromstring($fileContents);
                 $imgWidth = $dimensions[0] ?? null;
                 $imgHeight = $dimensions[1] ?? null;
@@ -661,7 +708,7 @@ class ResultController extends Controller
             ];
         }
 
-        // Dynamically capture, convert, and attach verified custom worksheets securely as well
+        // Dynamically capture, convert, and attach verified custom worksheets securely
         $customs = $res->customWorkstationResults()->where('status', 'verified')->get();
         foreach ($customs as $custom) {
             $filePath = $custom->scan_path;
@@ -675,7 +722,6 @@ class ResultController extends Controller
                     if ($ext === 'jpg' || $ext === 'jfif') $mimeType = 'image/jpeg';
                     $base64Image = 'data:' . $mimeType . ';base64,' . $imageData;
 
-                    // Load image dimensions to support proportional A4 scale calculations
                     $dimensions = @getimagesizefromstring($fileContents);
                     $imgWidth = $dimensions[0] ?? null;
                     $imgHeight = $dimensions[1] ?? null;
@@ -703,8 +749,6 @@ class ResultController extends Controller
         }
 
         $hasAccount = User::where('email', $email)->exists();
-
-        // Dynamically title-case the patient's first name for elegant email salutation
         $patientFirstName = ucwords(strtolower($appointment->patient_first_name));
 
         Mail::send([], [], function ($message) use ($email, $appointment, $attachments, $promoUrl, $hasAccount, $isForward, $patientFirstName) {
@@ -712,29 +756,29 @@ class ResultController extends Controller
                 ->subject('Your Medical Results are Ready - Medscreen')
                 ->html("
                 <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
-                <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
-                <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
-                </div>
-                <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
-                <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$patientFirstName},</h3>
-                <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Your secure, password-protected clinical results have been successfully released. Please find the encrypted PDF documents attached to this email.</p>
-                <div style='background-color: #f8fafc; border-left: 4px solid #19D38C; padding: 20px; margin: 30px 0; border-radius: 6px;'>
-                <strong style='color: #1c232d; display: block; margin-bottom: 8px; font-size: 16px;'>PDF Decryption Password:</strong>
-                <span style='font-size: 14px; color: #4a5568; line-height: 1.5;'>
-                Your files are secured using your personal password pattern:<br>
-                <strong style='color: #15b376; font-size: 15px;'>MMDDYYYY + Capitalized Initials</strong><br>
-                <span style='color: #718096; font-size: 12px; display: block; margin-top: 6px;'>Example: For birthdate October 24, 2005 & initials JDC, the password is <strong>10242005JDC</strong></span>
-                </span>
-                </div>
-                " . (($hasAccount || $isForward) ? "" : "
-                <div style='border: 1.5px dashed #19D38C; background-color: rgba(25, 211, 140, 0.03); padding: 25px; text-align: center; border-radius: 8px; margin: 30px 0;'>
-                <h4 style='margin-top: 0; color: #1c232d; font-size: 18px;'>Activate Your Permanent Portal</h4>
-                <p style='font-size: 14px; color: #4a5568; margin-bottom: 20px; line-height: 1.5;'>A temporary profile has been registered for you. Click below to secure your credentials and access your lifetime clinical history logs.</p>
-                <a href='{$promoUrl}' style='display: inline-block; background-color: #19D38C; color: #1C232D; font-weight: bold; text-decoration: none; padding: 12px 30px; border-radius: 6px;'>ACTIVATE PROFILE</a>
-                </div>
-                ") . "
-                <p style='margin-top: 30px; line-height: 1.6; color: #4a5568; font-size: 15px;'>Best regards,<br><strong>Medscreen Diagnostic Laboratory</strong></p>
-                </div>
+                    <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
+                        <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
+                    </div>
+                    <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
+                        <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$patientFirstName},</h3>
+                        <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Your secure, password-protected clinical results have been successfully released. Please find the encrypted PDF documents attached to this email.</p>
+                        <div style='background-color: #f8fafc; border-left: 4px solid #19D38C; padding: 20px; margin: 30px 0; border-radius: 6px;'>
+                            <strong style='color: #1c232d; display: block; margin-bottom: 8px; font-size: 16px;'>PDF Decryption Password:</strong>
+                            <span style='font-size: 14px; color: #4a5568; line-height: 1.5;'>
+                                Your files are secured using your personal password pattern:<br>
+                                <strong style='color: #15b376; font-size: 15px;'>MMDDYYYY + Capitalized Initials</strong><br>
+                                <span style='color: #718096; font-size: 12px; display: block; margin-top: 6px;'>Example: For birthdate October 24, 2005 & initials JDC, the password is <strong>10242005JDC</strong></span>
+                            </span>
+                        </div>
+                        " . (($hasAccount || $isForward) ? "" : "
+                        <div style='border: 1.5px dashed #19D38C; background-color: rgba(25, 211, 140, 0.03); padding: 25px; text-align: center; border-radius: 8px; margin: 30px 0;'>
+                            <h4 style='margin-top: 0; color: #1c232d; font-size: 18px;'>Activate Your Permanent Portal</h4>
+                            <p style='font-size: 14px; color: #4a5568; margin-bottom: 20px; line-height: 1.5;'>A temporary profile has been registered for you. Click below to secure your credentials and access your lifetime clinical history logs.</p>
+                            <a href='{$promoUrl}' style='display: inline-block; background-color: #19D38C; color: #1C232D; font-weight: bold; text-decoration: none; padding: 12px 30px; border-radius: 6px;'>ACTIVATE PROFILE</a>
+                        </div>
+                        ") . "
+                        <p style='margin-top: 30px; line-height: 1.6; color: #4a5568; font-size: 15px;'>Best regards,<br><strong>Medscreen Diagnostic Laboratory</strong></p>
+                    </div>
                 </div>
                 ");
 

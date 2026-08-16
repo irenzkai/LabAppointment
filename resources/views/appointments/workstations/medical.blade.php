@@ -25,7 +25,6 @@
     $showPreview = $isReadonly || $hasScan;
 @endphp
 
-{{-- FIXED: Changed container-fluid to container to restore alignment with the header layout --}}
 <div class="container text-start animate-page pt-4" id="medical-workstation-root">
 
     {{-- 1. HEADER SECTION --}}
@@ -75,7 +74,7 @@
     @endif
 
     {{-- 3. CORE SAVE FORM --}}
-    <form id="medForm" action="{{ $isReadonly ? route('workstation.verify', [$appointment->id, 'med_cert']) : route('workstation.medical.save', $appointment->id) }}" method="POST" enctype="multipart/form-data">
+    <form id="medForm" action="{{ $isReadonly ? route('workstation.verify', [$appointment->id, 'med_cert']) : route('workstation.medical.save', $appointment->id) }}" method="POST" enctype="multipart/form-data" novalidate>
         @csrf
         <input type="hidden" name="clear_scan" id="clear_scan_field" value="0">
         <div class="row g-4">
@@ -85,43 +84,64 @@
                 <div class="card p-3 border-secondary bg-card mb-3 shadow-sm" style="background-color: var(--bg-card); color: var(--text-main);">
                     <h6 class="text-accent mb-3 small fw-bold uppercase">Clinical Metadata</h6>
 
+                    {{-- Cert No. (Always Required & Always Visible) --}}
                     <div class="mb-3">
-                        <label class="smaller text-secondary fw-bold mb-1 uppercase">Cert No.</label>
-                        <input type="text" name="cert_no" id="cert_no_field" class="form-control" value="{{ $res->med_cert_data['metadata']['cert_no'] ?? '' }}" placeholder="Enter Certificate ID" required>
+                        <label class="smaller text-secondary fw-bold mb-1 uppercase">Cert No. / Reference No.</label>
+                        <input type="text" name="cert_no" id="cert_no_field" class="form-control @error('cert_no') is-invalid @enderror" value="{{ old('cert_no', $res->med_cert_data['metadata']['cert_no'] ?? ($res->medCert?->cert_no ?? '')) }}" placeholder="Enter Certificate ID" {{ $isReadonly ? 'readonly' : 'required' }}>
+                        <div class="invalid-feedback d-none" id="err_cert_no"></div>
+                        @error('cert_no')
+                            <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                        @enderror
                     </div>
 
-                    {{-- FIXED: Hides only the optional metadata snap fields on Scan Mode, keeping Cert No visible --}}
+                    {{-- READ-ONLY PATIENT PROFILE SNAPSHOT CARD WITH EDIT LINK --}}
+                    <div class="mb-3 p-3 rounded border border-secondary border-opacity-10" style="background-color: rgba(0,0,0,0.02);">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-secondary smaller fw-bold uppercase">Patient Profile</small>
+                            @if(!$isReadonly && auth()->user()->isEmployee())
+                                <a href="{{ route('appointments.edit-details', $appointment->id) }}?from=med_cert" class="btn btn-sm btn-outline-accent py-0.5 px-2 smaller uppercase fw-bold" style="font-size: 0.68rem;" title="Edit Patient Details">
+                                    <i class="bi bi-pencil-square me-1"></i>Edit Details
+                                </a>
+                            @endif
+                        </div>
+                        <div class="text-main fw-bold small mb-1">{{ strtoupper($appointment->patient_name) }}</div>
+                        <div class="text-secondary smaller mb-1">{{ $appointment->patient_age }} YRS / {{ strtoupper($appointment->patient_sex) }}</div>
+                        <div class="text-muted smaller text-break" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
+
+                        {{-- Hidden snapshot payloads for backend backwards-compatibility --}}
+                        <input type="hidden" name="med_cert_data[metadata][name]" value="{{ strtoupper($appointment->patient_name) }}">
+                        <input type="hidden" name="med_cert_data[metadata][address]" value="{{ $appointment->patient_address }}">
+                        <input type="hidden" name="med_cert_data[metadata][age]" value="{{ $appointment->patient_age }}">
+                        <input type="hidden" name="med_cert_data[metadata][sex]" value="{{ strtoupper($appointment->patient_sex) }}">
+                    </div>
+
+                    {{-- OPTIONAL MANUAL METADATA & SIGNATORIES (Hidden when file/scan is inputted) --}}
                     <div id="sidebar-manual-fields" class="{{ $hasScan ? 'd-none' : '' }}">
-                        <div class="mb-3">
-                            <label class="smaller text-secondary fw-bold mb-1 uppercase">Patient Name</label>
-                            <input type="text" name="med_cert_data[metadata][name]" class="form-control" value="{{ $res->med_cert_data['metadata']['name'] ?? strtoupper($appointment->patient_name) }}" {{ $hasScan ? 'disabled' : 'required' }}>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="smaller text-secondary fw-bold mb-1 uppercase">Address</label>
-                            <input type="text" name="med_cert_data[metadata][address]" class="form-control" value="{{ $res->med_cert_data['metadata']['address'] ?? $appointment->patient_address }}" {{ $hasScan ? 'disabled' : 'required' }}>
-                        </div>
-
-                        <div class="row g-2 mb-3">
-                            <div class="col-6">
-                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Age</label>
-                                <input type="number" name="med_cert_data[metadata][age]" class="form-control" value="{{ $res->med_cert_data['metadata']['age'] ?? $appointment->patient_age }}" {{ $hasScan ? 'disabled' : 'required' }}>
-                            </div>
-                            <div class="col-6">
-                                <label class="smaller text-secondary fw-bold mb-1 uppercase">Sex</label>
-                                <input type="text" name="med_cert_data[metadata][sex]" class="form-control" value="{{ $res->med_cert_data['metadata']['sex'] ?? strtoupper($appointment->patient_sex) }}" {{ $hasScan ? 'disabled' : 'required' }}>
-                            </div>
-                        </div>
-
                         <div class="mb-4">
                             <label class="smaller text-secondary fw-bold mb-1 uppercase">Date Tested</label>
-                            <input type="date" name="med_cert_data[metadata][tested_date]" class="form-control" value="{{ isset($res->med_cert_data['metadata']['tested_date']) ? \Carbon\Carbon::parse($res->med_cert_data['metadata']['tested_date'])->format('Y-m-d') : $testedDate }}" {{ $hasScan ? 'disabled' : 'required' }}>
+                            <input type="date" name="med_cert_data[metadata][tested_date]" id="med_tested_date" class="form-control @error('med_cert_data.metadata.tested_date') is-invalid @enderror" value="{{ old('med_cert_data.metadata.tested_date', isset($res->med_cert_data['metadata']['tested_date']) ? \Carbon\Carbon::parse($res->med_cert_data['metadata']['tested_date'])->format('Y-m-d') : $testedDate) }}" {{ $hasScan ? 'disabled' : 'required' }}>
+                            <div class="invalid-feedback d-none" id="err_med_tested_date"></div>
+                            @error('med_cert_data.metadata.tested_date')
+                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                            @enderror
                         </div>
 
+                        {{-- Clinical Signatory --}}
                         <h6 class="text-accent mb-3 small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3">Clinical Signatory</h6>
                         <div class="mb-0 border border-secondary border-opacity-10 p-2.5 rounded" style="background-color: rgba(0,0,0,0.015);">
-                            <input type="text" name="med_cert_data[sig][name]" class="form-control mb-1" placeholder="Physician Name" value="{{ $res->med_cert_data['sig']['name'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
-                            <input type="text" name="med_cert_data[sig][lic]" class="form-control" placeholder="License / PRC No." value="{{ $res->med_cert_data['sig']['lic'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
+                            <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">Physician Name</label>
+                            <input type="text" name="med_cert_data[sig][name]" id="sig_med_name" class="form-control mb-1 @error('med_cert_data.sig.name') is-invalid @enderror" placeholder="Physician Name" value="{{ old('med_cert_data.sig.name', $res->med_cert_data['sig']['name'] ?? ($res->medCert?->physician_name ?? '')) }}" {{ $hasScan ? 'disabled' : 'required' }}>
+                            <div class="invalid-feedback d-none mb-1" id="err_sig_med_name"></div>
+                            @error('med_cert_data.sig.name')
+                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                            @enderror
+
+                            <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">License / PRC No.</label>
+                            <input type="text" name="med_cert_data[sig][lic]" id="sig_med_lic" class="form-control @error('med_cert_data.sig.lic') is-invalid @enderror" placeholder="License / PRC No." value="{{ old('med_cert_data.sig.lic', $res->med_cert_data['sig']['lic'] ?? ($res->medCert?->physician_license ?? '')) }}" {{ $hasScan ? 'disabled' : 'required' }}>
+                            <div class="invalid-feedback d-none" id="err_sig_med_lic"></div>
+                            @error('med_cert_data.sig.lic')
+                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                            @enderror
                         </div>
                     </div>
                 </div>
@@ -136,7 +156,11 @@
                             <h6 class="text-warning fw-bold mb-2 uppercase"><i class="bi bi-file-earmark-arrow-up-fill me-2 fs-5"></i>Attach Completed Certificate Scan (Recommended)</h6>
                             <p class="text-secondary small mb-3">Uploading a scanned report takes absolute clinical priority and hides the manual inputs below.</p>
                             <div class="mx-auto" style="max-width: 450px;">
-                                <input type="file" name="med_cert_scan" id="med_scan_input" class="form-control" onchange="toggleScanPriority(this)">
+                                <input type="file" name="med_cert_scan" id="med_scan_input" class="form-control @error('med_cert_scan') is-invalid @enderror" onchange="toggleScanPriority(this)">
+                                <div class="invalid-feedback d-none" id="err_med_cert_scan"></div>
+                                @error('med_cert_scan')
+                                    <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                                @enderror
                             </div>
                         </div>
                     </div>
@@ -146,15 +170,23 @@
                 @if(!$isReadonly)
                     <div id="manual-panel" class="card p-4 border-secondary bg-card min-vh-75 shadow-lg {{ $hasScan ? 'd-none' : '' }}">
                         <h6 class="text-main border-bottom border-secondary border-opacity-25 pb-2 mb-4 uppercase small fw-bold">Manual Content Entry</h6>
-                        
+
                         <div class="mb-4">
                             <label class="text-secondary smaller fw-bold mb-1 uppercase">Findings</label>
-                            <textarea name="med_cert_data[findings]" id="findings_field" class="form-control p-3" rows="10" placeholder="Type findings..." {{ $hasScan ? 'disabled' : 'required' }}>{{ $res->med_cert_data['findings'] ?? '' }}</textarea>
+                            <textarea name="med_cert_data[findings]" id="findings_field" class="form-control p-3 @error('med_cert_data.findings') is-invalid @enderror" rows="10" placeholder="Type findings..." {{ $hasScan ? 'disabled' : 'required' }}>{{ old('med_cert_data.findings', $res->med_cert_data['findings'] ?? ($res->medCert?->findings ?? '')) }}</textarea>
+                            <div class="invalid-feedback d-none" id="err_findings"></div>
+                            @error('med_cert_data.findings')
+                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                            @enderror
                         </div>
 
                         <div>
                             <label class="text-secondary smaller fw-bold mb-1 uppercase">Remarks</label>
-                            <textarea name="med_cert_data[remarks]" class="form-control p-3" rows="4" placeholder="Additional notes..." {{ $hasScan ? 'disabled' : 'required' }}>{{ $res->med_cert_data['remarks'] ?? '' }}</textarea>
+                            <textarea name="med_cert_data[remarks]" id="remarks_field" class="form-control p-3 @error('med_cert_data.remarks') is-invalid @enderror" rows="4" placeholder="Additional notes..." {{ $hasScan ? 'disabled' : 'required' }}>{{ old('med_cert_data.remarks', $res->med_cert_data['remarks'] ?? ($res->medCert?->remarks ?? '')) }}</textarea>
+                            <div class="invalid-feedback d-none" id="err_remarks"></div>
+                            @error('med_cert_data.remarks')
+                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                            @enderror
                         </div>
                     </div>
                 @endif
@@ -170,11 +202,11 @@
                             @endif
                         </span>
                         @if(!$isReadonly)
-                            <button type="button" class="btn btn-sm btn-dark fw-bold px-3" onclick="removeScan()">REMOVE & RESTORE SIDEBAR</button>
+                            <button type="button" id="remove_scan_btn" class="btn btn-sm btn-dark fw-bold px-3" onclick="removeScan()">REMOVE & RESTORE SIDEBAR</button>
                         @endif
                     </div>
                     <div class="card border-warning border-top-0 rounded-0 rounded-bottom overflow-hidden shadow bg-card p-3 text-center d-flex justify-content-center align-items-center" style="min-height: 500px;">
-                        
+
                         {{-- Image Preview Container --}}
                         <div id="imagePreviewContainer" class="position-relative d-inline-block image-preview-wrapper {{ $hasScan && $isImage ? '' : 'd-none' }}" style="cursor: zoom-in;" onclick="zoomQR('{{ $hasScan && $isImage ? Storage::url($scanPath) : '' }}')">
                             <img id="imagePreviewImg" src="{{ $hasScan && $isImage ? Storage::url($scanPath) : '' }}" class="img-fluid rounded shadow-sm" style="max-height: 800px; object-fit: contain; border: 1px solid var(--border-color);">
@@ -204,8 +236,6 @@
 </div>
 @endsection
 
-{{-- FIXED: Modals, overlays, and script blocks moved strictly outside of @section('content') to resolve section ending buffer anomalies --}}
-
 <!-- VERIFY MODAL -->
 <div class="modal fade" id="verifyModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
@@ -214,7 +244,7 @@
             <h5 class="text-neon fw-bold mb-1 uppercase">Clinical Verification</h5>
             <p class="text-secondary small mb-4">Enter your name to sign-off and approve this medical certificate.</p>
             <div class="mb-4">
-                <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Verifier Name</label>
+                <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Verifier Full Name</label>
                 <input type="text" name="sig_name" class="form-control" value="{{ auth()->user()->name }}" required>
             </div>
             <div class="d-flex gap-2">
@@ -233,7 +263,7 @@
             <h5 class="text-danger fw-bold uppercase mb-1">Return to Encoder</h5>
             <p class="text-secondary small mb-3">Provide a reason for returning this certificate for corrections.</p>
             <div class="mb-3">
-                <label class="smaller fw-bold mb-2 d-block uppercase" style="color: var(--text-muted);">Reason for Return</label>
+                <label for="return_reason_select" class="smaller fw-bold mb-2 d-block uppercase" style="color: var(--text-muted);">Reason for Return</label>
                 <select id="return_reason_select" name="reason" class="form-select shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" required>
                     <option value="" disabled selected>-- Select a return justification --</option>
                     <option value="Mismatched patient identification or demographic fields">Mismatched patient identification or demographic fields</option>
@@ -258,59 +288,34 @@
     </div>
 </div>
 
-{{-- MULTI-FORMAT LIGHTBOX OVERLAY WITH SECURE PREVIEW GATES --}}
-<div id="qr_lightbox" class="d-none fixed inset-0 w-100 h-100 d-flex align-items-center justify-content-center" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 3000; background-color: rgba(0, 0, 0, 0.85); cursor: zoom-out;" onclick="closeQRLightbox(event)">
-    <div class="text-center p-3 animate-fade-in w-100 h-100 d-flex flex-column align-items-center justify-content-center" style="max-width: 95vw; max-height: 95vh;">
-        
-        {{-- Floating File Canvas --}}
-        <div id="lightbox_viewer_container" class="position-relative d-flex align-items-center justify-content-center bg-white rounded p-2 border border-secondary shadow-lg" style="max-width: 85vw; max-height: 80vh; overflow: auto; min-width: 300px; min-height: 300px;">
-            <!-- Render Image Scan -->
-            <img src="" id="lightbox_qr_img" alt="Zoomed Asset" class="img-fluid rounded transition-all" style="max-height: 75vh; max-width: 80vw; object-fit: contain; transform: scale(1); transform-origin: center; cursor: grab;">
-            
-            <!-- Render PDF Document Scan -->
-            <iframe id="lightbox_pdf_viewer" class="d-none rounded" style="width: 80vw; height: 75vh; border: none;"></iframe>
-        </div>
-
-        {{-- Interactive Document Control Toolbar --}}
-        <div id="lightbox_zoom_controls" class="mt-3 d-flex gap-3 align-items-center bg-dark bg-opacity-75 px-4 py-2 rounded-pill border border-secondary">
-            <button type="button" class="btn btn-sm btn-outline-light rounded-circle px-2.5 py-1" onclick="zoomImage(-0.15, event)" title="Zoom Out"><i class="bi bi-zoom-out"></i></button>
-            <span id="zoom_percent" class="text-white small fw-bold">100%</span>
-            <button type="button" class="btn btn-sm btn-outline-light rounded-circle px-2.5 py-1" onclick="zoomImage(0.15, event)" title="Zoom In"><i class="bi bi-zoom-in"></i></button>
-            <button type="button" class="btn btn-sm btn-outline-light rounded-circle px-2.5 py-1" onclick="toggleFullscreen(event)" title="Toggle Fullscreen"><i class="bi bi-fullscreen" id="fullscreen_icon"></i></button>
-            <button type="button" class="btn btn-sm btn-outline-danger rounded-circle px-2.5 py-1" onclick="resetZoom(event)" title="Reset Zoom"><i class="bi bi-arrow-counterclockwise"></i></button>
-        </div>
-
-        <p class="text-white-50 mt-3 small mb-0"><i class="bi bi-x-circle me-1"></i> Click anywhere on the dark overlay boundary to close preview</p>
-    </div>
-</div>
+{{-- MULTI-FORMAT LIGHTBOX OVERLAY --}}
+@include('layouts.partials.lightbox-overlay')
 
 @push('scripts')
 <script>
-let currentScale = 1;
-let translateX = 0;
-let translateY = 0;
-let isDragging = false;
-let startX, startY;
+// Universal Global Lightbox Zoom Helper
+window.zoomQR = function(fileSrc) {
+    if (!fileSrc) return;
+    if (typeof window.openFilePreview === 'function') {
+        window.openFilePreview(fileSrc, 'Medical Certificate Scan Preview');
+    } else if (typeof window.zoomFile === 'function') {
+        window.zoomFile(fileSrc);
+    }
+};
 
 // Setup and teardown required status on all manual input elements depending on current layout mode
 function setManualFieldsRequired(required) {
     const fields = [
         document.getElementById('cert_no_field'), // Standalone cert_no (Always Required)
-        document.querySelector('input[name="med_cert_data[metadata][date]"]'),
-        document.querySelector('input[name="med_cert_data[metadata][name]"]'),
-        document.querySelector('input[name="med_cert_data[metadata][address]"]'),
-        document.querySelector('input[name="med_cert_data[metadata][age]"]'),
-        document.querySelector('input[name="med_cert_data[metadata][sex]"]'),
-        document.querySelector('input[name="med_cert_data[metadata][tested_date]"]'),
-        document.querySelector('input[name="med_cert_data[sig][name]"]'),
-        document.querySelector('input[name="med_cert_data[sig][lic]"]'),
+        document.getElementById('med_tested_date'),
+        document.getElementById('sig_med_name'),
+        document.getElementById('sig_med_lic'),
         document.getElementById('findings_field'),
-        document.querySelector('textarea[name="med_cert_data[remarks]"]')
+        document.getElementById('remarks_field')
     ];
 
     fields.forEach(field => {
         if (field) {
-            // cert_no is always required and enabled!
             if (field.id === 'cert_no_field') {
                 field.setAttribute('required', 'required');
                 field.removeAttribute('disabled');
@@ -353,7 +358,7 @@ function toggleScanPriority(input) {
             const manualPanel = document.getElementById('manual-panel');
             if (manualPanel) manualPanel.classList.add('d-none');
 
-            // FIXED: Hide only the optional manual fields inside the sidebar, keep Cert No visible [358]
+            // Hide only the optional manual fields inside the sidebar, keep Cert No visible
             const sidebarContainer = document.getElementById('sidebar-manual-fields');
             if (sidebarContainer) sidebarContainer.classList.add('d-none');
 
@@ -364,8 +369,8 @@ function toggleScanPriority(input) {
                 document.getElementById('report-scan-upload-box').classList.add('d-none');
             }
             document.getElementById('scan-preview-zone').classList.remove('d-none');
-            
-            // FIXED: Maintains side-by-side grid structure (prevents wrap-around shifts)
+
+            // Maintains side-by-side grid structure
             document.getElementById('main-panel-container').className = 'col-md-8';
         };
         reader.readAsDataURL(file);
@@ -373,7 +378,6 @@ function toggleScanPriority(input) {
 }
 window.toggleScanPriority = toggleScanPriority;
 
-// FIXED: Defensively updated script references with robust element existence checks [377]
 function removeScan() {
     const scanInput = document.getElementById('med_scan_input');
     if (scanInput) scanInput.value = "";
@@ -399,7 +403,7 @@ function removeScan() {
     const manualPanel = document.getElementById('manual-panel');
     if (manualPanel) manualPanel.classList.remove('d-none');
 
-    // FIXED: Restores optional manual entry fields nested within the sidebar completely
+    // Restores optional manual entry fields nested within the sidebar
     const sidebarContainer = document.getElementById('sidebar-manual-fields');
     if (sidebarContainer) sidebarContainer.classList.remove('d-none');
 
@@ -410,8 +414,7 @@ function removeScan() {
         document.getElementById('report-scan-upload-box').classList.remove('d-none');
     }
     document.getElementById('scan-preview-zone').classList.add('d-none');
-    
-    // FIXED: Maintains side-by-side grid structure (prevents wrap-around shifts)
+
     document.getElementById('main-panel-container').className = 'col-md-8';
 }
 window.removeScan = removeScan;
@@ -436,140 +439,23 @@ function viewMedCertFullscreen() {
 }
 window.viewMedCertFullscreen = viewMedCertFullscreen;
 
-function zoomImage(amount, event) {
-    if (event) event.stopPropagation();
-
-    currentScale += amount;
-    currentScale = Math.max(0.5, Math.min(3, currentScale));
-
-    const img = document.getElementById('lightbox_qr_img');
-    if (img) {
-        img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${currentScale})`;
-        img.style.cursor = currentScale > 1 ? 'grab' : 'default';
-    }
-
-    const percentEl = document.getElementById('zoom_percent');
-    if (percentEl) {
-        percentEl.innerText = `${Math.round(currentScale * 100)}%`;
-    }
-}
-window.zoomImage = zoomImage;
-
-function resetZoom(event) {
-    if (event) event.stopPropagation();
-
-    currentScale = 1;
-    translateX = 0;
-    translateY = 0;
-    isDragging = false;
-
-    const img = document.getElementById('lightbox_qr_img');
-    if (img) {
-        img.style.transform = 'translate(0px, 0px) scale(1)';
-        img.style.cursor = 'default';
-    }
-
-    const percentEl = document.getElementById('zoom_percent');
-    if (percentEl) {
-        percentEl.innerText = '100%';
-    }
-}
-window.resetZoom = resetZoom;
-
-function zoomFile(fileSrc) {
-    if (!fileSrc) return;
-
-    const isPdf = fileSrc.toLowerCase().endsWith('.pdf') || fileSrc.startsWith('data:application/pdf');
-    const img = document.getElementById('lightbox_qr_img');
-    const iframe = document.getElementById('lightbox_pdf_viewer');
-    const controls = document.getElementById('lightbox_zoom_controls');
-
-    resetZoom();
-
-    if (isPdf) {
-        img.classList.add('d-none');
-        controls.classList.add('d-none');
-        iframe.src = fileSrc;
-        iframe.classList.remove('d-none');
-    } else {
-        iframe.classList.add('d-none');
-        iframe.src = '';
-        img.src = fileSrc;
-        img.classList.remove('d-none');
-        controls.classList.remove('d-none');
-    }
-
-    document.getElementById('qr_lightbox').classList.remove('d-none');
-    document.getElementById('qr_lightbox').classList.add('d-flex');
-}
-window.zoomQR = zoomFile;
-
-function closeQRLightbox(event) {
-    if (event) {
-        const container = document.getElementById('lightbox_viewer_container');
-        const controls = document.getElementById('lightbox_zoom_controls');
-        if (container.contains(event.target) || (controls && controls.contains(event.target))) {
-            return;
-        }
-    }
-    document.getElementById('qr_lightbox').classList.add('d-none');
-    document.getElementById('qr_lightbox').classList.remove('d-flex');
-
-    if (document.fullscreenElement) {
-        document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
-    }
-    resetZoom();
-}
-window.closeQRLightbox = closeQRLightbox;
-
-function toggleFullscreen(event) {
-    if (event) event.stopPropagation();
-
-    const container = document.getElementById('lightbox_viewer_container');
-    const icon = document.getElementById('fullscreen_icon');
-
-    if (!document.fullscreenElement) {
-        container.requestFullscreen().then(() => {
-            if (icon) {
-                icon.classList.remove('bi-fullscreen');
-                icon.classList.add('bi-fullscreen-exit');
-            }
-        }).catch(err => {
-            console.error("Error attempting to enable fullscreen mode:", err);
-        });
-    } else {
-        document.exitFullscreen().then(() => {
-            if (icon) {
-                icon.classList.remove('bi-fullscreen-exit');
-                icon.classList.add('bi-fullscreen');
-            }
-        }).catch(err => {
-            console.error("Error attempting to exit fullscreen mode:", err);
-        });
-    }
-}
-window.toggleFullscreen = toggleFullscreen;
-
 document.addEventListener('DOMContentLoaded', () => {
     // Initial setup on page load
     if ("{{ $hasScan ? '1' : '0' }}" === "1") {
         const manualPanel = document.getElementById('manual-panel');
         if (manualPanel) manualPanel.classList.add('d-none');
 
-        // FIXED: Hide only the optional manual fields inside the sidebar on page load [340]
         const sidebarContainer = document.getElementById('sidebar-manual-fields');
         if (sidebarContainer) sidebarContainer.classList.add('d-none');
 
         setManualFieldsRequired(false);
-        
-        // FIXED: Maintains side-by-side grid structure (prevents wrap-around shifts)
         document.getElementById('main-panel-container').className = 'col-md-8';
     } else {
         setManualFieldsRequired(true);
     }
 
     if("{{ $isReadonly }}") {
-        const form = document.getElementById('radioForm');
+        const form = document.getElementById('medForm');
         form.querySelectorAll('input:not([type="hidden"]), textarea, select').forEach(el => el.disabled = true);
     }
 
@@ -579,7 +465,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const formEl = document.getElementById('medReturnForm');
 
     if (selectEl && textareaEl && textareaWrapper && formEl) {
-        // FIXED: Dynamically toggle form submission names to ensure standard validation always succeeds [352]
         selectEl.addEventListener('change', function() {
             if (this.value === 'Others') {
                 textareaWrapper.classList.remove('d-none');
@@ -604,77 +489,95 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Draggable canvas functionality for zoomed-in images
-    const img = document.getElementById('lightbox_qr_img');
-    if (img) {
-        img.addEventListener('mousedown', (e) => {
-            if (currentScale > 1) {
-                isDragging = true;
-                img.style.cursor = 'grabbing';
-                startX = e.clientX;
-                startY = e.clientY;
+    // MAIN FORM SUBMIT GATEWAY: Enforces validation with inline error highlights
+    const mainForm = document.getElementById('medForm');
+    if (mainForm) {
+        mainForm.addEventListener('submit', function(e) {
+            let isValid = true;
+            let firstInvalid = null;
+
+            // Flush previous error states
+            document.querySelectorAll('#medForm .is-invalid').forEach(el => el.classList.remove('is-invalid'));
+            document.querySelectorAll('#medForm .invalid-feedback').forEach(el => {
+                el.classList.add('d-none');
+                el.innerText = '';
+            });
+
+            function markInvalid(input, errId, msg) {
+                if (!input) return;
+                input.classList.add('is-invalid');
+                const errDiv = document.getElementById(errId);
+                if (errDiv) {
+                    errDiv.innerText = msg;
+                    errDiv.classList.remove('d-none');
+                    errDiv.classList.add('d-block');
+                }
+                isValid = false;
+                if (!firstInvalid) firstInvalid = input;
+            }
+
+            const manualPanel = document.getElementById('manual-panel');
+            const isManualMode = manualPanel && !manualPanel.classList.contains('d-none');
+
+            // 1. Cert No Validation (Always required)
+            const certNo = document.getElementById('cert_no_field');
+            if (certNo && !certNo.value.trim()) {
+                markInvalid(certNo, 'err_cert_no', 'Certificate Number is required.');
+            }
+
+            // 2. Validate Manual Mode Fields
+            if (isManualMode) {
+                const testedDate = document.getElementById('med_tested_date');
+                if (testedDate && !testedDate.value) markInvalid(testedDate, 'err_med_tested_date', 'Date Tested is required.');
+
+                const sigName = document.getElementById('sig_med_name');
+                if (sigName && !sigName.value.trim()) markInvalid(sigName, 'err_sig_med_name', 'Physician Name is required.');
+
+                const sigLic = document.getElementById('sig_med_lic');
+                if (sigLic && !sigLic.value.trim()) markInvalid(sigLic, 'err_sig_med_lic', 'Physician License / PRC No. is required.');
+
+                const findings = document.getElementById('findings_field');
+                if (findings && !findings.value.trim()) markInvalid(findings, 'err_findings', 'Findings are required.');
+
+                const remarks = document.getElementById('remarks_field');
+                if (remarks && !remarks.value.trim()) markInvalid(remarks, 'err_remarks', 'Remarks are required.');
+            } else {
+                // Scan mode: scan file must be present
+                const scanInput = document.getElementById('med_scan_input');
+                const hasExistingScan = "{{ $hasScan ? '1' : '0' }}" === "1";
+                if (!hasExistingScan && scanInput && (!scanInput.files || scanInput.files.length === 0)) {
+                    markInvalid(scanInput, 'err_med_cert_scan', 'A completed medical certificate scan file is required.');
+                }
+            }
+
+            if (!isValid) {
                 e.preventDefault();
+                e.stopPropagation();
+                if (firstInvalid) {
+                    firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    firstInvalid.focus();
+                }
+                return false;
             }
-        });
-
-        window.addEventListener('mousemove', (e) => {
-            if (isDragging && currentScale > 1) {
-                const dx = e.clientX - startX;
-                const dy = e.clientY - startY;
-                translateX += dx;
-                translateY += dy;
-                startX = e.clientX;
-                startY = e.clientY;
-                img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${currentScale})`;
-            }
-        });
-
-        window.addEventListener('mouseup', () => {
-            isDragging = false;
-            if (img) img.style.cursor = currentScale > 1 ? 'grab' : 'default';
-        });
-
-        // Mobile touch swipe gestures
-        img.addEventListener('touchstart', (e) => {
-            if (currentScale > 1 && e.touches.length === 1) {
-                isDragging = true;
-                startX = e.touches[0].clientX;
-                startY = e.touches[0].clientY;
-            }
-        }, { passive: true });
-
-        img.addEventListener('touchmove', (e) => {
-            if (isDragging && currentScale > 1 && e.touches.length === 1) {
-                const dx = e.touches[0].clientX - startX;
-                const dy = e.touches[0].clientY - startY;
-                translateX += dx;
-                translateY += dy;
-                startX = e.touches[0].clientX;
-                startY = e.touches[0].clientY;
-                img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${currentScale})`;
-            }
-        }, { passive: true });
-
-        img.addEventListener('touchend', () => {
-            isDragging = false;
         });
     }
 
-    // Fullscreen wheel-to-zoom mapping
-    const container = document.getElementById('lightbox_viewer_container');
-    if (container) {
-        container.addEventListener('wheel', (e) => {
-            if (document.fullscreenElement) {
-                e.preventDefault();
-                const amount = e.deltaY < 0 ? 0.15 : -0.15;
-                zoomImage(amount);
+    // Dismiss errors on input change
+    document.querySelectorAll('#medForm input, #medForm select, #medForm textarea').forEach(input => {
+        input.addEventListener('input', () => {
+            input.classList.remove('is-invalid');
+            let errDiv = document.getElementById('err_' + input.id) || document.getElementById('err_' + input.name.replace(/\[|\]/g, '_'));
+            if (errDiv) {
+                errDiv.classList.add('d-none');
+                errDiv.classList.remove('d-block');
             }
-        }, { passive: false });
-    }
+        });
+    });
 });
 </script>
 @endpush
 
+@push('styles')
 <style>
 #medical-workstation-root .form-control,
 #medical-workstation-root .form-select,
@@ -713,9 +616,10 @@ document.addEventListener('DOMContentLoaded', () => {
     opacity: 0;
     background: rgba(0, 0, 0, 0.6);
     transition: opacity 0.22s ease-in-out;
-    border-radius: inherit;
 }
-.image-preview-wrapper:hover .zoom-overlay {
-    opacity: 1;
+#medical-workstation-root .is-invalid {
+    border-color: #ff4d4d !important;
+    box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.15) !important;
 }
 </style>
+@endpush

@@ -2,11 +2,13 @@
 $statusPriority = [
     'expired' => 1,
     'returned' => 2,
-    'pending' => 3,
-    'approved' => 4,
-    'tested' => 5,
-    'encoded' => 6,
-    'released' => 7,
+    'retest' => 3,
+    'canceled' => 4,
+    'pending' => 5,
+    'approved' => 6,
+    'tested' => 7,
+    'encoded' => 8,
+    'released' => 9,
 ];
 
 if ($app->batch_id) {
@@ -89,7 +91,7 @@ $anyApproved = $batchAppointments->contains(fn($appointment) => in_array($appoin
                 </h4>
                 <div class="text-secondary smaller fw-bold uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">
                     Batch ID: #{{ $app->batch_id }} <span class="mx-2">|</span> 
-                    Schedule: {{ $app->appointment_date->format('M d, Y') }} <span class="mx-2">|</span>
+                    Schedule: {{ $app->appointment_date->format('M d, Y') }} <span class="mx-2">|</span> 
                     Total PAX: {{ $batchAppointments->count() }}
                 </div>
             </div>
@@ -131,7 +133,7 @@ $anyApproved = $batchAppointments->contains(fn($appointment) => in_array($appoin
             </div>
 
             @if($app->payment_receipt)
-            <div class="d-flex align-items-center gap-3 bg-white p-2 rounded mb-1" style="cursor: zoom-in; max-width: 260px;" onclick="window.zoomQR('{{ Storage::url($app->payment_receipt) }}')" title="Click to view full screen">
+            <div class="d-flex align-items-center gap-3 bg-white p-2 rounded mb-1" style="cursor: zoom-in; max-width: 260px;" onclick="openFilePreview('{{ Storage::url($app->payment_receipt) }}', 'Batch Proof of Payment')" title="Click to view full screen">
                 <i class="bi bi-file-earmark-image-fill text-accent display-6"></i>
                 <div class="text-start">
                     <div class="fw-bold small text-dark text-truncate" style="max-width: 140px;">proof_of_payment.png</div>
@@ -194,17 +196,17 @@ $anyApproved = $batchAppointments->contains(fn($appointment) => in_array($appoin
     <div class="d-flex flex-column gap-3 overflow-auto custom-scroll pe-1 mb-2" style="max-height: 480px;">
         @foreach($batchAppointments as $subApp)
         @php
-            $isSubExpired = $subApp->isExpired();
-            $subBadgeColor = $isSubExpired ? 'danger' : match($subApp->status) {
-                'pending' => 'warning',
-                'approved' => 'info',
-                'tested' => 'info',
-                'encoded' => 'info',
-                'released' => 'accent',
-                'returned' => 'danger',
-                default => 'secondary'
-            };
-            $subBadgeLabel = $isSubExpired ? 'EXPIRED' : strtoupper($subApp->status);
+        $isSubExpired = $subApp->isExpired();
+        $subBadgeColor = $isSubExpired ? 'danger' : match($subApp->status) {
+            'pending' => 'warning',
+            'approved' => 'info',
+            'tested' => 'info',
+            'encoded' => 'info',
+            'released' => 'accent',
+            'returned' => 'danger',
+            default => 'secondary'
+        };
+        $subBadgeLabel = $isSubExpired ? 'EXPIRED' : strtoupper($subApp->status);
         @endphp
 
         <div class="card p-3 border-secondary border-opacity-25 bg-card bulk-patient-row-{{ $app->batch_id }} text-start" data-name="{{ strtoupper($subApp->patient_name) }}">
@@ -239,7 +241,7 @@ $anyApproved = $batchAppointments->contains(fn($appointment) => in_array($appoin
                 <div class="bulk-actions-container">
                     @if($subApp->status == 'released')
                     @php
-                        $isCoordinatorOnly = (auth()->id() === $app->user_id && $subApp->patient_email !== auth()->user()->email);
+                    $isCoordinatorOnly = (auth()->id() === $app->user_id && $subApp->patient_email !== auth()->user()->email);
                     @endphp
 
                     @if($isCoordinatorOnly)
@@ -273,7 +275,7 @@ $anyApproved = $batchAppointments->contains(fn($appointment) => in_array($appoin
     </div>
 </div>
 @else
-{{-- ==========================================================================
+{{-- =========================================================================
 B. INDIVIDUAL / FAMILY WORKSPACE [297]
 ========================================================================= --}}
 <div id="details-{{ $app->id }}" class="appointment-detail-pane card border-secondary bg-card p-4 d-none animate-page">
@@ -315,20 +317,20 @@ B. INDIVIDUAL / FAMILY WORKSPACE [297]
                 </li>
             </ul>
 
-            {{-- FIXED: Enforced strict data security bounds. Only verified patients can directly render and preview folders without and audit trace --}}
+            {{-- FIXED: Enforced strict data security bounds. Only verified patients can directly render and preview folders without an audit trace --}}
             @if($app->status == 'released' && $app->result && auth()->user()->isPatient())
             <div class="mt-4 border-top border-secondary border-opacity-10 pt-3 text-start animate-page">
                 <h6 class="text-accent small fw-bold uppercase mb-3"><i class="bi bi-file-earmark-medical me-2"></i>Released Clinical Results</h6>
                 <div class="d-flex flex-column gap-2">
                     @foreach($app->result->included_reports ?? ['lab'] as $type)
                     @php
-                        $label = match($type) {
-                            'lab' => 'Laboratory Result Findings',
-                            'radio' => 'Radiology Report Findings',
-                            'drug' => 'Drug Test Screening Result',
-                            'med_cert' => 'Medical Certificate Clearance',
-                            default => strtoupper($type) . ' Result'
-                        };
+                    $label = match($type) {
+                        'lab' => 'Laboratory Result Findings',
+                        'radio' => 'Radiology Report Findings',
+                        'drug' => 'Drug Test Screening Result',
+                        'med_cert' => 'Medical Certificate Clearance',
+                        default => strtoupper($type) . ' Result'
+                    };
                     @endphp
                     <div class="d-flex justify-content-between align-items-center p-2.5 border border-secondary border-opacity-10 rounded" style="background-color: rgba(0,0,0,0.015);">
                         <span class="small text-main fw-semibold"><i class="bi bi-file-earmark-pdf text-accent me-1.5"></i>{{ $label }}</span>
@@ -385,11 +387,11 @@ B. INDIVIDUAL / FAMILY WORKSPACE [297]
                     <div class="text-main small">{{ $app->patient_phone }}</div>
                 </div>
 
-                {{-- Dynamic Doctor's Referral File Preview --}}
+                {{-- Dynamic Doctor's Referral File Preview (Calls Unified Overlay) --}}
                 @if($app->referral_note)
                 <div class="mb-4">
                     <small class="text-muted fw-bold d-block mb-1.5 uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">Doctor's Referral:</small>
-                    <div class="d-flex align-items-center gap-3 bg-white p-2 rounded border" style="cursor: zoom-in;" onclick="window.zoomQR('{{ Storage::url($app->referral_note) }}')" title="Click to view full screen">
+                    <div class="d-flex align-items-center gap-3 bg-white p-2 rounded border" style="cursor: zoom-in;" onclick="openFilePreview('{{ Storage::url($app->referral_note) }}', 'Doctor\'s Referral Note')" title="Click to view full screen">
                         <i class="bi bi-file-earmark-medical-fill text-accent display-6"></i>
                         <div class="text-start">
                             <div class="fw-bold small text-dark text-truncate" style="max-width: 140px;">referral_note.pdf</div>

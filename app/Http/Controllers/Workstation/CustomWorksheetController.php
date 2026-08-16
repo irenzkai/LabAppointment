@@ -15,6 +15,27 @@ class CustomWorksheetController extends Controller
     use HandlesResultFiles;
 
     /**
+     * WORKSTATION: Custom Worksheet Index Page
+     */
+    public function index(Appointment $appointment, $id)
+    {
+        if (Gate::denies('isStaff')) abort(403);
+
+        $customRes = CustomWorkstationResult::findOrFail($id);
+
+        // Progress Tracking: Mark as 'encoding' if it was 'pending' or 'returned'
+        if (in_array($customRes->status, ['pending', 'returned'])) {
+            $customRes->update(['status' => 'encoding']);
+            event(new QueueUpdated());
+        }
+
+        // SECURED: Pre-authorize embedded preview frame
+        session()->put("access_granted_{$appointment->id}_custom_{$customRes->id}", true);
+
+        return view('appointments.workstations.custom', compact('appointment', 'customRes'));
+    }
+
+    /**
      * Store a dynamic, appointment-scoped custom workstation result (Worksheet)
      */
     public function store(Request $request, Appointment $appointment)
@@ -36,7 +57,7 @@ class CustomWorksheetController extends Controller
             'status' => 'encoded', // Automatically set to encoded once file is uploaded
         ]);
 
-        // Upload the scanned file directly to S3/Local Storage using the standard helper
+        // Upload the scanned file directly to S3/Local Storage using the standard trait
         $this->uploadCustomWorksheetFile($request, $customRes, 'scan_file');
 
         // Set system audit trail for dynamic custom worksheet encoding
@@ -59,7 +80,62 @@ class CustomWorksheetController extends Controller
     }
 
     /**
-     * Update an appointment-scoped custom workstation result (Worksheet)
+     * WORKSTATION: Custom Worksheet Save
+     */
+    public function save(Request $request, Appointment $appointment, $id)
+    {
+        if (Gate::denies('isStaff')) abort(403);
+
+        $customRes = CustomWorkstationResult::findOrFail($id);
+        $res = $appointment->result;
+
+        $isScanCleared = ($request->input('clear_scan') == '1');
+        $isScanRequired = !$customRes->scan_path || $isScanCleared;
+
+        $request->validate([
+            'cert_no' => 'required|string|max:255',
+            'scan_file' => ($isScanRequired ? 'required' : 'nullable') . '|file|mimes:pdf,jpg,jpeg,png|max:10240',
+        ]);
+
+        if ($isScanCleared) {
+            if ($customRes->scan_path && Storage::disk('public')->exists($customRes->scan_path)) {
+                Storage::disk('public')->delete($customRes->scan_path);
+            }
+            $customRes->update(['scan_path' => null]);
+        }
+
+        if ($request->hasFile('scan_file')) {
+            $this->uploadCustomWorksheetFile($request, $customRes, 'scan_file');
+        }
+
+        $customRes->update([
+            'cert_no' => $request->cert_no,
+            'status' => 'encoded',
+            'return_reason' => null
+        ]);
+
+        // Set system audit trail
+        $res->updateAudit("custom_{$customRes->id}", [
+            'v1_by' => auth()->id(),
+            'v1_by_name' => auth()->user()->name,
+            'v1_at' => now(),
+        ]);
+
+        ActivityLog::record(
+            'ENCODED',
+            "Updated custom worksheet: {$customRes->name}",
+            $appointment->patient_name,
+            $appointment->id
+        );
+
+        event(new QueueUpdated());
+
+        return redirect()->route('appointments.encode', $appointment->id)
+            ->with('success', "Worksheet '{$customRes->name}' saved and sent for verification.");
+    }
+
+    /**
+     * Update an appointment-scoped custom workstation result
      */
     public function update(Request $request, Appointment $appointment, $id)
     {
@@ -74,19 +150,17 @@ class CustomWorksheetController extends Controller
 
         $customRes->update([
             'cert_no' => $request->cert_no,
-            'status' => 'encoded', // Sets status back to encoded for verification
-            'return_reason' => null // Clears any previous correction logs
+            'status' => 'encoded',
+            'return_reason' => null
         ]);
 
-        // Manage file override cleanups safely
         if ($request->hasFile('scan_file')) {
-            if ($customRes->scan_path) {
+            if ($customRes->scan_path && Storage::disk('public')->exists($customRes->scan_path)) {
                 Storage::disk('public')->delete($customRes->scan_path);
             }
             $this->uploadCustomWorksheetFile($request, $customRes, 'scan_file');
         }
 
-        // Update system audit trail with new encoder, clearing previous verifier details
         $appointment->result->updateAudit("custom_{$customRes->id}", [
             'v1_by' => auth()->id(),
             'v1_by_name' => auth()->user()->name,
@@ -97,7 +171,7 @@ class CustomWorksheetController extends Controller
         ]);
 
         ActivityLog::record(
-            'ENCODED', 
+            'ENCODED',
             "Updated custom worksheet: {$customRes->name}",
             $appointment->patient_name,
             $appointment->id
@@ -115,26 +189,23 @@ class CustomWorksheetController extends Controller
     {
         if (Gate::denies('isStaff')) abort(403);
 
-        // Validate the audit justification reason
         $request->validate([
             'reason' => 'required|string|min:5'
         ]);
 
         $customRes = CustomWorkstationResult::findOrFail($id);
 
-        // Delete active file asset from storage
-        if ($customRes->scan_path) {
+        if ($customRes->scan_path && Storage::disk('public')->exists($customRes->scan_path)) {
             Storage::disk('public')->delete($customRes->scan_path);
         }
 
         $name = $customRes->name;
         $customRes->delete();
 
-        // Clear corresponding audit trail logs to protect referential hygiene
         $appointment->result->audits()->where('workstation_type', "custom_{$id}")->delete();
 
         ActivityLog::record(
-            'DELETED', 
+            'DELETED',
             "Removed custom worksheet: {$name}. Reason: " . $request->reason,
             $appointment->patient_name,
             $appointment->id
@@ -162,7 +233,6 @@ class CustomWorksheetController extends Controller
             'status' => 'verified'
         ]);
 
-        // Record verification details in security audits log
         $appointment->result->updateAudit("custom_{$customRes->id}", [
             'v2_by' => auth()->id(),
             'v2_by_name' => $request->sig_name,
@@ -170,7 +240,7 @@ class CustomWorksheetController extends Controller
         ]);
 
         ActivityLog::record(
-            'VERIFIED', 
+            'VERIFIED',
             "Verified custom worksheet: {$customRes->name}",
             $appointment->patient_name,
             $appointment->id
@@ -178,7 +248,8 @@ class CustomWorksheetController extends Controller
 
         event(new QueueUpdated());
 
-        return back()->with('success', "Worksheet '{$customRes->name}' verified and approved.");
+        return redirect()->route('appointments.encode', $appointment->id)
+            ->with('success', "Worksheet '{$customRes->name}' verified and approved.");
     }
 
     /**
@@ -199,20 +270,18 @@ class CustomWorksheetController extends Controller
             'return_reason' => $request->reason
         ]);
 
-        // Nullify verifier logs since state is returned for correction
         $appointment->result->updateAudit("custom_{$customRes->id}", [
             'v2_by' => null,
             'v2_by_name' => null,
             'v2_at' => null,
         ]);
 
-        // Dynamically unlock the overall patient folder if returned after final release has completed
         if ($appointment->status === 'released') {
             $appointment->update(['status' => 'encoded']);
         }
 
         ActivityLog::record(
-            'RETURNED', 
+            'RETURNED',
             "Returned custom worksheet: {$customRes->name} for correction",
             $appointment->patient_name,
             $appointment->id
@@ -220,7 +289,8 @@ class CustomWorksheetController extends Controller
 
         event(new QueueUpdated());
 
-        return back()->with('success', "Worksheet '{$customRes->name}' sent back to encoder.");
+        return redirect()->route('appointments.encode', $appointment->id)
+            ->with('success', "Worksheet '{$customRes->name}' sent back to encoder.");
     }
 
     /**

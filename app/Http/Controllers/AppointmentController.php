@@ -185,21 +185,21 @@ class AppointmentController extends Controller
      */
     public function store(Request $request)
     {
-        // Custom name validation closure rules matching register schema
+        // Custom name validation closure rules matching register schema (supports Unicode Ñ/ñ)
         $nameRule = function ($attribute, $value, $fail) {
             $val = trim($value);
             if (empty($val) || $val === 'N/A') {
                 return;
             }
-            if (!preg_match('/^[a-zA-ZñÑ\s.\'-]+$/u', $val)) {
+            if (!preg_match('/^[\p{L} \s.\'-]+$/u', $val)) {
                 $fail("The " . str_replace('patient_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
                 return;
             }
-            if (!preg_match('/^[a-zA-ZñÑ]/u', $val)) {
+            if (!preg_match('/^[\p{L} ]/u', $val)) {
                 $fail("The " . str_replace('patient_', ' ', $attribute) . " must start with a letter.");
                 return;
             }
-            if (!preg_match('/[a-zA-ZñÑ]/u', $val)) {
+            if (!preg_match('/[\p{L}]/u', $val)) {
                 $fail("The " . str_replace('patient_', ' ', $attribute) . " must contain at least one letter.");
                 return;
             }
@@ -235,7 +235,7 @@ class AppointmentController extends Controller
             'payment_receipt' => 'required_if:payment_method,Cashless|nullable|file|mimes:pdf,jpg,jpeg,png|max:10240'
         ], [
             'patient_phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
-            'patient_suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
+            'patient_suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.'
         ]);
 
         $dayNum = date('w', strtotime($request->appointment_date));
@@ -327,26 +327,64 @@ class AppointmentController extends Controller
     }
 
     /**
+     * Show the dedicated full-page resubmission form for returned or canceled appointments.
+     */
+    public function editResubmit(Appointment $appointment)
+    {
+        // Enforce authorization: Ensure the patient owns this specific record
+        if ($appointment->user_id !== Auth::id()) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        // Validate current status: Must be eligible for modification
+        if ($appointment->status === 'released') {
+            return redirect()->route('appointments.index')->with('error', 'Released appointments are locked and cannot be modified.');
+        }
+
+        $isExpired = $appointment->isExpired();
+        
+        if (!($appointment->status === 'returned' || $appointment->status === 'canceled' || $isExpired)) {
+            return redirect()->route('appointments.index')->with('error', 'This appointment is currently not eligible for resubmission.');
+        }
+
+        $services = Service::where('is_available', true)->orderBy('name')->get();
+        $paymentProviders = PaymentProvider::where('is_active', true)->get();
+
+        return view('appointments.resubmit', compact('appointment', 'services', 'paymentProviders', 'isExpired'));
+    }
+
+    /**
      * Resubmit: Patients correcting a "Returned" or "Canceled" record.
      */
     public function update(Request $request, Appointment $appointment)
     {
+        // Enforce authorization: Prevent cross-user parameter tampering
+        if ($appointment->user_id !== Auth::id()) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        // Do not allow post-release tampering
+        if ($appointment->status === 'released') {
+            return redirect()->route('appointments.index')->with('error', 'Released appointments cannot be updated.');
+        }
+
         $isBulk = !is_null($appointment->batch_id);
 
+        // Unicode-aware name closure supporting Spanish & Filipino Ñ/ñ characters
         $nameRule = function ($attribute, $value, $fail) {
             $val = trim($value);
             if (empty($val) || $val === 'N/A') {
                 return;
             }
-            if (!preg_match('/^[a-zA-Z \s.\'-]+$/u', $val)) {
+            if (!preg_match('/^[\p{L} \s.\'-]+$/u', $val)) {
                 $fail("The " . str_replace('patient_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
                 return;
             }
-            if (!preg_match('/^[a-zA-Z ]/u', $val)) {
+            if (!preg_match('/^[\p{L} ]/u', $val)) {
                 $fail("The " . str_replace('patient_', ' ', $attribute) . " must start with a letter.");
                 return;
             }
-            if (!preg_match('/[a-zA-Z ]/u', $val)) {
+            if (!preg_match('/[\p{L}]/u', $val)) {
                 $fail("The " . str_replace('patient_', ' ', $attribute) . " must contain at least one letter.");
                 return;
             }
@@ -377,12 +415,13 @@ class AppointmentController extends Controller
             $rules['payment_method'] = 'required|string';
             $rules['referral_note'] = 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240';
 
-            // FIXED: Only require a payment receipt upload if there is no existing file on the server,
-            // OR if the user explicitly chose to remove the existing one.
+            // Only require payment receipt if payment is NOT already confirmed (rollover)
             $isReceiptRequired = false;
-            if ($request->payment_method === 'Cashless' && (in_array($appointment->status, ['canceled', 'returned']) || in_array($appointment->payment_status, ['invalid', 'refunded']))) {
-                if (!$appointment->payment_receipt || $request->input('remove_receipt') === '1') {
-                    $isReceiptRequired = true;
+            if ($request->payment_method === 'Cashless' && $appointment->payment_status !== 'paid') {
+                if (in_array($appointment->status, ['canceled', 'returned']) || in_array($appointment->payment_status, ['invalid', 'refunded'])) {
+                    if (!$appointment->payment_receipt || $request->input('remove_receipt') === '1') {
+                        $isReceiptRequired = true;
+                    }
                 }
             }
 
@@ -424,6 +463,9 @@ class AppointmentController extends Controller
         $city = $isBulk ? 'N/A' : strtoupper(trim($request->patient_city));
         $province = $isBulk ? 'N/A' : strtoupper(trim($request->patient_province));
 
+        // Preserve 'paid' payment_status for canceled appointments being rolled over
+        $paymentStatus = ($appointment->status === 'canceled' && $appointment->payment_status === 'paid') ? 'paid' : 'unpaid';
+
         $updateData = [
             'patient_first_name' => strtoupper($request->patient_first_name),
             'patient_middle_name' => $mName ? strtoupper($mName) : 'N/A',
@@ -440,7 +482,7 @@ class AppointmentController extends Controller
             'appointment_date' => $request->appointment_date,
             'time_slot' => $request->time_slot,
             'status' => 'pending',
-            'payment_status' => 'unpaid',
+            'payment_status' => $paymentStatus,
             'return_reason' => null
         ];
 
@@ -455,7 +497,7 @@ class AppointmentController extends Controller
             }
         }
 
-        // FIXED: Safely process server-side file deletion if the user explicitly clicked "Remove" on the server-cached Referral Note
+        // Safely process server-side file deletion if requested
         if (!$isBulk) {
             if ($request->input('remove_referral') === '1') {
                 if ($appointment->referral_note) {
@@ -472,7 +514,6 @@ class AppointmentController extends Controller
             }
         }
 
-        // FIXED: Safely process server-side file deletion if the user explicitly clicked "Remove" on the server-cached Cashless Receipt
         if (!$isBulk) {
             if ($request->input('remove_receipt') === '1') {
                 if ($appointment->payment_receipt) {
@@ -529,7 +570,7 @@ class AppointmentController extends Controller
         if ($request->status == 'returned') {
             $updatePayload['return_reason'] = $request->return_reason;
         } else {
-            $updatePayload['return_reason'] = null; 
+            $updatePayload['return_reason'] = null;
         }
 
         if ($request->has('payment_status')) {
@@ -563,7 +604,7 @@ class AppointmentController extends Controller
                             'type' => 'danger'
                         ]));
 
-                        event(new NotificationSent($patient->id, 'Appointment Returned', "Your appointment scheduled for {$dateFormatted} requires corrections."));
+                        event(new NotificationSent($patient->id, 'Appointment Returned', "Your appointment scheduled for {$dateFormatted} at {$timeFormatted} requires corrections."));
                     }
                 }
             }
@@ -592,7 +633,7 @@ class AppointmentController extends Controller
                         'type' => 'danger'
                     ]));
 
-                    event(new NotificationSent($patient->id, 'Appointment Returned', "Your appointment scheduled for {$dateFormatted} requires corrections."));
+                    event(new NotificationSent($patient->id, 'Appointment Returned', "Your appointment scheduled for {$dateFormatted} at {$timeFormatted} requires corrections."));
                 }
             }
         }
@@ -633,15 +674,15 @@ class AppointmentController extends Controller
             if (empty($val) || $val === 'N/A') {
                 return;
             }
-            if (!preg_match('/^[a-zA-ZñÑ\s.\'-]+$/u', $val)) {
+            if (!preg_match('/^[\p{L} \s.\'-]+$/u', $val)) {
                 $fail("The " . str_replace('patient_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
                 return;
             }
-            if (!preg_match('/^[a-zA-ZñÑ]/u', $val)) {
+            if (!preg_match('/^[\p{L} ]/u', $val)) {
                 $fail("The " . str_replace('patient_', ' ', $attribute) . " must start with a letter.");
                 return;
             }
-            if (!preg_match('/[a-zA-ZñÑ]/u', $val)) {
+            if (!preg_match('/[\p{L}]/u', $val)) {
                 $fail("The " . str_replace('patient_', ' ', $attribute) . " must contain at least one letter.");
                 return;
             }
@@ -785,7 +826,7 @@ class AppointmentController extends Controller
             'payment_status' => 'paid', // Automatically flagged as PAID on sampling stage
             'status' => 'tested',
             'tested_at' => now(),
-            'result_estimated_at' => $est, 
+            'result_estimated_at' => $est,
             'return_reason' => null
         ];
 
@@ -838,9 +879,12 @@ class AppointmentController extends Controller
 
         $reason = 'Canceled by patient';
 
+        // MODIFIED: Preserves the 'paid' status so that refund tracking workflows function accurately.
+        $paymentStatus = $appointment->payment_status === 'paid' ? 'paid' : 'unpaid';
+
         $appointment->update([
             'status' => 'canceled',
-            'payment_status' => 'unpaid',
+            'payment_status' => $paymentStatus,
             'return_reason' => $reason
         ]);
 

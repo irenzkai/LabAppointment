@@ -1,37 +1,37 @@
 @php
-// Intercept status metrics on-the-fly to represent unprogressed expired records safely
-$isExpired = $app->isExpired();
+    // Intercept status metrics on-the-fly to represent unprogressed expired records safely
+    $isExpired = $app->isExpired();
 
-$statusColor = $isExpired ? 'danger' : match($app->status) {
-    'pending' => 'warning',
-    'approved' => 'info',
-    'tested' => 'info',
-    'encoded' => 'info',
-    'released' => 'accent',
-    'returned' => 'danger',
-    'retest' => 'danger',
-    'canceled' => 'danger',
-    default => 'secondary'
-};
+    $statusColor = $isExpired ? 'danger' : match($app->status) {
+        'pending' => 'warning',
+        'approved' => 'info',
+        'tested' => 'info',
+        'encoded' => 'info',
+        'released' => 'accent',
+        'returned' => 'danger',
+        'retest' => 'danger',
+        'canceled' => 'danger',
+        default => 'secondary'
+    };
 
-$statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
+    $statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
 @endphp
 
 <div class="mt-2 text-start">
 
     {{-- 1. FEEDBACK: SHOW RETURN REASON (Visible to Everyone) --}}
     @if($app->status == 'returned' && $app->return_reason)
-    <div class="alert-clinical p-3 mb-3 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
-        <div class="d-flex align-items-center mb-1">
-            <i class="bi bi-exclamation-octagon-fill text-danger me-2"></i>
-            <small class="text-danger fw-bold uppercase" style="font-size: 0.65rem; letter-spacing: 1px;">
-                Staff Feedback / Reason for Return:
-            </small>
+        <div class="alert-clinical p-3 mb-3 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
+            <div class="d-flex align-items-center mb-1">
+                <i class="bi bi-exclamation-octagon-fill text-danger me-2"></i>
+                <small class="text-danger fw-bold uppercase" style="font-size: 0.65rem; letter-spacing: 1px;">
+                    Staff Feedback / Reason for Return:
+                </small>
+            </div>
+            <p class="small mb-0 italic" style="line-height: 1.4; color: var(--text-main);">
+                "{{ $app->return_reason }}"
+            </p>
         </div>
-        <p class="small mb-0 italic" style="line-height: 1.4; color: var(--text-main);">
-            "{{ $app->return_reason }}"
-        </p>
-    </div>
     @endif
 
     {{-- 2. RETEST NOTICE (Context-Aware: Distinguishes Patient vs Staff) --}}
@@ -86,6 +86,23 @@ $statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
                         </div>
                         <p class="small mb-0 text-main mt-1">This canceled appointment has a confirmed cashless payment. Please manually process and confirm the refund below.</p>
                     </div>
+                @elseif($app->payment_status === 'invalid')
+                    <div class="alert-clinical p-3 mb-3 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
+                        <div class="d-flex align-items-center mb-1">
+                            <i class="bi bi-exclamation-octagon-fill text-danger me-2"></i>
+                            <small class="text-danger fw-bold uppercase" style="font-size: 0.65rem; letter-spacing: 1px;">Refund Unavailable (Payment Invalid)</small>
+                        </div>
+                        <p class="small mb-2 italic" style="line-height: 1.4; color: var(--text-main);">
+                            This cashless transaction has been flagged as invalid. Refund processing is bypassed as no valid payment was received.
+                        </p>
+                        <div class="pt-2 border-top border-danger border-opacity-25 mt-2">
+                            <small class="text-danger fw-bold uppercase" style="font-size: 0.6rem; letter-spacing: 0.5px;">Invalidation Reason:</small>
+                            <p class="small mb-2 text-main mt-1 fw-bold">{{ $app->return_reason }}</p>
+                            <p class="small mb-0 text-muted" style="font-size: 0.72rem; line-height: 1.5;">
+                                If there are any issues, please contact us at <strong>medscreen.lab@gmail.com</strong> or call <strong>(083) 823 8754</strong>.
+                            </p>
+                        </div>
+                    </div>
                 @endif
             @else
                 {{-- Patient View: Dynamic Cashless Refund Handshake --}}
@@ -98,6 +115,23 @@ $statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
                         <p class="small mb-0 italic" style="line-height: 1.4; color: var(--text-main);">
                             Your appointment has been canceled and your cashless payment is confirmed. Please wait for our clinical team to process and finalize your refund.
                         </p>
+                    </div>
+                @elseif($app->payment_status === 'invalid')
+                    <div class="alert-clinical p-3 mb-3 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
+                        <div class="d-flex align-items-center mb-1">
+                            <i class="bi bi-exclamation-octagon-fill text-danger me-2"></i>
+                            <small class="text-danger fw-bold uppercase" style="font-size: 0.65rem; letter-spacing: 1px;">Refund Unavailable (Payment Invalid)</small>
+                        </div>
+                        <p class="small mb-2 italic" style="line-height: 1.4; color: var(--text-main);">
+                            Your uploaded proof of payment has been marked as invalid by our staff. Consequently, a refund cannot be processed for this transaction.
+                        </p>
+                        <div class="pt-2 border-top border-danger border-opacity-25 mt-2">
+                            <small class="text-danger fw-bold uppercase" style="font-size: 0.6rem; letter-spacing: 0.5px;">Invalidation Reason:</small>
+                            <p class="small mb-2 text-main mt-1 fw-bold">{{ $app->return_reason }}</p>
+                            <p class="small mb-0 text-muted" style="font-size: 0.72rem; line-height: 1.5;">
+                                If there are any issues, please contact us at <strong>medscreen.lab@gmail.com</strong> or call <strong>(083) 823 8754</strong>.
+                            </p>
+                        </div>
                     </div>
                 @elseif($app->payment_status !== 'refunded')
                     <div class="alert-clinical p-3 mb-3 text-warning border-warning" style="background-color: rgba(255, 193, 7, 0.05); border-left: 4px solid var(--bs-warning) !important; border-radius: 8px;">
@@ -195,20 +229,20 @@ $statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
                 {{-- STEP A: PENDING -> APPROVE, RETURN, or CANCEL (Administrative) --}}
                 {{-- Only display individual approval forms if the appointment is NOT part of a bulk batch --}}
                 @php
-                // Enable individual actions for single appointments, or bulk records once payment is confirmed [263]
-                $allowIndividualActions = !$app->batch_id || ($app->payment_method === 'Cash' || $app->payment_status === 'paid');
+                    // Enable individual actions for single appointments, or bulk records once payment is confirmed [263]
+                    $allowIndividualActions = !$app->batch_id || ($app->payment_method === 'Cash' || $app->payment_status === 'paid');
                 @endphp
 
                 @if($app->status == 'pending' && $allowIndividualActions)
                     <div class="d-flex gap-2 justify-content-end mb-2">
                         <form action="{{ route('appointments.status', $app->id) }}" method="POST" class="flex-grow-1 m-0">
-                            @csrf 
+                            @csrf
                             @method('PATCH')
                             <input type="hidden" name="status" value="approved">
 
                             {{-- Disabled only if payment is Cashless AND remains unpaid [263] --}}
                             @php
-                            $isApproveDisabled = ($app->payment_method === 'Cashless' && $app->payment_status !== 'paid');
+                                $isApproveDisabled = ($app->payment_method === 'Cashless' && $app->payment_status !== 'paid');
                             @endphp
                             <button type="submit" class="btn-custom btn-accent w-100 py-2 fw-bold {{ $isApproveDisabled ? 'opacity-50 cursor-not-allowed' : '' }}" {{ $isApproveDisabled ? 'disabled title="Cashless payment must be confirmed before approval"' : '' }}>
                                 <i class="bi bi-check-circle me-1"></i> APPROVE
@@ -219,8 +253,6 @@ $statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
                         </button>
                     </div>
                 @endif
-
-                {{-- Note: CANCEL APPOINTMENT action for staff has been removed from this block --}}
 
                 {{-- Confirm Refund option on Canceled, Paid folders --}}
                 @if($app->status === 'canceled' && $app->payment_status === 'paid')
@@ -287,9 +319,9 @@ $statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
         {{-- Allow resubmission/rescheduling strictly for returned, canceled, and dynamically expired unreleased records --}}
         @if(($app->status == 'returned' || $app->status == 'canceled' || $isExpired) && $app->status !== 'released')
             <div class="d-flex gap-2">
-                <button type="button" class="btn-custom btn-accent flex-grow-1 py-3 fw-bold shadow" data-bs-toggle="modal" data-bs-target="#resubmitModal{{$app->id}}">
+                <a href="{{ route('appointments.resubmit', $app->id) }}" class="btn-custom btn-accent flex-grow-1 py-3 fw-bold shadow text-center text-decoration-none">
                     <i class="bi bi-arrow-repeat me-2"></i> UPDATE & RESUBMIT APPOINTMENT
-                </button>
+                </a>
             </div>
             <div class="text-center mt-2">
                 <small class="text-secondary" style="font-size: 0.65rem;">* Edit your details and pick a new schedule to reactivate.</small>

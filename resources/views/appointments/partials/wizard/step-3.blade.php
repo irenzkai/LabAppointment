@@ -26,7 +26,7 @@
                     {{-- Checkbox + Summary Info --}}
                     <div class="d-flex align-items-center flex-grow-1">
                         <input type="checkbox" name="service_ids[]" value="{{ $s->id }}" id="test_{{ $s->id }}" class="btn-check test-checkbox" 
-                            data-name="{{ $s->name }}" data-price="{{ $s->price }}" data-sample="{{ $s->sample_required ?? 'N/A' }}" data-time="{{ $s->estimated_time ?? 0 }}" onchange="updateSummary();">
+                               data-name="{{ $s->name }}" data-price="{{ $s->price }}" data-sample="{{ $s->sample_required ?? 'N/A' }}" data-time="{{ $s->estimated_time ?? 0 }}" onchange="updateSummary();">
                         
                         <label class="d-flex align-items-center cursor-pointer mb-0" for="test_{{ $s->id }}">
                             {{-- Checkbox Indicator --}}
@@ -82,54 +82,80 @@
             NEXT: CHOOSE SCHEDULE <i class="bi bi-arrow-right ms-2"></i>
         </button>
     </div>
+
 </div>
 
 <style>
-    /* Accordion & Selection High-Contrast styling overrides */
-    .test-item {
-        transition: all 0.2s ease-in-out;
-    }
-    .test-item:hover {
-        background-color: rgba(25, 211, 140, 0.02);
-    }
-    .selected-test-item {
-        background-color: rgba(25, 211, 140, 0.04) !important;
-        border-left: 4px solid var(--brand-accent) !important;
-    }
-    .test-checkbox:checked + label .check-indicator {
-        background-color: var(--brand-accent);
-        border-color: var(--brand-accent) !important;
-    }
-    .test-checkbox:checked + label .check-indicator i {
-        display: block !important;
-    }
-    
-    /* Theme-Adaptive Drawer Styling */
-    .test-details-drawer {
-        background-color: rgba(0, 0, 0, 0.02) !important;
-        border: 1px solid var(--border-color) !important;
-    }
-    [data-bs-theme="dark"] .test-details-drawer {
-        background-color: rgba(255, 255, 255, 0.03) !important;
-    }
-    
-    /* Preparation warnings text contrast levels */
-    .prep-badge {
-        color: #b58105 !important;
-        font-weight: 700;
-    }
-    [data-bs-theme="dark"] .prep-badge {
-        color: #ffc107 !important;
-    }
-    
-    .test-list-container.custom-scroll::-webkit-scrollbar {
-        width: 6px;
-    }
-    .test-list-container.custom-scroll::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.03);
-    }
-    .test-list-container.custom-scroll::-webkit-scrollbar-thumb {
-        background: var(--brand-accent);
-        border-radius: 10px;
-    }
+/* Accordion & Selection High-Contrast styling overrides */
+.test-item {
+    transition: all 0.2s ease-in-out;
+}
+.test-item:hover {
+    background-color: rgba(25, 211, 140, 0.02);
+}
+.selected-test-item {
+    background-color: rgba(25, 211, 140, 0.04) !important;
+    border-left: 4px solid var(--brand-accent) !important;
+}
+.test-checkbox:checked + label .check-indicator {
+    background-color: var(--brand-accent);
+    border-color: var(--brand-accent) !important;
+}
+.test-checkbox:checked + label .check-indicator i {
+    display: block !important;
+}
+
+/* Theme-Adaptive Drawer Styling */
+.test-details-drawer {
+    background-color: rgba(0, 0, 0, 0.02) !important;
+    border: 1px solid var(--border-color) !important;
+}
+[data-bs-theme="dark"] .test-details-drawer {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Preparation warnings text contrast levels */
+.prep-badge {
+    color: #b58105 !important;
+    font-weight: 700;
+}
+[data-bs-theme="dark"] .prep-badge {
+    color: #ffc107 !important;
+}
+
+.test-list-container.custom-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+.test-list-container.custom-scroll::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.03);
+}
+.test-list-container.custom-scroll::-webkit-scrollbar-thumb {
+    background: var(--brand-accent);
+    border-radius: 10px;
+}
 </style>
+
+@once
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const testSearchInput = document.getElementById('testSearch');
+    if (testSearchInput) {
+        testSearchInput.addEventListener('input', function() {
+            const query = this.value.trim().toLowerCase();
+            const testItems = document.querySelectorAll('.test-list-container .test-item');
+            
+            testItems.forEach(item => {
+                const testName = item.dataset.name ? item.dataset.name.toLowerCase() : '';
+                if (testName.includes(query)) {
+                    item.classList.remove('d-none');
+                } else {
+                    item.classList.add('d-none');
+                }
+            });
+        });
+    }
+});
+</script>
+@endpush
+@endonce

@@ -13,9 +13,9 @@ trait HandlesResultFiles
     {
         if ($request->hasFile($fieldName)) {
             $res = $appointment->result;
-            
+
             // Delete old file from storage if it exists to save space
-            if ($res->$fieldName) {
+            if ($res->$fieldName && Storage::disk('public')->exists($res->$fieldName)) {
                 Storage::disk('public')->delete($res->$fieldName);
             }
 
