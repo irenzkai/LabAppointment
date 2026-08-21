@@ -15,6 +15,7 @@ class LaboratoryHistoryRecord extends Model
         'patient_first_name',
         'patient_middle_name',
         'patient_last_name',
+        'patient_suffix',
         'patient_name',
         'age',
         'sex',

@@ -26,6 +26,8 @@ return new class extends Migration
             $table->string('patient_first_name', 60);
             $table->string('patient_middle_name', 60)->nullable(); // Nullable per PSA guidelines
             $table->string('patient_last_name', 60);
+            $table->string('patient_suffix', 10)->nullable();     // Optional suffix (e.g. JR, SR, III)
+            
             $table->string('patient_name', 255); // Composite full display name
             $table->unsignedTinyInteger('age');  // Constrained to unsigned byte
             $table->enum('sex', ['Male', 'Female']);

@@ -19,6 +19,7 @@
                 <label class="smaller text-secondary fw-bold mb-1 uppercase">First Name</label>
                 <input type="text" name="first_name" class="form-control uppercase" value="{{ old('first_name', $user->first_name) }}" oninput="this.value = this.value.replace(/[^a-zA-ZñÑ\s.\'-]/g, '')" required>
             </div>
+
             <div class="col-md-3">
                 <div class="d-flex justify-content-between align-items-center mb-1">
                     <label class="smaller text-secondary fw-bold mb-0 uppercase">Middle Name</label>
@@ -29,10 +30,12 @@
                 </div>
                 <input type="text" name="middle_name" id="profile_middle_name" class="form-control uppercase" value="{{ old('middle_name', $user->middle_name) }}" oninput="this.value = this.value.replace(/[^a-zA-ZñÑ\s.\'-]/g, '')" {{ $user->middle_name == 'N/A' ? 'readonly' : '' }}>
             </div>
+
             <div class="col-md-3">
                 <label class="smaller text-secondary fw-bold mb-1 uppercase">Last Name</label>
                 <input type="text" name="last_name" class="form-control uppercase" value="{{ old('last_name', $user->last_name) }}" oninput="this.value = this.value.replace(/[^a-zA-ZñÑ\s.\'-]/g, '')" required>
             </div>
+
             <div class="col-md-3">
                 <label class="smaller text-secondary fw-bold mb-1 uppercase">Suffix (Opt.)</label>
                 <input type="text" name="suffix" id="suffix" list="suffix_options" class="form-control uppercase" value="{{ old('suffix', $user->suffix) }}" placeholder="e.g. JR" maxlength="10">
@@ -47,7 +50,7 @@
             </div>
 
             {{-- Clinical re-verification helper alert --}}
-            <div class="col-12 mt-2"> 
+            <div class="col-12 mt-2">
                 <div class="alert alert-clinical p-2 border-warning border-opacity-10" style="background-color: rgba(25, 211, 140, 0.03);">
                     <i class="bi bi-shield-exclamation text-warning me-1.5"></i>
                     <small class="text-muted"><strong>Safety Notice:</strong> Modifying your registered email or phone number will automatically reset its verification status and require re-verification.</small>
@@ -98,6 +101,7 @@
                 <label class="smaller text-secondary fw-bold mb-1 uppercase">Birthdate</label>
                 <input type="date" name="birthdate" class="form-control" value="{{ $user->birthdate ? $user->birthdate->format('Y-m-d') : '' }}" required max="{{ now()->subYears(18)->format('Y-m-d') }}">
             </div>
+
             <div class="col-md-6">
                 <label class="smaller text-secondary fw-bold mb-1 uppercase">Sex</label>
                 <select name="sex" class="form-select" required>
@@ -116,18 +120,21 @@
                             <option value="">Loading Provinces...</option>
                         </select>
                     </div>
+
                     <div class="col-md-6">
                         <label class="smaller text-secondary fw-bold mb-1 uppercase">City / Municipality</label>
                         <select id="addr_city" name="city" class="form-select" onchange="fetchBarangays(this.value)" disabled required>
                             <option value="">Select Province First</option>
                         </select>
                     </div>
+
                     <div class="col-md-6">
                         <label class="smaller text-secondary fw-bold mb-1 uppercase">Barangay</label>
                         <select id="addr_brgy" name="barangay" class="form-select" disabled required>
                             <option value="">Select City First</option>
                         </select>
                     </div>
+
                     <div class="col-md-6">
                         <label class="smaller text-secondary fw-bold mb-1 uppercase">Street / House No.</label>
                         <input type="text" id="addr_street" name="street" class="form-control uppercase" value="{{ old('street', $user->street) }}" required>
@@ -250,10 +257,8 @@ let isSubmittingForm = false;
 function showFieldError(inputElement, errorMessage) {
     if (!inputElement) return;
     inputElement.classList.add('is-invalid');
-
     let parent = inputElement.parentElement;
     let targetParent = parent.classList.contains('input-group') ? parent.parentElement : parent;
-
     let existingError = targetParent.querySelector('.invalid-feedback-inline');
     if (existingError) {
         existingError.innerText = errorMessage;
@@ -416,9 +421,9 @@ function validateProfileForm(event) {
             showFieldError(email, "Email Address is required.");
             errorsCount++;
         } else {
-            const atCount = (currentEmail.match(/@/g) || []).length;
-            if (atCount !== 1) {
-                showFieldError(email, "The email address must contain exactly one @ symbol.");
+            const emailRegex = /^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+            if (!emailRegex.test(currentEmail)) {
+                showFieldError(email, "Please enter a valid email address with a domain (e.g. name@domain.com or user@online.htcgsc.edu.ph).");
                 errorsCount++;
             }
         }
@@ -458,7 +463,6 @@ function resetProfileForm(event) {
             } else if (cleanPhone.startsWith('639')) {
                 cleanPhone = '09' + cleanPhone.substring(3);
             }
-
             if (cleanPhone && (cleanPhone.startsWith('09') || cleanPhone.startsWith('9')) && (cleanPhone.length === 11 || cleanPhone.length === 10)) {
                 let suffixVal = cleanPhone.startsWith('09') ? cleanPhone.substring(2) : cleanPhone.substring(1);
                 displayInput.value = suffixVal;
@@ -540,17 +544,16 @@ async function triggerAutoSendProfileOtp() {
     const btn = document.getElementById('otp-resend-btn');
     const emailInput = document.getElementById('prof_email');
     const errorMsgDiv = document.getElementById('otp_error_msg');
-
     if (errorMsgDiv) {
         errorMsgDiv.classList.add('d-none');
         errorMsgDiv.innerText = '';
     }
-
     if (!emailInput || !emailInput.value.trim()) return;
 
     const now = Date.now();
     const cooldownExpiry = safeStorage.getItem('resend_cooldown_expiry');
     const lockoutExpiry = safeStorage.getItem('resend_lockout_expiry');
+
     if ((cooldownExpiry && now < parseInt(cooldownExpiry)) || (lockoutExpiry && now < parseInt(lockoutExpiry))) {
         return;
     }
@@ -570,13 +573,11 @@ async function triggerAutoSendProfileOtp() {
             },
             body: JSON.stringify({ email: emailInput.value.trim() })
         });
-
         let attempts = parseInt(safeStorage.getItem('resend_attempts') || '0');
         attempts++;
         safeStorage.setItem('resend_attempts', attempts.toString());
         const expiryTime = now + (30 * 1000);
         safeStorage.setItem('resend_cooldown_expiry', expiryTime.toString());
-
         updateResendState();
     } catch (e) {
         console.error(e);
@@ -624,7 +625,6 @@ async function submitProfileOtpCode(event) {
             body: JSON.stringify(payload)
         });
         const data = await response.json();
-
         if (data.success) {
             emailVerifiedLocally = true;
             verifiedEmailValue = data.email;
@@ -742,7 +742,6 @@ function compileProfileAddress() {
             prov.options[prov.selectedIndex].value = provName;
             city.options[city.selectedIndex].value = cityName;
             brgy.options[brgy.selectedIndex].value = brgyName;
-
             document.getElementById('profile_address_hidden').value = `${street}, BRGY. ${brgyName}, ${cityName}, ${provName}`.toUpperCase();
         }
     }
@@ -762,14 +761,12 @@ async function initializeAddress() {
             if (provOpt) {
                 provSel.value = provOpt.value;
                 await fetchCities(provOpt.value);
-
                 const citySel = document.getElementById('addr_city');
                 if (citySel) {
                     let cityOpt = Array.from(citySel.options).find(opt => opt.text.toUpperCase().trim() === savedCity.toUpperCase().trim() || opt.value === savedCity.trim());
                     if (cityOpt) {
                         citySel.value = cityOpt.value;
                         await fetchBarangays(cityOpt.value);
-
                         const brgySel = document.getElementById('addr_brgy');
                         if (brgySel) {
                             let brgyOpt = Array.from(brgySel.options).find(opt => opt.text.toUpperCase().trim() === savedBarangay.toUpperCase().trim() || opt.value === savedBarangay.trim());
@@ -796,7 +793,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else if (hiddenPhone.startsWith('639')) {
         hiddenPhone = '09' + hiddenPhone.substring(3);
     }
-
     if (hiddenPhone && (hiddenPhone.startsWith('09') || hiddenPhone.startsWith('9')) && (hiddenPhone.length === 11 || hiddenPhone.length === 10)) {
         let suffixVal = hiddenPhone.startsWith('09') ? hiddenPhone.substring(2) : hiddenPhone.substring(1);
         const displayInput = document.getElementById('phone_display');

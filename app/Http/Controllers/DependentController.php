@@ -10,15 +10,23 @@ use Carbon\Carbon;
 class DependentController extends Controller
 {
     /**
+     * Display the form for creating a new family dependent.
+     */
+    public function create()
+    {
+        return view('dependents.create');
+    }
+
+    /**
      * Store a newly created family dependent in the database.
      */
     public function store(Request $request) 
     {
-        // Calculate the threshold date exactly 18 years ago from today [38]
+        // Calculate the threshold date exactly 18 years ago from today
         $eighteenYearsAgo = Carbon::now()->subYears(18)->toDateString();
 
         // Custom name validation rule block matching parent registries
-        $nameRule = function ($attribute, $value, $fail) {
+        $nameRule = function ($attribute, $value, $fail) { 
             $val = trim($value);
             if (empty($val) || $val === 'N/A') {
                 return; // Handled by nullable/required constraints
@@ -54,9 +62,9 @@ class DependentController extends Controller
             'first_name' => ['required', 'string', 'max:60', $nameRule],
             'middle_name' => ['nullable', 'string', 'max:60', $nameRule],
             'last_name' => ['required', 'string', 'max:60', $nameRule],
-            'suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'], // Alphanumeric, spaces, and periods allowed
-            
-            // Enforce minor status (under 18 years of age) to meet legal compliance [38]
+            'suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
+
+            // Enforce minor status (under 18 years of age) to meet legal compliance
             'birthdate' => 'required|date|before_or_equal:today|after:' . $eighteenYearsAgo, 
             'sex' => 'required|in:Male,Female',
             'relationship' => 'required|string|in:Son,Daughter,SON,DAUGHTER',
@@ -96,14 +104,26 @@ class DependentController extends Controller
             'suffix' => $request->filled('suffix') ? strtoupper(trim($request->suffix)) : null,
             'birthdate' => $request->birthdate,
             'sex' => $request->sex,
-            'relationship' => strtoupper(trim($request->relationship)), // Normalized to SON/DAUGHTER
+            'relationship' => strtoupper(trim($request->relationship)),
             'street' => $street,
             'barangay' => $barangay,
             'city' => $city, 
             'province' => $province 
         ]);
 
-        return back()->with('success', 'Dependent record created.');
+        return redirect()->to(route('profile.edit') . '#tab-dependents')->with('success', 'Dependent record created.');
+    }
+
+    /**
+     * Display the form for editing an existing family dependent.
+     */
+    public function edit(Dependent $dependent)
+    {
+        if ($dependent->user_id !== Auth::id()) {
+            abort(403);
+        }
+
+        return view('dependents.edit', compact('dependent'));
     }
 
     /**
@@ -115,7 +135,7 @@ class DependentController extends Controller
             abort(403);
         }
 
-        // Calculate the threshold date exactly 18 years ago from today [39]
+        // Calculate the threshold date exactly 18 years ago from today
         $eighteenYearsAgo = Carbon::now()->subYears(18)->toDateString();
 
         // Custom name validation rule block matching parent registries
@@ -155,9 +175,9 @@ class DependentController extends Controller
             'first_name' => ['required', 'string', 'max:60', $nameRule],
             'middle_name' => ['nullable', 'string', 'max:60', $nameRule],
             'last_name' => ['required', 'string', 'max:60', $nameRule],
-            'suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'], // Alphanumeric, spaces, and periods allowed
-            
-            // Enforce minor status (under 18 years of age) to meet legal compliance [39]
+            'suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
+
+            // Enforce minor status (under 18 years of age) to meet legal compliance
             'birthdate' => 'required|date|before_or_equal:today|after:' . $eighteenYearsAgo, 
             'sex' => 'required|in:Male,Female',
             'relationship' => 'required|string|in:Son,Daughter,SON,DAUGHTER',
@@ -197,14 +217,14 @@ class DependentController extends Controller
             'suffix' => $request->filled('suffix') ? strtoupper(trim($request->suffix)) : null,
             'birthdate' => $request->birthdate,
             'sex' => $request->sex,
-            'relationship' => strtoupper(trim($request->relationship)), // Normalized to SON/DAUGHTER
-            'street' => $street, 
-            'barangay' => $barangay, 
+            'relationship' => strtoupper(trim($request->relationship)),
+            'street' => $street,
+            'barangay' => $barangay,
             'city' => $city,
             'province' => $province
         ]);
 
-        return back()->with('success', 'Dependent record successfully updated.');
+        return redirect()->to(route('profile.edit') . '#tab-dependents')->with('success', 'Dependent record successfully updated.');
     }
 
     /**

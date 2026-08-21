@@ -58,6 +58,7 @@
                         <option value="">All Statuses</option>
                         <option value="needs_action" {{ request('status') === 'needs_action' ? 'selected' : '' }}>Needs Action</option>
                         <option value="no_action" {{ request('status') === 'no_action' ? 'selected' : '' }}>No Action Needed</option>
+                        <option value="expired" {{ request('status') === 'expired' ? 'selected' : '' }}>Expired</option>
                         <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
                         <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
                         <option value="retest" {{ request('status') === 'retest' ? 'selected' : '' }}>Retest Required</option>

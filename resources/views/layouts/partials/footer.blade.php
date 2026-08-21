@@ -30,7 +30,7 @@
                     {{-- FIXED: Added direct link to the secure clinical results verification page --}}
                     <li><a href="{{ route('result.verify-search') }}" class="footer-link">Verify Result</a></li>
                     @auth
-                        <li><a href="{{ route('dashboard') }}" class="footer-link">Dashboard</a></li>
+                        <li><a href="{{ route('dashboard') }}" class="footer-link">Main Menu</a></li>
                         <li><a href="{{ route('patient.history') }}" class="footer-link">Medical History</a></li>
                     @else
                         <li><a href="{{ route('login') }}" class="footer-link">Patient Login</a></li>

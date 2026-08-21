@@ -39,11 +39,11 @@ class ProfileUpdateRequest extends FormRequest
             'city' => ['required', 'string', 'max:100'],
             'province' => ['required', 'string', 'max:100'],
 
-            // 4. Contact & Security (Single @ verification & strict 11-digit mobile standard)
+            // 4. Contact & Security (Multi-level domain verification & strict 11-digit mobile standard)
             'email' => [
                 'required', 'string', 'lowercase', 'email', 'max:191', 
                 'unique:users,email,' . $this->user()->id, 
-                'regex:/^[^@]+@[^@]+$/'
+                'regex:/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'
             ],
             'phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
         ];
@@ -55,7 +55,7 @@ class ProfileUpdateRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'email.regex' => 'The email address must contain exactly one @ symbol.',
+            'email.regex' => 'Please enter a valid email address with a domain (e.g. name@domain.com or user@online.htcgsc.edu.ph).',
             'phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
             'birthdate.before_or_equal' => 'Administrative Policy: You must be at least 18 years old.',
             'suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',

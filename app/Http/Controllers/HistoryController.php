@@ -13,38 +13,37 @@ use App\Models\{
     Service
 };
 use App\Notifications\AppointmentNotification;
-use App\Events\NotificationSent;  // Broadcasts instant real-time bell notifications globally [423]
+use App\Events\NotificationSent;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Auth, Gate, DB, Storage};
 
 class HistoryController extends Controller
 {
     /**
-     * Display medical history view [41]
+     * Display medical history view
      */
     public function index(User $user = null)
     {
         $targetUser = $user ?: Auth::user();
 
-        // Security: Patients can only see themselves [41]
+        // Security: Patients can only see themselves
         if (Auth::user()->isPatient() && Auth::id() !== $targetUser->id) {
             abort(403);
         }
 
         $labHistory = LaboratoryHistory::firstOrCreate(['user_id' => $targetUser->id]);
-
         $appointments = Appointment::where('user_id', $targetUser->id)
             ->with('services')
             ->latest()
             ->get();
 
-        // FETCH: Real catalog of active/available clinical services [41]
+        // FETCH: Real catalog of active/available clinical services
         $availableServices = Service::where('is_available', true)
             ->orderBy('category')
             ->orderBy('name')
             ->get();
 
-        // Retrieve digitized sub-table records & map them back into a backward-compatible array structure [41]
+        // Retrieve digitized sub-table records & map them back into a backward-compatible array structure
         $recordsModels = LaboratoryHistoryRecord::whereHas('laboratoryHistory', function($q) use ($targetUser) {
             $q->where('user_id', $targetUser->id);
         })
@@ -60,13 +59,13 @@ class HistoryController extends Controller
                 'patient_name' => $r->patient_name,
                 'age' => $r->age,
                 'sex' => $r->sex,
-                'address' => $r->patient_address, // dynamic address string [41]
+                'address' => $r->patient_address,
                 'tests_requested' => $r->procedures->pluck('procedure_name')->toArray(),
                 'scans' => $r->scans->map(function($s) {
                     return [
                         'label' => $s->label,
                         'file_path' => $s->file_path,
-                        'certificate_no' => $s->certificate_no ?? null // FIXED: Included certificate_no in mapped array for patient view loading [42]
+                        'certificate_no' => $s->certificate_no ?? null
                     ];
                 })->toArray()
             ];
@@ -76,20 +75,17 @@ class HistoryController extends Controller
     }
 
     /**
-     * Patient requests a manual data import from the laboratory staff [42]
+     * Patient requests a manual data import from the laboratory staff
      */
     public function requestPermission()
     {
         $user = Auth::user();
         $history = LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
-
         $history->update(['permission_status' => 'pending_staff']);
-
         ActivityLog::record('HISTORY REQUEST', 'Patient requested data import', $user->name);
 
         $internalStaff = User::whereIn('role', ['staff', 'lab_tech', 'admin'])->get();
         foreach($internalStaff as $staff) {
-            // Persistent DB log
             $staff->notify(new AppointmentNotification([
                 'title' => 'Lab History Request',
                 'message' => "Patient {$user->name} is requesting a historical data import.",
@@ -97,7 +93,6 @@ class HistoryController extends Controller
                 'type' => 'info'
             ]));
 
-            // Real-time broadcast [423]
             event(new NotificationSent($staff->id, 'Lab History Request', "Patient {$user->name} is requesting a historical data import."));
         }
 
@@ -105,13 +100,11 @@ class HistoryController extends Controller
     }
 
     /**
-     * Clinical staff requests permission to digitize physical records for a patient [42]
+     * Clinical staff requests permission to digitize physical records for a patient
      */
     public function staffTriggerRequest(User $user)
     {
-        // RENEW SESSION TOKEN FIRST: Re-authorize the session key so any validation/redirect errors do not trigger lockouts [42]
         session()->put("access_granted_{$user->id}_history", true);
-
         $history = LaboratoryHistory::where('user_id', $user->id)->first();
         $history->update(['permission_status' => 'pending_patient']);
 
@@ -122,14 +115,13 @@ class HistoryController extends Controller
             'type' => 'info'
         ]));
 
-        // Real-time broadcast [423]
         event(new NotificationSent($user->id, 'Data Import Permission', 'The laboratory is asking for permission to digitize your previous physical records.'));
 
         return back()->with('success', 'Permission request sent to patient.');
     }
 
     /**
-     * Accept a permission handshake request [43]
+     * Accept a permission handshake request
      */
     public function acceptRequest(User $user = null)
     {
@@ -139,19 +131,16 @@ class HistoryController extends Controller
 
         $targetUser = $user ?: Auth::user();
 
-        // RENEW SESSION TOKEN FIRST: Re-authorize the session key so any redirects do not lock employees out [43]
         if (Auth::user()->isEmployee()) {
             session()->put("access_granted_{$targetUser->id}_history", true);
         }
 
         $history = LaboratoryHistory::where('user_id', $targetUser->id)->first();
-
         if (!$history) {
             return back()->with('error', 'History record not found.');
         }
 
         $history->update(['permission_status' => 'granted']);
-
         $roleName = Auth::user()->role;
         ActivityLog::record('HISTORY GRANTED', "Handshake accepted by {$roleName}", $targetUser->name);
 
@@ -159,11 +148,10 @@ class HistoryController extends Controller
     }
 
     /**
-     * Save newly digitized manual laboratory report into patient archive timeline [43]
+     * Save newly digitized manual laboratory report into patient archive timeline
      */
     public function saveManualData(Request $request, User $user)
     {
-        // RENEW SESSION TOKEN FIRST: Re-authorize session so validation failures redirect back safely instead of kicking users out [43]
         session()->put("access_granted_{$user->id}_history", true);
 
         $request->validate([
@@ -172,6 +160,7 @@ class HistoryController extends Controller
             'patient_first_name' => 'required|string|max:255',
             'patient_middle_name' => 'nullable|string|max:255',
             'patient_last_name' => 'required|string|max:255',
+            'patient_suffix' => 'nullable|string|max:10|regex:/^[a-zA-Z0-9\s.]+$/u',
             'age' => 'required|integer|min:0',
             'sex' => 'required|in:Male,Female',
             'patient_street' => 'required|string|max:255',
@@ -183,9 +172,12 @@ class HistoryController extends Controller
             'scans.*' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10000',
             'scan_labels' => 'required|array|min:1',
             'scan_labels.*' => 'required|string|max:255',
-            // FIXED: Added validation rules for optional certificate numbers [44]
             'scan_cert_nos' => 'nullable|array',
             'scan_cert_nos.*' => 'nullable|string|max:255',
+        ], [
+            'patient_suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
+            'tests_requested.required' => 'At least one procedure/test must be selected.',
+            'scans.required' => 'At least one scanned document is required.'
         ]);
 
         $history = LaboratoryHistory::where('user_id', $user->id)->firstOrCreate(['user_id' => $user->id]);
@@ -193,7 +185,9 @@ class HistoryController extends Controller
         $fName = strtoupper(trim($request->patient_first_name));
         $mName = ($request->patient_middle_name && strtoupper($request->patient_middle_name) !== 'N/A') ? strtoupper(trim($request->patient_middle_name)) : 'N/A';
         $lName = strtoupper(trim($request->patient_last_name));
-        $fullName = $fName . ($mName !== 'N/A' ? ' ' . $mName : '') . ' ' . $lName;
+        $suffix = $request->filled('patient_suffix') ? strtoupper(trim($request->patient_suffix)) : null;
+
+        $fullName = $fName . ($mName !== 'N/A' ? ' ' . $mName : '') . ' ' . $lName . ($suffix ? ' ' . $suffix : '');
 
         $street = strtoupper(trim($request->patient_street));
         $barangay = strtoupper(trim($request->patient_barangay));
@@ -201,7 +195,7 @@ class HistoryController extends Controller
         $province = strtoupper(trim($request->patient_province));
         $fullAddress = "{$street}, BRGY. {$barangay}, {$city}, {$province}";
 
-        // 1. Create Main Digitized Record entry (Demographics Snapshot) [44]
+        // 1. Create Main Digitized Record entry
         $record = LaboratoryHistoryRecord::create([
             'laboratory_history_id' => $history->id,
             'date_of_record' => $request->date_of_record,
@@ -209,6 +203,7 @@ class HistoryController extends Controller
             'patient_first_name' => $fName,
             'patient_middle_name' => $mName,
             'patient_last_name' => $lName,
+            'patient_suffix' => $suffix,
             'patient_name' => strtoupper($fullName),
             'age' => $request->age,
             'sex' => $request->sex,
@@ -219,7 +214,7 @@ class HistoryController extends Controller
             'patient_address' => strtoupper($fullAddress),
         ]);
 
-        // 2. Save Procedures (Tests Requested) [44]
+        // 2. Save Procedures (Tests Requested)
         foreach ($request->tests_requested as $testName) {
             LaboratoryHistoryProcedure::create([
                 'history_record_id' => $record->id,
@@ -227,7 +222,7 @@ class HistoryController extends Controller
             ]);
         }
 
-        // 3. Save Scans [44, 45]
+        // 3. Save Scans
         if ($request->hasFile('scans')) {
             foreach ($request->file('scans') as $index => $file) {
                 if ($file->isValid()) {
@@ -236,7 +231,6 @@ class HistoryController extends Controller
                         'history_record_id' => $record->id,
                         'label' => $request->scan_labels[$index] ?? 'Diagnostic Scan',
                         'file_path' => $path,
-                        // FIXED: Saves the optional certificate number directly to our normalized sub-table column [45]
                         'certificate_no' => $request->scan_cert_nos[$index] ?? null,
                     ]);
                 }
@@ -247,7 +241,7 @@ class HistoryController extends Controller
     }
 
     /**
-     * RESTORED & EXPOSABLE: Handle Reason-Gate Submission for Patient Medical History [45]
+     * Handle Reason-Gate Submission for Patient Medical History
      */
     public function logAccess(Request $request)
     {
@@ -258,26 +252,22 @@ class HistoryController extends Controller
 
         $targetUser = User::findOrFail($request->target_user_id);
 
-        // 1. Record the clinical audit trail
         ActivityLog::record(
             'SENSITIVE DATA ACCESS',
             "Reason: {$request->access_reason} | Action: VIEW | Target: HISTORICAL ARCHIVE",
             $targetUser->name
         );
 
-        // 2. Grant session-based access to pass the Reason-Gate
         session()->put("access_granted_{$targetUser->id}_history", true);
 
-        // 3. Redirect to the secure medical history view
         return redirect()->route('admin.users.history', $targetUser->id);
     }
 
     /**
-     * Dispatch status notification alerting patient of successfully digitized records [45]
+     * Dispatch status notification alerting patient of successfully digitized records
      */
     public function notifyEncoded(User $user)
     {
-        // RENEW SESSION TOKEN FIRST: Re-authorize session key so redirects do not trigger blocks [45]
         session()->put("access_granted_{$user->id}_history", true);
 
         $user->notify(new AppointmentNotification([
@@ -287,10 +277,8 @@ class HistoryController extends Controller
             'type' => 'success'
         ]));
 
-        // Real-time broadcast [423]
         event(new NotificationSent($user->id, 'Laboratory Records Digitized', 'The laboratory staff has successfully digitized and archived your historical medical records.'));
 
-        // Safe activity logging
         ActivityLog::record('NOTIFIED PATIENT', 'Dispatched historical records digitization completion alert', $user->name);
 
         return back()->with('success', 'Patient has been successfully notified of records encoding.');

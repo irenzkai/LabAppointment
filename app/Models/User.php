@@ -4,23 +4,23 @@ namespace App\Models;
 
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\SoftDeletes; // Import SoftDeletes trait
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
-    use HasFactory, Notifiable, SoftDeletes; // Use SoftDeletes trait
+    use HasFactory, Notifiable, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
-     * Normalized to 3NF: No physical 'name' or 'address' columns [102]
+     * Normalized to 3NF: No physical 'name' or 'address' columns
      */
     protected $fillable = [
-        'first_name',
+        'first_name', 
         'middle_name',
         'last_name',
-        'suffix', // Added to support optional user suffixes (e.g. JR, III)
+        'suffix',
         'email',
         'password',
         'phone', 
@@ -30,9 +30,9 @@ class User extends Authenticatable implements MustVerifyEmail
         'barangay', 
         'city', 
         'province', 
-        'role', // 'user', 'staff', 'lab_tech', 'admin'
+        'role',
         'is_active',
-        'password_change_required', // Flag to force password updates on next login
+        'password_change_required',
     ];
 
     /**
@@ -53,113 +53,86 @@ class User extends Authenticatable implements MustVerifyEmail
             'password' => 'hashed',
             'birthdate' => 'date', 
             'is_active' => 'boolean',
-            'password_change_required' => 'boolean', // Cast to boolean cleanly [102]
-            'deleted_at' => 'datetime', // Cast SoftDelete timestamp [102]
+            'password_change_required' => 'boolean',
+            'deleted_at' => 'datetime',
         ];
     }
 
     // =========================================================================
-    // DYNAMIC ACCESSORS (COMPATIBILITY LAYER) [103]
+    // DYNAMIC ACCESSORS (COMPATIBILITY LAYER - Multibyte Ñ/ñ Safe)
     // =========================================================================
 
     /**
-     * Dynamic Name Accessor (Compiles full name dynamically on-the-fly) [103]
+     * Dynamic Name Accessor (Compiles full name dynamically on-the-fly, multibyte ñ -> Ñ safe)
      */
     public function getNameAttribute()
     {
-        $fullName = $this->first_name . ($this->middle_name && strtoupper($this->middle_name) !== 'N/A' ? ' ' . $this->middle_name : '') . ' ' . $this->last_name;
+        $mName = ($this->middle_name && mb_strtoupper($this->middle_name, 'UTF-8') !== 'N/A') ? ' ' . $this->middle_name : '';
+        $fullName = $this->first_name . $mName . ' ' . $this->last_name;
         
-        // Append suffix if it exists on the model instance
         if ($this->suffix) {
             $fullName .= ' ' . $this->suffix;
         }
 
-        return $fullName;
+        return mb_strtoupper($fullName, 'UTF-8');
     }
 
     /**
-     * Dynamic Address Accessor (Compiles atomic fields into a single clinical string) [103]
+     * Dynamic Address Accessor (Compiles atomic fields into a single clinical string)
      */
     public function getAddressAttribute()
     {
-        return strtoupper("{$this->street}, BRGY. {$this->barangay}, {$this->city}, {$this->province}");
+        return mb_strtoupper("{$this->street}, BRGY. {$this->barangay}, {$this->city}, {$this->province}", 'UTF-8');
     }
 
     // =========================================================================
-    // ROLE CHECKING HELPERS [103]
+    // ROLE CHECKING HELPERS
     // =========================================================================
 
-    /**
-     * Check if user is the System Administrator. [103]
-     */
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
     }
 
-    /**
-     * Check if user is a Laboratory Technician (or Admin for oversight). [103]
-     */
     public function isLabTech(): bool
     {
         return in_array($this->role, ['lab_tech', 'admin']);
     }
 
-    /**
-     * Check if user is a General Staff/Receptionist. [103]
-     */
     public function isStaff(): bool
     {
         return in_array($this->role, ['staff', 'lab_tech', 'admin']);
     }
 
-    /**
-     * Unified check for any employee (Internal Personnel). [103]
-     */
     public function isEmployee(): bool
     {
         return in_array($this->role, ['staff', 'lab_tech', 'admin']);
     }
 
-    /**
-     * Check if user is purely a Patient. [104]
-     */
     public function isPatient(): bool
     {
         return $this->role === 'user';
     }
 
-    /**
-     * Specific check for workflow: Staff who are NOT technicians. [104]
-     */
     public function isStaffOnly(): bool
     {
         return $this->role === 'staff'; 
     }
 
     // =========================================================================
-    // RELATIONSHIPS [104]
+    // RELATIONSHIPS
     // =========================================================================
 
-    /**
-     * A patient can have multiple dependents (children/elderly). [104]
-     */
     public function dependents()
     {
         return $this->hasMany(Dependent::class);
     }
 
-    /**
-     * A user (Patient) has many appointments. [104]
-     */
     public function appointments()
     {
         return $this->hasMany(Appointment::class);
     }
 
-    /**
-     * Tracks actions performed by this user (Staff). [104]
-     */
     public function activityLogs()
     {
         return $this->hasMany(ActivityLog::class, 'user_id');
