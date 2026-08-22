@@ -44,7 +44,7 @@ Route::get('/api/check-slots', [AppointmentConfigController::class, 'checkOccupa
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth', 'verified', 'force.password'])->group(function () {
-    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/main', [DashboardController::class, 'index'])->name('main');
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::get('/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('notifications.markAsRead');
     Route::get('/notifications/clear-all', [NotificationController::class, 'clearAll'])->name('notifications.clearAll');
@@ -87,7 +87,7 @@ Route::middleware(['auth', 'verified', 'force.password'])->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::middleware(['can:isStaff'])->prefix('staff')->group(function () {
-        Route::get('/dashboard', [DashboardController::class, 'staffDashboard'])->name('staff.dashboard');
+        Route::get('/panel', [DashboardController::class, 'staffPanel'])->name('staff.panel');
         Route::get('/services/manage', [ServiceController::class, 'manage'])->name('services.manage');
         Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus'])->name('appointments.status');
         Route::post('/appointments/{appointment}/confirm-payment', [AppointmentController::class, 'confirmPayment'])->name('appointments.confirm-payment');
@@ -124,13 +124,32 @@ Route::middleware(['auth', 'verified', 'force.password'])->group(function () {
 
     /*
     |--------------------------------------------------------------------------
+    | Staff & Admin Shared Settings / Gateways (Gate: isStaff)
+    |--------------------------------------------------------------------------
+    */
+    Route::middleware(['can:isStaff'])->prefix('admin')->group(function () {
+        // Schedule Editor
+        Route::get('/appointment-settings', [AppointmentConfigController::class, 'index'])->name('admin.appointment-settings');
+        Route::post('/appointment-settings', [AppointmentConfigController::class, 'store'])->name('admin.appointment-settings.store');
+
+        // Payment Gateway Configuration
+        Route::get('/payment-providers', [PaymentProviderController::class, 'index'])->name('admin.payment-providers.index');
+        Route::post('/payment-providers', [PaymentProviderController::class, 'store'])->name('admin.payment-providers.store');
+        Route::put('/payment-providers/{provider}', [PaymentProviderController::class, 'update'])->name('admin.payment-providers.update');
+        Route::patch('/payment-providers/{provider}/toggle', [PaymentProviderController::class, 'toggle'])->name('admin.payment-providers.toggle');
+        Route::delete('/payment-providers/{provider}', [PaymentProviderController::class, 'destroy'])->name('admin.payment-providers.destroy');
+        Route::post('/payment-providers/{id}/restore', [PaymentProviderController::class, 'restore'])->name('admin.payment-providers.restore');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
     | System Administrator Routes (Gate: isAdmin)
     |--------------------------------------------------------------------------
     */
     Route::middleware(['can:isAdmin'])->prefix('admin')->group(function () {
-        Route::get('/dashboard', [DashboardController::class, 'adminDashboard'])->name('admin.dashboard');
+        Route::get('/panel', [DashboardController::class, 'adminPanel'])->name('admin.panel');
 
-        // User Management Routes (Explicitly accepting $id to support deactivated soft-deleted users)
+        // User Management Routes
         Route::get('/users', [AdminController::class, 'index'])->name('admin.users.index');
         Route::get('/users/create', [AdminController::class, 'createUser'])->name('admin.users.create');
         Route::post('/users', [AdminController::class, 'storeUser'])->name('admin.users.store');
@@ -149,18 +168,12 @@ Route::middleware(['auth', 'verified', 'force.password'])->group(function () {
         Route::post('/users/{user}/dependents/{id}/restore', [AdminController::class, 'restoreDependentForUser'])->name('admin.users.dependents.restore');
         Route::post('/users/{user}/dependents/{dependent}/promote', [AdminController::class, 'promoteDependentForUser'])->name('admin.users.dependents.promote');
 
-        // Audit Logs & Settings
+        // Audit Logs
         Route::get('/logs', [AdminController::class, 'viewLogs'])->name('admin.logs');
-        Route::get('/appointment-settings', [AppointmentConfigController::class, 'index'])->name('admin.appointment-settings');
-        Route::post('/appointment-settings', [AppointmentConfigController::class, 'store'])->name('admin.appointment-settings.store');
 
-        // Payment Gateway Configuration
-        Route::get('/payment-providers', [PaymentProviderController::class, 'index'])->name('admin.payment-providers.index');
-        Route::post('/payment-providers', [PaymentProviderController::class, 'store'])->name('admin.payment-providers.store');
-        Route::put('/payment-providers/{provider}', [PaymentProviderController::class, 'update'])->name('admin.payment-providers.update');
-        Route::patch('/payment-providers/{provider}/toggle', [PaymentProviderController::class, 'toggle'])->name('admin.payment-providers.toggle');
-        Route::delete('/payment-providers/{provider}', [PaymentProviderController::class, 'destroy'])->name('admin.payment-providers.destroy');
-        Route::post('/payment-providers/{id}/restore', [PaymentProviderController::class, 'restore'])->name('admin.payment-providers.restore');
+        // Reports
+        Route::get('/reports', [AdminController::class, 'reports'])->name('admin.reports');
+        Route::get('/reports/export', [AdminController::class, 'exportReport'])->name('admin.reports.export');
     });
 });
 

@@ -50,7 +50,7 @@ class ProfileController extends Controller
             'middle_name' => $mName,
             'last_name' => $lName,
             'suffix' => $suffix ?: null, // Save suffix snapshot
-            'name' => $displayName,      // Computed dynamic display name
+            'name' => $displayName, // Computed dynamic display name
             'street' => strtoupper(trim($request->street)),
             'barangay' => strtoupper(trim($request->barangay)),
             'city' => strtoupper(trim($request->city)),
@@ -58,7 +58,6 @@ class ProfileController extends Controller
         ]));
 
         $emailChanged = $user->isDirty('email');
-
         if ($emailChanged) {
             $user->email_verified_at = null;
         }
@@ -71,6 +70,7 @@ class ProfileController extends Controller
         if ($emailChanged) {
             // Clear current OTP session to trigger a fresh OTP email upon prompt redirection
             session()->forget('email_otp_code');
+
             return redirect()->route('verification.notice')->with('status', 'verification-code-sent');
         }
 
@@ -92,6 +92,7 @@ class ProfileController extends Controller
         ActivityLog::record('ACCOUNT DELETED', 'User voluntarily deactivated their account', $user->name);
 
         Auth::logout();
+
         $user->delete(); // Soft-deletes user record
 
         $request->session()->invalidate();
@@ -139,9 +140,9 @@ class ProfileController extends Controller
         }
 
         $request->validate([
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,' . $user->id, 'regex:/^[^@]+@[^@]+$/'],
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,' . $user->id, 'regex:/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
         ], [
-            'email.regex' => 'The email address must contain exactly one @ symbol.',
+            'email.regex' => 'Please enter a valid email address with a domain (e.g. name@domain.com or user@online.htcgsc.edu.ph).',
             'email.unique' => 'This email address is already registered.'
         ]);
 

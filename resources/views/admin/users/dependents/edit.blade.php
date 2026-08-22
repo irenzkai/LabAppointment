@@ -18,16 +18,16 @@
                 </div>
 
                 @if ($errors->any())
-                <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 text-danger p-3 mb-4 rounded-3">
-                    <div class="d-flex align-items-center mb-1 fw-bold uppercase small">
-                        <i class="bi bi-exclamation-triangle-fill me-2"></i> Validation Errors
+                    <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 text-danger p-3 mb-4 rounded-3">
+                        <div class="d-flex align-items-center mb-1 fw-bold uppercase small">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i> Validation Errors
+                        </div>
+                        <ul class="mb-0 small ps-3">
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
                     </div>
-                    <ul class="mb-0 small ps-3">
-                        @foreach ($errors->all() as $error)
-                        <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
                 @endif
 
                 <form action="{{ route('admin.users.dependents.update', [$user->id, $dependent->id]) }}" method="POST" id="adminEditDepForm" onsubmit="return validateAdminEditDepForm(event)">
@@ -57,26 +57,18 @@
                             <input type="text" name="suffix" id="suffix" class="form-control uppercase" value="{{ old('suffix', $dependent->suffix) }}" placeholder="e.g. JR">
                             <div class="invalid-feedback d-none" id="err_suffix"></div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Birthdate</label>
                             <input type="date" name="birthdate" id="birthdate" class="form-control" value="{{ $dependent->birthdate->format('Y-m-d') }}" required max="{{ date('Y-m-d') }}">
                             <div class="invalid-feedback d-none" id="err_birthdate"></div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Sex</label>
                             <select name="sex" id="sex" class="form-select" required>
                                 <option value="Male" {{ $dependent->sex == 'Male' ? 'selected' : '' }}>Male</option>
                                 <option value="Female" {{ $dependent->sex == 'Female' ? 'selected' : '' }}>Female</option>
                             </select>
                             <div class="invalid-feedback d-none" id="err_sex"></div>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">Relationship</label>
-                            <select name="relationship" id="relationship" class="form-select" required>
-                                <option value="Son" {{ strtoupper($dependent->relationship) == 'SON' ? 'selected' : '' }}>Son</option>
-                                <option value="Daughter" {{ strtoupper($dependent->relationship) == 'DAUGHTER' ? 'selected' : '' }}>Daughter</option>
-                            </select>
-                            <div class="invalid-feedback d-none" id="err_relationship"></div>
                         </div>
                     </div>
 
@@ -216,36 +208,29 @@ function clearFieldError(input) {
 function validateAdminEditDepForm(e) {
     let isValid = true;
     let firstInvalidInput = null;
-
     document.querySelectorAll('#adminEditDepForm .is-invalid').forEach(el => el.classList.remove('is-invalid'));
     document.querySelectorAll('#adminEditDepForm .invalid-feedback').forEach(el => {
         el.innerText = '';
         el.classList.add('d-none');
         el.classList.remove('d-block');
     });
-
     function markInvalid(input, errId, msg) {
         setFieldError(input, errId, msg);
         isValid = false;
         if (!firstInvalidInput) firstInvalidInput = input;
     }
-
     const fName = document.getElementById('first_name');
     if (!fName || !fName.value.trim()) markInvalid(fName, 'err_first_name', 'First Name is required.');
-
     const lName = document.getElementById('last_name');
     if (!lName || !lName.value.trim()) markInvalid(lName, 'err_last_name', 'Last Name is required.');
-
     const prov = document.getElementById('edit_dep_province');
     const city = document.getElementById('edit_dep_city');
     const brgy = document.getElementById('edit_dep_barangay');
     const street = document.getElementById('street');
-
     if (!prov || !prov.value.trim()) markInvalid(prov, 'err_province', 'Province is required.');
     if (!city || !city.value.trim()) markInvalid(city, 'err_city', 'City is required.');
     if (!brgy || !brgy.value.trim()) markInvalid(brgy, 'err_barangay', 'Barangay is required.');
     if (!street || !street.value.trim()) markInvalid(street, 'err_street', 'Street address is required.');
-
     if (!isValid) {
         e.preventDefault();
         e.stopPropagation();
@@ -255,7 +240,6 @@ function validateAdminEditDepForm(e) {
         }
         return false;
     }
-
     compileAdminEditDepAddress();
     return true;
 }

@@ -41,7 +41,7 @@ class DependentController extends Controller
             // 2. Strict non-punctuation starting validation
             if (!preg_match('/^[a-zA-ZñÑ]/u', $val)) {
                 $fail("The " . str_replace('_', ' ', $attribute) . " must start with a letter.");
-                return;
+                return; 
             }
 
             // 3. Must possess at least one character letter to prevent punctuation-only values
@@ -67,7 +67,6 @@ class DependentController extends Controller
             // Enforce minor status (under 18 years of age) to meet legal compliance
             'birthdate' => 'required|date|before_or_equal:today|after:' . $eighteenYearsAgo, 
             'sex' => 'required|in:Male,Female',
-            'relationship' => 'required|string|in:Son,Daughter,SON,DAUGHTER',
 
             // 2. Address fields (PSGC size standard matching)
             'province' => 'required_unless:inherit_address,1|nullable|string|max:100',
@@ -92,7 +91,7 @@ class DependentController extends Controller
             $barangay = strtoupper(trim($request->barangay));
             $city = strtoupper(trim($request->city));
             $province = strtoupper(trim($request->province));
-        }
+        } 
 
         // 4. Create record with normalized fields
         $user->dependents()->create([
@@ -104,7 +103,6 @@ class DependentController extends Controller
             'suffix' => $request->filled('suffix') ? strtoupper(trim($request->suffix)) : null,
             'birthdate' => $request->birthdate,
             'sex' => $request->sex,
-            'relationship' => strtoupper(trim($request->relationship)),
             'street' => $street,
             'barangay' => $barangay,
             'city' => $city, 
@@ -122,7 +120,6 @@ class DependentController extends Controller
         if ($dependent->user_id !== Auth::id()) {
             abort(403);
         }
-
         return view('dependents.edit', compact('dependent'));
     }
 
@@ -180,7 +177,6 @@ class DependentController extends Controller
             // Enforce minor status (under 18 years of age) to meet legal compliance
             'birthdate' => 'required|date|before_or_equal:today|after:' . $eighteenYearsAgo, 
             'sex' => 'required|in:Male,Female',
-            'relationship' => 'required|string|in:Son,Daughter,SON,DAUGHTER',
 
             // 2. Address fields (PSGC size standard matching)
             'province' => 'required_unless:inherit_address,1|nullable|string|max:100',
@@ -217,7 +213,6 @@ class DependentController extends Controller
             'suffix' => $request->filled('suffix') ? strtoupper(trim($request->suffix)) : null,
             'birthdate' => $request->birthdate,
             'sex' => $request->sex,
-            'relationship' => strtoupper(trim($request->relationship)),
             'street' => $street,
             'barangay' => $barangay,
             'city' => $city,
@@ -235,9 +230,7 @@ class DependentController extends Controller
         if ($dependent->user_id !== Auth::id()) {
             abort(403);
         }
-
         $dependent->delete(); // Soft-deletes record (preserves audit trail)
-
         return back()->with('success', 'Dependent removed.');
     }
 
@@ -247,13 +240,10 @@ class DependentController extends Controller
     public function restore($id)
     {
         $dependent = Dependent::onlyTrashed()->findOrFail($id);
-
         if ($dependent->user_id !== Auth::id()) {
             abort(403);
-        }
-
+        } 
         $dependent->restore();
-
         return back()->with('success', 'Dependent record successfully reactivated.');
     }
 }

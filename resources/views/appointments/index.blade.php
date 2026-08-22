@@ -1,5 +1,4 @@
 @extends('layouts.app')
-
 @section('title', 'Laboratory Appointments')
 
 @section('content')
@@ -16,166 +15,159 @@
         </p>
     </div>
     @if(!$is_staff)
-    <a href="{{ route('patient.history') }}" class="btn-custom btn-outline-accent px-3 py-2">
-        <i class="bi bi-clock-history me-2"></i> VIEW ARCHIVED RECORDS
-    </a>
+        <a href="{{ route('patient.history') }}" class="btn-custom btn-outline-accent px-3 py-2">
+            <i class="bi bi-clock-history me-2"></i> VIEW ARCHIVED RECORDS
+        </a>
     @endif
 </div>
 
 {{-- Split Pane Grid Layout --}}
 <div class="row g-4">
-
     {{-- LEFT PANEL: Card Lists & Filters --}}
     <div class="col-lg-5 col-xl-4">
-
         {{-- Navigation Tabs (Patient Only) --}}
         @if(!$is_staff)
-        <ul class="nav nav-pills mb-3 gap-1 bg-secondary bg-opacity-10 p-1.5 rounded-3 border border-secondary border-opacity-25" id="appTabs" role="tablist">
-            <li class="nav-item flex-grow-1">
-                <button class="nav-link active w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-self" onclick="resetActiveDetail()">Myself</button>
-            </li>
-            <li class="nav-item flex-grow-1">
-                <button class="nav-link w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-family" onclick="resetActiveDetail()">Family</button>
-            </li>
-            <li class="nav-item flex-grow-1">
-                <button class="nav-link w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-bulk" onclick="resetActiveDetail()">Bulk</button>
-            </li>
-        </ul>
+            <ul class="nav nav-pills mb-3 gap-1 bg-secondary bg-opacity-10 p-1.5 rounded-3 border border-secondary border-opacity-25" id="appTabs" role="tablist">
+                <li class="nav-item flex-grow-1">
+                    <button class="nav-link active w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-self" onclick="resetActiveDetail()">Myself</button>
+                </li>
+                <li class="nav-item flex-grow-1">
+                    <button class="nav-link w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-family" onclick="resetActiveDetail()">Family</button>
+                </li>
+                <li class="nav-item flex-grow-1">
+                    <button class="nav-link w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-bulk" onclick="resetActiveDetail()">Bulk</button>
+                </li>
+            </ul>
         @else
-        {{-- Server-side Search & Configuration Filter Toolbar for Staff --}}
-        <form action="{{ route('appointments.index') }}" method="GET" class="mb-4">
-            <div class="row g-2">
-                <div class="col-12 mb-2">
-                    <div class="input-group input-group-sm border border-secondary border-opacity-25 rounded-3 overflow-hidden">
-                        <span class="input-group-text border-0 text-secondary" style="background-color: var(--bg-card);">
-                            <i class="bi bi-search"></i>
-                        </span>
-                        <input type="text" name="search" class="form-control border-0 shadow-none py-2" style="background-color: var(--bg-card); color: var(--text-main);" placeholder="Search patient, ID, or batch..." value="{{ request('search') }}">
+            {{-- Server-side Search & Configuration Filter Toolbar for Staff --}}
+            <form action="{{ route('appointments.index') }}" method="GET" class="mb-4">
+                {{-- Ensures filtering in Master Queue preserves view=queue --}}
+                <input type="hidden" name="view" value="queue">
+                <div class="row g-2">
+                    <div class="col-12 mb-2">
+                        <div class="input-group input-group-sm border border-secondary border-opacity-25 rounded-3 overflow-hidden">
+                            <span class="input-group-text border-0 text-secondary" style="background-color: var(--bg-card);">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input type="text" name="search" class="form-control border-0 shadow-none py-2" style="background-color: var(--bg-card); color: var(--text-main);" placeholder="Search patient, ID, or batch..." value="{{ request('search') }}">
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <select name="status" class="form-select form-select-sm" style="background-color: var(--bg-card); color: var(--text-main); border-color: rgba(255,255,255,0.15);" onchange="this.form.submit()">
+                            <option value="">All Statuses</option>
+                            <option value="needs_action" {{ request('status') === 'needs_action' ? 'selected' : '' }}>Needs Action</option>
+                            <option value="no_action" {{ request('status') === 'no_action' ? 'selected' : '' }}>No Action Needed</option>
+                            <option value="expired" {{ request('status') === 'expired' ? 'selected' : '' }}>Expired</option>
+                            <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
+                            <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
+                            <option value="retest" {{ request('status') === 'retest' ? 'selected' : '' }}>Retest Required</option>
+                            <option value="tested" {{ request('status') === 'tested' ? 'selected' : '' }}>Tested</option>
+                            <option value="encoded" {{ request('status') === 'encoded' ? 'selected' : '' }}>Encoded</option>
+                            <option value="released" {{ request('status') === 'released' ? 'selected' : '' }}>Released</option>
+                            <option value="canceled" {{ request('status') === 'canceled' ? 'selected' : '' }}>Canceled</option>
+                        </select>
+                    </div>
+                    <div class="col-3">
+                        <select name="sort_by" class="form-select form-select-sm" style="background-color: var(--bg-card); color: var(--text-main); border-color: rgba(255,255,255,0.15);" onchange="this.form.submit()">
+                            <option value="date" {{ request('sort_by', 'date') === 'date' ? 'selected' : '' }}>Date</option>
+                            <option value="name" {{ request('sort_by') === 'name' ? 'selected' : '' }}>Name</option>
+                            <option value="submitted" {{ request('sort_by') === 'submitted' ? 'selected' : '' }}>Submitted</option>
+                        </select>
+                    </div>
+                    <div class="col-3">
+                        <select name="order" class="form-select form-select-sm" style="background-color: var(--bg-card); color: var(--text-main); border-color: rgba(255,255,255,0.15);" onchange="this.form.submit()">
+                            <option value="desc" {{ request('order', 'desc') === 'desc' ? 'selected' : '' }}>Desc</option>
+                            <option value="asc" {{ request('order') === 'asc' ? 'selected' : '' }}>Asc</option>
+                        </select>
                     </div>
                 </div>
-                <div class="col-6">
-                    <select name="status" class="form-select form-select-sm" style="background-color: var(--bg-card); color: var(--text-main); border-color: rgba(255,255,255,0.15);" onchange="this.form.submit()">
-                        <option value="">All Statuses</option>
-                        <option value="needs_action" {{ request('status') === 'needs_action' ? 'selected' : '' }}>Needs Action</option>
-                        <option value="no_action" {{ request('status') === 'no_action' ? 'selected' : '' }}>No Action Needed</option>
-                        <option value="expired" {{ request('status') === 'expired' ? 'selected' : '' }}>Expired</option>
-                        <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
-                        <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
-                        <option value="retest" {{ request('status') === 'retest' ? 'selected' : '' }}>Retest Required</option>
-                        <option value="tested" {{ request('status') === 'tested' ? 'selected' : '' }}>Tested</option>
-                        <option value="encoded" {{ request('status') === 'encoded' ? 'selected' : '' }}>Encoded</option>
-                        <option value="released" {{ request('status') === 'released' ? 'selected' : '' }}>Released</option>
-                        <option value="canceled" {{ request('status') === 'canceled' ? 'selected' : '' }}>Canceled</option>
-                    </select>
-                </div>
-                <div class="col-3">
-                    <select name="sort_by" class="form-select form-select-sm" style="background-color: var(--bg-card); color: var(--text-main); border-color: rgba(255,255,255,0.15);" onchange="this.form.submit()">
-                        <option value="date" {{ request('sort_by', 'date') === 'date' ? 'selected' : '' }}>Date</option>
-                        <option value="name" {{ request('sort_by') === 'name' ? 'selected' : '' }}>Name</option>
-                        <option value="submitted" {{ request('sort_by') === 'submitted' ? 'selected' : '' }}>Submitted</option>
-                    </select>
-                </div>
-                <div class="col-3">
-                    <select name="order" class="form-select form-select-sm" style="background-color: var(--bg-card); color: var(--text-main); border-color: rgba(255,255,255,0.15);" onchange="this.form.submit()">
-                        <option value="desc" {{ request('order', 'desc') === 'desc' ? 'selected' : '' }}>Desc</option>
-                        <option value="asc" {{ request('order') === 'asc' ? 'selected' : '' }}>Asc</option>
-                    </select>
-                </div>
-            </div>
-        </form>
+            </form>
         @endif
 
         {{-- Main List Wrapper --}}
         <div class="tab-content" id="listContent">
-
             {{-- STAFF MAIN QUEUE --}}
             @if($is_staff)
-            <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
-                @forelse($staffQueue as $batchId => $group)
-                @php 
-                $isGroup = $group instanceof \Illuminate\Support\Collection;
-                $first = $isGroup ? $group->first() : $group;
-                @endphp
-                @include('appointments.partials.list-card', ['app' => $first, 'groupCount' => $isGroup ? $group->count() : 1, 'batchId' => $batchId])
-                @empty
-                <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
-                    <i class="bi bi-folder-x text-accent fs-1 mb-3 opacity-75"></i>
-                    <p class="small mb-0">No appointments in queue.</p>
+                <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
+                    @forelse($staffQueue as $batchId => $group)
+                        @php 
+                            $isGroup = $group instanceof \Illuminate\Support\Collection;
+                            $first = $isGroup ? $group->first() : $group;
+                        @endphp
+                        @include('appointments.partials.list-card', ['app' => $first, 'groupCount' => $isGroup ? $group->count() : 1, 'batchId' => $batchId])
+                    @empty
+                        <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
+                            <i class="bi bi-folder-x text-accent fs-1 mb-3 opacity-75"></i>
+                            <p class="small mb-0">No appointments in queue.</p>
+                        </div>
+                    @endforelse
                 </div>
-                @endforelse
-            </div>
-
-            {{-- Staff Pagination Links --}}
-            <div class="mt-4 d-flex justify-content-center">
-                {{ $staffPaginator->links() }}
-            </div>
+                {{-- Staff Pagination Links --}}
+                <div class="mt-4 d-flex justify-content-center">
+                    {{ $staffPaginator->links() }}
+                </div>
             @else
-            {{-- PATIENT: MYSELF --}}
-            <div class="tab-pane fade show active" id="pane-self">
-                <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
-                    @forelse($self as $app)
-                    @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1])
-                    @empty
-                    <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
-                        <i class="bi bi-calendar-x text-accent fs-1 mb-3 opacity-75"></i>
-                        <p class="small mb-0">No personal bookings found.</p>
+                {{-- PATIENT: MYSELF --}}
+                <div class="tab-pane fade show active" id="pane-self">
+                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
+                        @forelse($self as $app)
+                            @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1])
+                        @empty
+                            <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
+                                <i class="bi bi-calendar-x text-accent fs-1 mb-3 opacity-75"></i>
+                                <p class="small mb-0">No personal bookings found.</p>
+                            </div>
+                        @endforelse
                     </div>
-                    @endforelse
-                </div>
-
-                {{-- Myself Pagination Links --}}
-                <div class="mt-4 d-flex justify-content-center">
-                    {{ $self->links() }}
-                </div>
-            </div>
-
-            {{-- PATIENT: FAMILY DEPENDENTS --}}
-            <div class="tab-pane fade" id="pane-family">
-                <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
-                    @forelse($dependents as $app)
-                    @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1])
-                    @empty
-                    <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
-                        <i class="bi bi-people text-accent fs-1 mb-3 opacity-75"></i>
-                        <p class="small mb-0">No dependent bookings found.</p>
+                    {{-- Myself Pagination Links --}}
+                    <div class="mt-4 d-flex justify-content-center">
+                        {{ $self->links() }}
                     </div>
-                    @endforelse
                 </div>
 
-                {{-- Family Pagination Links --}}
-                <div class="mt-4 d-flex justify-content-center">
-                    {{ $dependents->links() }}
-                </div>
-            </div>
-
-            {{-- PATIENT: ORGANIZATIONAL BULK --}}
-            <div class="tab-pane fade" id="pane-bulk">
-                <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
-                    @forelse($bulkGroups as $batchId => $group)
-                    @php $first = $group->first(); @endphp
-                    @include('appointments.partials.list-card', ['app' => $first, 'groupCount' => $group->count(), 'batchId' => $batchId])
-                    @empty
-                    <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
-                        <i class="bi bi-buildings text-accent fs-1 mb-3 opacity-75"></i>
-                        <p class="small mb-0">No corporate groups found.</p>
+                {{-- PATIENT: FAMILY DEPENDENTS --}}
+                <div class="tab-pane fade" id="pane-family">
+                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
+                        @forelse($dependents as $app)
+                            @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1])
+                        @empty
+                            <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
+                                <i class="bi bi-people text-accent fs-1 mb-3 opacity-75"></i>
+                                <p class="small mb-0">No dependent bookings found.</p>
+                            </div>
+                        @endforelse
                     </div>
-                    @endforelse
+                    {{-- Family Pagination Links --}}
+                    <div class="mt-4 d-flex justify-content-center">
+                        {{ $dependents->links() }}
+                    </div>
                 </div>
 
-                {{-- Bulk Pagination Links --}}
-                <div class="mt-4 d-flex justify-content-center">
-                    {{ $bulkPaginator->links() }}
+                {{-- PATIENT: ORGANIZATIONAL BULK --}}
+                <div class="tab-pane fade" id="pane-bulk">
+                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
+                        @forelse($bulkGroups as $batchId => $group)
+                            @php $first = $group->first(); @endphp
+                            @include('appointments.partials.list-card', ['app' => $first, 'groupCount' => $group->count(), 'batchId' => $batchId])
+                        @empty
+                            <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
+                                <i class="bi bi-buildings text-accent fs-1 mb-3 opacity-75"></i>
+                                <p class="small mb-0">No corporate groups found.</p>
+                            </div>
+                        @endforelse
+                    </div>
+                    {{-- Bulk Pagination Links --}}
+                    <div class="mt-4 d-flex justify-content-center">
+                        {{ $bulkPaginator->links() }}
+                    </div>
                 </div>
-            </div>
             @endif
-
         </div>
     </div>
 
     {{-- RIGHT PANEL: Active Clinical Sheet Workspace --}}
     <div class="col-lg-7 col-xl-8" style="top: 100px; align-self: flex-start; {{ !$is_staff ? 'margin-top: 52px;' : '' }}">
         <div id="workspace-container" class="h-100">
-            
             {{-- Default Empty State Placeholder --}}
             <div id="details-placeholder" class="card p-5 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100" style="min-height: 420px; background-color: var(--bg-card);">
                 <div class="bg-secondary bg-opacity-10 rounded-circle p-3 mb-4 text-accent d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
@@ -187,12 +179,10 @@
 
             {{-- Render Hidden Detail Panels --}}
             @foreach($allApps as $app)
-            @include('appointments.partials.detail-card', ['app' => $app])
+                @include('appointments.partials.detail-card', ['app' => $app])
             @endforeach
-
         </div>
     </div>
-
 </div>
 </div>
 
@@ -204,7 +194,6 @@
 @php
 $isExpired = $app->isExpired();
 @endphp
-
 {{-- A. DELETE EXPIRED APPOINTMENT MODAL --}}
 @if(Auth::id() == $app->user_id)
 <div class="modal fade" id="deleteExpiredModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
@@ -225,8 +214,10 @@ $isExpired = $app->isExpired();
         </div>
     </div>
 </div>
+@endif
 
 {{-- C. CANCEL APPOINTMENT MODAL --}}
+@if(Auth::id() == $app->user_id)
 <div class="modal fade" id="cancelAppointmentModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
         <form action="{{ route('appointments.cancel', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
@@ -407,20 +398,17 @@ $isExpired = $app->isExpired();
 let activeRowIdx = null;
 
 /**
- * Reveal clinical details workspace card smoothly [257]
+ * Reveal clinical details workspace card smoothly
  */
 function showAppointmentDetails(appId) {
     const placeholder = document.getElementById('details-placeholder');
     if (placeholder) placeholder.classList.add('d-none');
-
     document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
     document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
-
     const detailPanel = document.getElementById(`details-${appId}`);
     if (detailPanel) {
         detailPanel.classList.remove('d-none');
     }
-
     const listCard = document.getElementById(`card-${appId}`);
     if (listCard) {
         listCard.classList.add('border-accent', 'shadow-neon');
@@ -428,65 +416,57 @@ function showAppointmentDetails(appId) {
 }
 
 /**
- * Reset active detail workspace view to default placeholder state [257]
+ * Reset active detail workspace view to default placeholder state
  */
 function resetActiveDetail() {
     const placeholder = document.getElementById('details-placeholder');
     if (placeholder) placeholder.classList.remove('d-none');
-
     document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
     document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
 }
 
 /**
  * DYNAMIC SYNC QUEUE: Silently fetches updated HTML, updates containers,
- * and preserves the employee's active focused record card and workspace view [253, 254].
+ * and preserves the employee's active focused record card and workspace view
  */
 function syncMasterQueue() {
-    fetch("{{ route('appointments.index') }}")
+    fetch("{{ route('appointments.index', ['view' => 'queue']) }}")
         .then(response => response.text())
         .then(html => {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
-
-            // 1. Sync active queue lists (Myself, Family, Bulk, or Staff main queue) [253]
+            // 1. Sync active queue lists
             const newContent = doc.getElementById('listContent');
             const oldContent = document.getElementById('listContent');
             if (newContent && oldContent) {
                 oldContent.innerHTML = newContent.innerHTML;
             }
-
-            // 2. Sync pre-rendered workspace cards silently [254]
+            // 2. Sync pre-rendered workspace cards silently
             const newWorkspace = doc.getElementById('workspace-container');
             const oldWorkspace = document.getElementById('workspace-container');
             if (newWorkspace && oldWorkspace) {
                 const activePane = document.querySelector('.appointment-detail-pane:not(.d-none)');
                 const activeId = activePane ? activePane.id : null;
-
                 oldWorkspace.innerHTML = newWorkspace.innerHTML;
-
                 // Restore active card view if it existed before sync
                 if (activeId) {
                     const placeholder = document.getElementById('details-placeholder');
                     if (placeholder) placeholder.classList.add('d-none');
-
                     const restoredPane = document.getElementById(activeId);
                     if (restoredPane) restoredPane.classList.remove('d-none');
-
                     const recordId = activeId.split('-')[1];
                     const listCard = document.getElementById(`card-${recordId}`);
                     if (listCard) listCard.classList.add('border-accent', 'shadow-neon');
                 }
             }
-
-            // 3. Re-initialize filters and input listeners on the new DOM elements [257]
+            // 3. Re-initialize filters and input listeners on the new DOM elements
             initializeFilters();
         })
         .catch(error => console.error('Queue sync failed:', error));
 }
 
 /**
- * Initializes filter listeners for the live search input [257]
+ * Initializes filter listeners for the live search input
  */
 function initializeFilters() {
     const queueSearch = document.getElementById('queueSearch');
@@ -503,7 +483,6 @@ function initializeFilters() {
 
 document.addEventListener('DOMContentLoaded', () => {
     initializeFilters();
-
     // Auto-select appointment if 'id' parameter is passed in the URL
     const urlParams = new URLSearchParams(window.location.search);
     const selectId = urlParams.get('id');
@@ -530,7 +509,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const select = document.getElementById(`return_reason_select_${appId}`);
         const wrapper = document.getElementById(`custom_return_reason_wrapper_${appId}`);
         const textarea = document.getElementById(`return_reason_${appId}`);
-
         if (select && wrapper && textarea) {
             select.addEventListener('change', function() {
                 if (this.value === 'Others') {
@@ -543,7 +521,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     textarea.value = this.value;
                 }
             });
-
             form.addEventListener('submit', function(e) {
                 const activeVal = select.value === 'Others' ? textarea : select;
                 if (activeVal.value.trim().length < 5) {
@@ -605,10 +582,8 @@ button.nav-link.active {
     color: #1c232d !important;
     border-color: var(--brand-accent) !important;
 }
-
 .border-dashed { border-style: dashed !important; }
 .min-vh-50 { min-height: 50vh; }
-
 #listContent .custom-scroll {
     padding: 6px 12px 6px 6px !important;
 }

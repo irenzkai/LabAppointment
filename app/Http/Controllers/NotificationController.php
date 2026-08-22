@@ -8,19 +8,19 @@ use Illuminate\Support\Facades\Auth;
 class NotificationController extends Controller
 {
     public function index()
-{
-    // Fetch all notifications for the user, paginated for performance
-    $notifications = auth()->user()->notifications()->paginate(15);
-    return view('notifications.index', compact('notifications'));
-}
+    {
+        // Fetch all notifications for the user, paginated for performance
+        $notifications = auth()->user()->notifications()->paginate(15);
+        return view('notifications.index', compact('notifications'));
+    }
 
     public function markAsRead($id)
     {
         $notification = auth()->user()->notifications()->findOrFail($id);
         $notification->markAsRead();
 
-        // Redirect to the specific appointment if the URL exists
-        return redirect($notification->data['url'] ?? route('dashboard'));
+        // Redirect to the specific appointment if the URL exists, or fall back to main menu
+        return redirect($notification->data['url'] ?? route('main'));
     }
 
     public function clearAll()

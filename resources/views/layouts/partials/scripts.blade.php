@@ -4,7 +4,7 @@
 /**
  * 1. THEME SWITCHER LOGIC
  * Handles switching between Dark and Light modes and persists choice in LocalStorage.
- */ 
+ */
 const themeToggle = document.getElementById('theme-toggle');
 const themeIcon = document.getElementById('theme-icon');
 const htmlElement = document.documentElement;
@@ -58,6 +58,7 @@ window.onscroll = function() {
         if (backToTopBtn) backToTopBtn.style.display = "none";
     }
 };
+
 backToTopBtn?.addEventListener("click", () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 });
@@ -95,7 +96,6 @@ function convertTimestamps() {
         const dateObj = new Date(utcStr);
         const localDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
         const localTime = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-
         el.innerHTML = `
             <div class="small fw-bold" style="color: var(--text-main);">${localDate}</div>
             <div style="font-size: 0.8rem; color: var(--text-muted);">${localTime}</div>
@@ -116,14 +116,12 @@ function promptAccess(id, type, mode, isHistory = false) {
         form.action = '/internal/archive-log-access'; 
         document.getElementById('target_user_id').value = id;
     } else {
-        form.action = '/internal/appointment-log-access/' + id;
+        form.action = '/staff/internal/appointment-log-access/' + id;
         document.getElementById('target_user_id').value = '';
     }
-
     // Set type (e.g., 'hub', 'lab', 'radio') and mode ('preview' or 'edit')
     document.getElementById('access_type').value = type; 
     document.getElementById('access_mode').value = mode;
-
     // Reset textarea and show modal
     form.querySelector('textarea').value = '';
     const accessModal = new bootstrap.Modal(document.getElementById('accessReasonModal'));
@@ -162,7 +160,6 @@ window.initUnifiedAddressCascade = async function(config) {
         if (!select || !value) return null;
         const targetNorm = normalizeName(value);
         const targetRaw = value.toString().trim().toUpperCase();
-
         return Array.from(select.options).find(opt => {
             if (opt.value.toString().trim().toUpperCase() === targetRaw) return true;
             if (opt.text.toString().trim().toUpperCase() === targetRaw) return true;
@@ -178,7 +175,7 @@ window.initUnifiedAddressCascade = async function(config) {
         let res = await fetch(`${PSGC_BASE}/provinces.json`);
         if (!res.ok) res = await fetch(`${PSGC_BASE}/provinces/`);
         const provinces = await res.json();
-
+        
         provEl.innerHTML = '<option value="">Select Province</option>';
         provinces.sort((a,b) => a.name.localeCompare(b.name)).forEach(p => {
             const opt = document.createElement('option');
@@ -210,7 +207,7 @@ window.initUnifiedAddressCascade = async function(config) {
             let res = await fetch(`${PSGC_BASE}/provinces/${provCode}/cities-municipalities.json`);
             if (!res.ok) res = await fetch(`${PSGC_BASE}/provinces/${provCode}/cities-municipalities/`);
             const cities = await res.json();
-
+            
             cityEl.innerHTML = '<option value="">Select City</option>';
             cities.sort((a,b) => a.name.localeCompare(b.name)).forEach(c => {
                 const opt = document.createElement('option');
@@ -250,7 +247,7 @@ window.initUnifiedAddressCascade = async function(config) {
             let res = await fetch(`${PSGC_BASE}/cities-municipalities/${cityCode}/barangays.json`);
             if (!res.ok) res = await fetch(`${PSGC_BASE}/cities-municipalities/${cityCode}/barangays/`);
             const barangays = await res.json();
-
+            
             brgyEl.innerHTML = '<option value="">Select Barangay</option>';
             barangays.sort((a,b) => a.name.localeCompare(b.name)).forEach(b => {
                 const opt = document.createElement('option');

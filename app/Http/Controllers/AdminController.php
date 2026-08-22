@@ -24,7 +24,6 @@ class AdminController extends Controller
     public function createUser(Request $request) 
     {
         if (Auth::user()->role !== 'admin') abort(403);
-
         $promotedDependent = null;
         if ($request->has('promote')) {
             try {
@@ -32,14 +31,12 @@ class AdminController extends Controller
                 $promotedDependent = Dependent::withTrashed()->find($decryptedId);
             } catch (\Exception $e) {}
         }
-
         return view('admin.users.create', compact('promotedDependent'));
     }
 
     public function storeUser(Request $request)
     {
         if (Auth::user()->role !== 'admin') abort(403);
-
         $nameRule = function ($attribute, $value, $fail) {
             $val = trim($value);
             if (empty($val) || $val === 'N/A') return;
@@ -60,7 +57,6 @@ class AdminController extends Controller
                 return;
             }
         };
-
         $isPromoted = $request->filled('promoted_dependent_id');
         $birthdateRule = $isPromoted 
             ? ['required', 'date', 'before_or_equal:today'] 
@@ -129,7 +125,6 @@ class AdminController extends Controller
         }
 
         event(new QueueUpdated());
-
         return redirect()->route('admin.users.index')->with('success', "Account for {$user->name} created successfully!");
     }
 
@@ -145,7 +140,6 @@ class AdminController extends Controller
     {
         if (Auth::user()->role !== 'admin') abort(403);
         $user = User::withTrashed()->findOrFail($id);
-
         $nameRule = function ($attribute, $value, $fail) {
             $val = trim($value);
             if (empty($val) || $val === 'N/A') return;
@@ -246,6 +240,7 @@ class AdminController extends Controller
             'reason' => 'required|string|min:5',
             'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
         ]);
+
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
         $user = User::withTrashed()->findOrFail($id);
 
@@ -297,7 +292,6 @@ class AdminController extends Controller
             'suffix' => 'nullable|string|max:10',
             'birthdate' => 'required|date|before_or_equal:today|after:' . $eighteenYearsAgo,
             'sex' => 'required|in:Male,Female',
-            'relationship' => 'required|in:Son,Daughter,SON,DAUGHTER',
             'street' => 'required|string|max:150',
             'barangay' => 'required|string|max:100',
             'city' => 'required|string|max:100',
@@ -305,7 +299,6 @@ class AdminController extends Controller
         ]);
 
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
-
         $dependent = $user->dependents()->create([
             'first_name' => mb_strtoupper(trim($request->first_name), 'UTF-8'),
             'middle_name' => ($request->middle_name && mb_strtoupper(trim($request->middle_name), 'UTF-8') !== 'N/A') ? mb_strtoupper(trim($request->middle_name), 'UTF-8') : 'N/A',
@@ -313,7 +306,6 @@ class AdminController extends Controller
             'suffix' => $request->filled('suffix') ? mb_strtoupper(trim($request->suffix), 'UTF-8') : null,
             'birthdate' => $request->birthdate,
             'sex' => $request->sex,
-            'relationship' => mb_strtoupper(trim($request->relationship), 'UTF-8'),
             'street' => mb_strtoupper(trim($request->street), 'UTF-8'),
             'barangay' => mb_strtoupper(trim($request->barangay), 'UTF-8'),
             'city' => mb_strtoupper(trim($request->city), 'UTF-8'),
@@ -321,11 +313,10 @@ class AdminController extends Controller
         ]);
 
         ActivityLog::record('ADMIN ADD DEPENDENT', "Admin added dependent {$dependent->name} for user {$user->name}. Reason: {$reasonText}", $user->name);
-
         return redirect()->route('admin.users.edit', ['id' => $user->id, '#tab-dependents'])->with('success', "Dependent {$dependent->name} created successfully.");
     }
 
-    public function editDependentForUser($userId, $dependentId)
+    public function editDependentForUser($userId, $dependentId) 
     {
         if (Auth::user()->role !== 'admin') abort(403);
         $user = User::withTrashed()->findOrFail($userId);
@@ -349,7 +340,6 @@ class AdminController extends Controller
             'suffix' => 'nullable|string|max:10',
             'birthdate' => 'required|date|before_or_equal:today|after:' . $eighteenYearsAgo,
             'sex' => 'required|in:Male,Female',
-            'relationship' => 'required|in:Son,Daughter,SON,DAUGHTER',
             'street' => 'required|string|max:150',
             'barangay' => 'required|string|max:100',
             'city' => 'required|string|max:100',
@@ -357,7 +347,6 @@ class AdminController extends Controller
         ]);
 
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
-
         $dependent->update([
             'first_name' => mb_strtoupper(trim($request->first_name), 'UTF-8'),
             'middle_name' => ($request->middle_name && mb_strtoupper(trim($request->middle_name), 'UTF-8') !== 'N/A') ? mb_strtoupper(trim($request->middle_name), 'UTF-8') : 'N/A',
@@ -365,7 +354,6 @@ class AdminController extends Controller
             'suffix' => $request->filled('suffix') ? mb_strtoupper(trim($request->suffix), 'UTF-8') : null,
             'birthdate' => $request->birthdate,
             'sex' => $request->sex,
-            'relationship' => mb_strtoupper(trim($request->relationship), 'UTF-8'),
             'street' => mb_strtoupper(trim($request->street), 'UTF-8'),
             'barangay' => mb_strtoupper(trim($request->barangay), 'UTF-8'),
             'city' => mb_strtoupper(trim($request->city), 'UTF-8'),
@@ -373,7 +361,6 @@ class AdminController extends Controller
         ]);
 
         ActivityLog::record('ADMIN EDIT DEPENDENT', "Admin updated dependent {$dependent->name} for user {$user->name}. Reason: {$reasonText}", $user->name);
-
         return redirect()->route('admin.users.edit', ['id' => $user->id, '#tab-dependents'])->with('success', "Dependent {$dependent->name} updated successfully.");
     }
 
@@ -382,7 +369,6 @@ class AdminController extends Controller
         if (Auth::user()->role !== 'admin') abort(403);
         $user = User::withTrashed()->findOrFail($userId);
         $dependent = Dependent::withTrashed()->where('user_id', $user->id)->findOrFail($dependentId);
-
         $request->validate([
             'reason' => 'required|string|min:5',
             'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
@@ -393,7 +379,6 @@ class AdminController extends Controller
         $dependent->delete();
 
         ActivityLog::record('ADMIN ARCHIVE DEPENDENT', "Admin archived dependent {$depName} for user {$user->name}. Reason: {$reasonText}", $user->name);
-
         return back()->with('success', "Dependent {$depName} moved to archive.");
     }
 
@@ -401,7 +386,6 @@ class AdminController extends Controller
     {
         if (Auth::user()->role !== 'admin') abort(403);
         $user = User::withTrashed()->findOrFail($userId);
-
         $request->validate([
             'reason' => 'required|string|min:5',
             'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
@@ -412,7 +396,6 @@ class AdminController extends Controller
         $dependent->restore();
 
         ActivityLog::record('ADMIN RESTORE DEPENDENT', "Admin restored dependent {$dependent->name} for user {$user->name}. Reason: {$reasonText}", $user->name);
-
         return back()->with('success', "Dependent {$dependent->name} reactivated successfully.");
     }
 
@@ -421,7 +404,6 @@ class AdminController extends Controller
         if (Auth::user()->role !== 'admin') abort(403);
         $user = User::withTrashed()->findOrFail($userId);
         $dependent = Dependent::withTrashed()->where('user_id', $user->id)->findOrFail($dependentId);
-
         $request->validate([
             'reason' => 'required|string|min:5',
             'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
@@ -431,7 +413,6 @@ class AdminController extends Controller
         $promoUrl = route('admin.users.create', ['promote' => Crypt::encryptString($dependent->id)]);
 
         ActivityLog::record('ADMIN PROMOTE DEPENDENT', "Admin generated account promotion for dependent {$dependent->name}. Reason: {$reasonText}", $user->name);
-
         return redirect()->to($promoUrl);
     }
 
@@ -439,10 +420,9 @@ class AdminController extends Controller
     {
         if (!Auth::user()->isEmployee()) abort(403);
         $targetUser = User::withTrashed()->findOrFail($id);
-
         if (!session()->has("access_granted_{$targetUser->id}_history")) {
             return redirect()->route('admin.users.index')->with('error', 'Clinical authorization required to view patient records.');
-        } 
+        }
 
         $labHistory = LaboratoryHistory::firstOrCreate(['user_id' => $targetUser->id]);
         $appointments = Appointment::with(['services', 'result'])
@@ -453,7 +433,6 @@ class AdminController extends Controller
         ActivityLog::record('VIEWED HISTORY', 'Accessed clinical archive via User Management', $targetUser->name);
 
         $availableServices = Service::where('is_available', true)->orderBy('category')->orderBy('name')->get();
-
         $recordsModels = LaboratoryHistoryRecord::whereHas('laboratoryHistory', fn($q) => $q->where('user_id', $targetUser->id))
             ->with(['scans', 'procedures'])
             ->latest('date_of_record')
@@ -481,12 +460,192 @@ class AdminController extends Controller
         if (Auth::user()->role !== 'admin') abort(403);
         $roleFilter = $request->query('role');
         $query = ActivityLog::with('user')->latest();
-
         if ($roleFilter) {
             $query->whereHas('user', fn($q) => $q->where('role', $roleFilter));
         }
-
         $logs = $query->paginate(20)->withQueryString();
         return view('admin.logs', compact('logs'));
     }
+
+    /**
+     * Dedicated Reports & Export Console View
+     */
+    public function reports(Request $request)
+    {
+        if (Auth::user()->role !== 'admin') abort(403);
+
+        $type = $request->query('type', 'transactions'); // transactions, accounts, logs
+        
+        // Transactions Filters
+        $txPeriod = $request->query('tx_period', 'cumulative');
+        $txDate = $request->query('tx_date', Carbon::today()->toDateString());
+        $txMonth = $request->query('tx_month', Carbon::now()->format('Y-m'));
+        $txYear = $request->query('tx_year', Carbon::now()->format('Y'));
+        $txStatus = $request->query('tx_status', 'all');
+
+        $txQuery = Appointment::with('services');
+        if ($txStatus !== 'all') {
+            $txQuery->where('payment_status', $txStatus);
+        }
+        if ($txPeriod === 'daily' && $txDate) {
+            $txQuery->whereDate('appointment_date', $txDate);
+        } elseif ($txPeriod === 'monthly' && $txMonth) {
+            $mParts = explode('-', $txMonth);
+            if (count($mParts) === 2) {
+                $txQuery->whereYear('appointment_date', $mParts[0])->whereMonth('appointment_date', $mParts[1]);
+            }
+        } elseif ($txPeriod === 'yearly' && $txYear) {
+            $txQuery->whereYear('appointment_date', $txYear);
+        }
+        $transactions = $txQuery->latest()->get();
+
+        // Accounts Filters
+        $accRole = $request->query('acc_role', 'all');
+        $accQuery = User::withTrashed();
+        if ($accRole === 'patients') {
+            $accQuery->where('role', 'user');
+        } elseif ($accRole === 'employees') {
+            $accQuery->whereIn('role', ['staff', 'lab_tech']);
+        } elseif ($accRole === 'admins') {
+            $accQuery->where('role', 'admin');
+        }
+        $accounts = $accQuery->latest()->get();
+
+        // Logs Filters
+        $logPeriod = $request->query('log_period', 'cumulative');
+        $logDate = $request->query('log_date', Carbon::today()->toDateString());
+        $logMonth = $request->query('log_month', Carbon::now()->format('Y-m'));
+        $logYear = $request->query('log_year', Carbon::now()->format('Y'));
+        $logCategory = $request->query('log_category', 'all');
+
+        $logQuery = ActivityLog::with('user');
+        if ($logCategory !== 'all') {
+            $logQuery->where('action', 'like', "%{$logCategory}%");
+        }
+        if ($logPeriod === 'daily' && $logDate) {
+            $logQuery->whereDate('created_at', $logDate);
+        } elseif ($logPeriod === 'monthly' && $logMonth) {
+            $lParts = explode('-', $logMonth);
+            if (count($lParts) === 2) {
+                $logQuery->whereYear('created_at', $lParts[0])->whereMonth('created_at', $lParts[1]);
+            }
+        } elseif ($logPeriod === 'yearly' && $logYear) {
+            $logQuery->whereYear('created_at', $logYear);
+        }
+        $logs = $logQuery->latest()->get();
+
+        return view('admin.reports', compact(
+            'type',
+            'transactions', 'txPeriod', 'txDate', 'txMonth', 'txYear', 'txStatus',
+            'accounts', 'accRole',
+            'logs', 'logPeriod', 'logDate', 'logMonth', 'logYear', 'logCategory'
+        ));
+    }
+
+    /**
+     * CSV Stream Exporter for Reports Page
+     */
+    public function exportReport(Request $request)
+    {
+        if (Auth::user()->role !== 'admin') abort(403);
+
+        $reportType = $request->query('report_type', 'transactions');
+        $filename = "medscreen_" . $reportType . "_report_" . date('Y-m-d') . ".csv";
+
+        $headers = [
+            "Content-type" => "text/csv; charset=UTF-8",
+            "Content-Disposition" => "attachment; filename=$filename",
+            "Pragma" => "no-cache",
+            "Cache-Control" => "must-revalidate, post-check=0, pre-check=0",
+            "Expires" => "0"
+        ];
+
+        $callback = function() use ($request, $reportType) {
+            $file = fopen('php://output', 'w');
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+
+            if ($reportType === 'transactions') {
+                fputcsv($file, ['Date (M/D/Y)', 'Reference ID', 'Patient Name', 'Services Requested', 'Method', 'Payment Status', 'Amount (PHP)']);
+                
+                $txPeriod = $request->query('tx_period', 'cumulative');
+                $txDate = $request->query('tx_date', Carbon::today()->toDateString());
+                $txMonth = $request->query('tx_month', Carbon::now()->format('Y-m'));
+                $txYear = $request->query('tx_year', Carbon::now()->format('Y'));
+                $txStatus = $request->query('tx_status', 'all');
+
+                $txQuery = Appointment::with('services');
+                if ($txStatus !== 'all') $txQuery->where('payment_status', $txStatus);
+                if ($txPeriod === 'daily' && $txDate) $txQuery->whereDate('appointment_date', $txDate);
+                elseif ($txPeriod === 'monthly' && $txMonth) {
+                    $mParts = explode('-', $txMonth);
+                    if (count($mParts) === 2) $txQuery->whereYear('appointment_date', $mParts[0])->whereMonth('appointment_date', $mParts[1]);
+                } elseif ($txPeriod === 'yearly' && $txYear) $txQuery->whereYear('appointment_date', $txYear);
+
+                foreach ($txQuery->latest()->get() as $tx) {
+                    $amt = $tx->payment_amount ?: $tx->totalPrice();
+                    fputcsv($file, [
+                        $tx->appointment_date ? $tx->appointment_date->format('M d, Y') : $tx->created_at->format('M d, Y'),
+                        '#' . $tx->id,
+                        $tx->patient_name,
+                        $tx->services->pluck('name')->implode(', '),
+                        $tx->payment_method,
+                        strtoupper($tx->payment_status),
+                        number_format($amt, 2)
+                    ]);
+                }
+            } elseif ($reportType === 'accounts') {
+                fputcsv($file, ['ID', 'Full Name', 'Email Address', 'Phone Number', 'Role', 'Status', 'Registered Date']);
+                
+                $accRole = $request->query('acc_role', 'all');
+                $accQuery = User::withTrashed();
+                if ($accRole === 'patients') $accQuery->where('role', 'user');
+                elseif ($accRole === 'employees') $accQuery->whereIn('role', ['staff', 'lab_tech']);
+                elseif ($accRole === 'admins') $accQuery->where('role', 'admin');
+
+                foreach ($accQuery->latest()->get() as $acc) {
+                    fputcsv($file, [
+                        '#' . $acc->id,
+                        $acc->name,
+                        $acc->email,
+                        $acc->phone,
+                        strtoupper($acc->role),
+                        $acc->trashed() ? 'DEACTIVATED' : 'ACTIVE',
+                        $acc->created_at ? $acc->created_at->format('M d, Y') : 'N/A'
+                    ]);
+                }
+            } elseif ($reportType === 'logs') {
+                fputcsv($file, ['Date & Time', 'Performer', 'Role', 'Action Event', 'Target Patient', 'Audit Reason']);
+                
+                $logPeriod = $request->query('log_period', 'cumulative');
+                $logDate = $request->query('log_date', Carbon::today()->toDateString());
+                $logMonth = $request->query('log_month', Carbon::now()->format('Y-m'));
+                $logYear = $request->query('log_year', Carbon::now()->format('Y'));
+                $logCategory = $request->query('log_category', 'all');
+
+                $logQuery = ActivityLog::with('user');
+                if ($logCategory !== 'all') $logQuery->where('action', 'like', "%{$logCategory}%");
+                if ($logPeriod === 'daily' && $logDate) $logQuery->whereDate('created_at', $logDate);
+                elseif ($logPeriod === 'monthly' && $logMonth) {
+                    $lParts = explode('-', $logMonth);
+                    if (count($lParts) === 2) $logQuery->whereYear('created_at', $lParts[0])->whereMonth('created_at', $lParts[1]);
+                } elseif ($logPeriod === 'yearly' && $logYear) $logQuery->whereYear('created_at', $logYear);
+
+                foreach ($logQuery->latest()->get() as $log) {
+                    fputcsv($file, [
+                        $log->created_at ? $log->created_at->format('M d, Y h:i A') : 'N/A',
+                        $log->user->name ?? 'System/Deleted',
+                        strtoupper($log->user->role ?? 'SYSTEM'),
+                        $log->action,
+                        $log->patient_name,
+                        $log->reason
+                    ]);
+                }
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
 }
+

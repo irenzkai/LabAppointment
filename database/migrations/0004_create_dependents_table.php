@@ -29,14 +29,12 @@ return new class extends Migration
             $table->date('birthdate');
             $table->enum('sex', ['Male', 'Female']);
             $table->string('phone', 11)->nullable(); // Nullable but constrained if provided
-            $table->enum('relationship', ['SON', 'DAUGHTER']); // Enforces minor-only policy
 
             // 3. Split Address Fields (3NF Atomic - PSGC API Compatible)
             $table->string('street', 150);
             $table->string('barangay', 100);
-            $table->string('city', 100);       // City or Municipality
+            $table->string('city', 100); // City or Municipality
             $table->string('province', 100);
-
             $table->timestamps();
 
             // AUDIT & DATA RETENTION COMPLIANCE [102]

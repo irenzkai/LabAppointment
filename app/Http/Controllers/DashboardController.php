@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Service;
 use App\Models\Appointment;
 use App\Models\ActivityLog;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
@@ -21,8 +22,8 @@ class DashboardController extends Controller
 
         // Initialize default stats to prevent Blade undefined variable errors
         $stats = [
-            'total_users' => 0, 
-            'pending_apps' => 0, 
+            'total_users' => 0,
+            'pending_apps' => 0,
             'today_apps' => 0,
             'released_today' => 0,
             'role_queue_count' => 0,
@@ -64,13 +65,13 @@ class DashboardController extends Controller
     }
 
     /**
-     * Staff Dashboard View: Analytics, status breakdowns, needing action list, and quick management links.
+     * Staff Panel View: Analytics, status breakdowns, needing action list, and quick management links.
      */
-    public function staffDashboard()
+    public function staffPanel()
     {
         $user = Auth::user();
         if (!$user->isEmployee()) {
-            abort(403, 'Access denied to Staff Dashboard.');
+            abort(403, 'Access denied to Staff Panel.');
         }
 
         $nowSub24 = Carbon::now()->subHours(24)->toDateTimeString();
@@ -100,21 +101,31 @@ class DashboardController extends Controller
         $needingActionQuery = Appointment::with(['services', 'user'])
             ->where(function($q) {
                 $q->whereIn('status', ['pending', 'approved', 'retest', 'tested', 'encoded'])
-                  ->orWhere(function($sub) {
-                      $sub->where('status', 'canceled')
-                          ->where('payment_method', 'Cashless')
-                          ->where('payment_status', 'paid');
-                  });
+                    ->orWhere(function($sub) {
+                        $sub->where('status', 'canceled')
+                            ->where('payment_method', 'Cashless')
+                            ->where('payment_status', 'paid');
+                    });
             })
             ->where(function($q) use ($nowSub24) {
                 $q->whereIn('status', ['tested', 'encoded'])
-                  ->orWhereRaw("TIMESTAMP(appointment_date, time_slot) >= ?", [$nowSub24]);
+                    ->orWhereRaw("TIMESTAMP(appointment_date, time_slot) >= ?", [$nowSub24]);
             });
 
         $needingActionCount = (clone $needingActionQuery)->count();
         $latestNeedingAction = (clone $needingActionQuery)->latest()->take(8)->get();
 
         // 5. Graphs & Analytics Payload
+        // Daily (Last 7 Days)
+        $dailyAppointmentsData = [];
+        $dayLabels = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $day = Carbon::now()->subDays($i);
+            $dayLabels[] = $day->format('M d');
+            $dailyAppointmentsData[] = Appointment::whereDate('created_at', $day->toDateString())->count();
+        }
+
+        // Monthly (Last 6 Months)
         $monthlyAppointmentsData = [];
         $monthLabels = [];
         for ($i = 5; $i >= 0; $i--) {
@@ -125,28 +136,41 @@ class DashboardController extends Controller
                 ->count();
         }
 
+        // Yearly (Last 5 Years)
+        $yearlyAppointmentsData = [];
+        $yearLabels = [];
+        for ($i = 4; $i >= 0; $i--) {
+            $year = Carbon::now()->subYears($i);
+            $yearLabels[] = $year->format('Y');
+            $yearlyAppointmentsData[] = Appointment::whereYear('created_at', $year->year)->count();
+        }
+
         return view('dashboards.staff', compact(
             'totalPatientAccounts',
             'statusCounts',
             'needingActionCount',
             'latestNeedingAction',
+            'dailyAppointmentsData',
+            'dayLabels',
+            'monthlyAppointmentsData',
             'monthLabels',
-            'monthlyAppointmentsData'
+            'yearlyAppointmentsData',
+            'yearLabels'
         ));
     }
 
     /**
-     * Admin Dashboard View: System-wide analytics, user breakdown, status stats, needing action, and system logs.
+     * Admin Panel View: System-wide analytics, user breakdown, status stats, needing action, revenue, transactions, and system logs.
      */
-    public function adminDashboard()
+    public function adminPanel(Request $request)
     {
         $user = Auth::user();
         if (!$user->isAdmin()) {
-            abort(403, 'Access denied to System Administrator Dashboard.');
+            abort(403, 'Access denied to System Administrator Panel.');
         }
 
-        // Carry over all Staff Dashboard statistics
-        $staffData = $this->staffDashboard()->getData();
+        // Carry over all Staff Panel statistics
+        $staffData = $this->staffPanel()->getData();
 
         // Admin-Specific User Account Breakdown
         $userRoleBreakdown = [
@@ -156,12 +180,67 @@ class DashboardController extends Controller
             'total' => User::count(),
         ];
 
-        // Latest System Audit Logs
-        $latestLogs = ActivityLog::with('user')->latest()->take(10)->get();
+        // Financial & Revenue Metrics
+        $totalRevenue = Appointment::where('payment_status', 'paid')->sum('payment_amount');
+        $monthlyRevenue = Appointment::where('payment_status', 'paid')
+            ->whereMonth('created_at', Carbon::now()->month)
+            ->whereYear('created_at', Carbon::now()->year)
+            ->sum('payment_amount');
+        $todayRevenue = Appointment::where('payment_status', 'paid')
+            ->whereDate('created_at', Carbon::today())
+            ->sum('payment_amount');
+
+        // Transactions Filter & Pagination (10 per page)
+        $txPeriod = $request->query('tx_period', 'cumulative');
+        $txDate = $request->query('tx_date', Carbon::today()->toDateString());
+        $txMonth = $request->query('tx_month', Carbon::now()->format('Y-m'));
+        $txYear = $request->query('tx_year', Carbon::now()->format('Y'));
+        $txStatus = $request->query('tx_status', 'all');
+        $txSearch = $request->query('tx_search');
+
+        $txQuery = Appointment::with('services');
+
+        if ($txSearch) {
+            $txQuery->where(function($q) use ($txSearch) {
+                $q->where('patient_name', 'like', "%{$txSearch}%")
+                    ->orWhere('id', 'like', "%{$txSearch}%")
+                    ->orWhere('organization_name', 'like', "%{$txSearch}%");
+            });
+        }
+
+        if ($txStatus && $txStatus !== 'all') {
+            $txQuery->where('payment_status', $txStatus);
+        }
+
+        if ($txPeriod === 'daily' && $txDate) {
+            $txQuery->whereDate('appointment_date', $txDate);
+        } elseif ($txPeriod === 'monthly' && $txMonth) {
+            $mParts = explode('-', $txMonth);
+            if (count($mParts) === 2) {
+                $txQuery->whereYear('appointment_date', $mParts[0])->whereMonth('appointment_date', $mParts[1]);
+            }
+        } elseif ($txPeriod === 'yearly' && $txYear) {
+            $txQuery->whereYear('appointment_date', $txYear);
+        }
+
+        $transactions = $txQuery->latest()->paginate(10, ['*'], 'tx_page')->withQueryString();
+
+        // Latest System Audit Logs Pagination (10 per page)
+        $latestLogs = ActivityLog::with('user')->latest()->paginate(10, ['*'], 'logs_page')->withQueryString();
 
         return view('dashboards.admin', array_merge($staffData, compact(
             'userRoleBreakdown',
-            'latestLogs'
+            'latestLogs',
+            'totalRevenue',
+            'monthlyRevenue',
+            'todayRevenue',
+            'transactions',
+            'txPeriod',
+            'txDate',
+            'txMonth',
+            'txYear',
+            'txStatus',
+            'txSearch'
         )));
     }
 }

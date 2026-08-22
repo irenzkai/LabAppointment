@@ -22,7 +22,6 @@ class Dependent extends Model
         'birthdate', 
         'sex', 
         'phone', 
-        'relationship', 
         'street',
         'barangay',
         'city',
@@ -32,7 +31,7 @@ class Dependent extends Model
     /**
      * Get the attributes that should be cast to native types.
      */
-    protected $casts = [
+    protected $casts = [ 
         'birthdate' => 'date',
         'deleted_at' => 'datetime'
     ];
@@ -46,13 +45,13 @@ class Dependent extends Model
      */
     public function getNameAttribute()
     {
-        $mName = ($this->middle_name && mb_strtoupper($this->middle_name, 'UTF-8') !== 'N/A') ? ' ' . $this->middle_name : '';
+        $mName = ($this->middle_name && mb_strtoupper($this->middle_name, 'UTF-8') !== 'N/A')
+            ? ' ' . $this->middle_name : '';
         $fullName = $this->first_name . $mName . ' ' . $this->last_name;
         
         if ($this->suffix) {
             $fullName .= ' ' . $this->suffix;
         }
-
         return mb_strtoupper($fullName, 'UTF-8');
     }
 

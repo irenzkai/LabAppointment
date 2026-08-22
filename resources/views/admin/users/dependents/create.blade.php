@@ -18,16 +18,16 @@
                 </div>
 
                 @if ($errors->any())
-                <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 text-danger p-3 mb-4 rounded-3">
-                    <div class="d-flex align-items-center mb-1 fw-bold uppercase small">
-                        <i class="bi bi-exclamation-triangle-fill me-2"></i> Validation Errors
+                    <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 text-danger p-3 mb-4 rounded-3">
+                        <div class="d-flex align-items-center mb-1 fw-bold uppercase small">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i> Validation Errors
+                        </div>
+                        <ul class="mb-0 small ps-3">
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
                     </div>
-                    <ul class="mb-0 small ps-3">
-                        @foreach ($errors->all() as $error)
-                        <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
                 @endif
 
                 <form action="{{ route('admin.users.dependents.store', $user->id) }}" method="POST" id="adminCreateDepForm" onsubmit="return validateAdminCreateDepForm(event)">
@@ -58,27 +58,19 @@
                             </datalist>
                             <div class="invalid-feedback d-none" id="err_suffix"></div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Birthdate</label>
                             <input type="date" name="birthdate" id="birthdate" class="form-control" value="{{ old('birthdate') }}" required max="{{ date('Y-m-d') }}" min="{{ now()->subYears(18)->addDay()->format('Y-m-d') }}">
                             <div class="invalid-feedback d-none" id="err_birthdate"></div>
                             <small class="text-muted smaller mt-1 d-block">Dependents must be minors under 18 years of age.</small>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Sex</label>
                             <select name="sex" id="sex" class="form-select" required>
                                 <option value="Male" {{ old('sex') == 'Male' ? 'selected' : '' }}>Male</option>
                                 <option value="Female" {{ old('sex') == 'Female' ? 'selected' : '' }}>Female</option>
                             </select>
                             <div class="invalid-feedback d-none" id="err_sex"></div>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">Relationship</label>
-                            <select name="relationship" id="relationship" class="form-select" required>
-                                <option value="Son" {{ old('relationship') == 'Son' ? 'selected' : '' }}>Son</option>
-                                <option value="Daughter" {{ old('relationship') == 'Daughter' ? 'selected' : '' }}>Daughter</option>
-                            </select>
-                            <div class="invalid-feedback d-none" id="err_relationship"></div>
                         </div>
                     </div>
 
@@ -243,26 +235,21 @@ function clearFieldError(input) {
 function validateAdminCreateDepForm(e) {
     let isValid = true;
     let firstInvalidInput = null;
-
     document.querySelectorAll('#adminCreateDepForm .is-invalid').forEach(el => el.classList.remove('is-invalid'));
     document.querySelectorAll('#adminCreateDepForm .invalid-feedback').forEach(el => {
         el.innerText = '';
         el.classList.add('d-none');
         el.classList.remove('d-block');
     });
-
     function markInvalid(input, errId, msg) {
         setFieldError(input, errId, msg);
         isValid = false;
         if (!firstInvalidInput) firstInvalidInput = input;
     }
-
     const fName = document.getElementById('first_name');
     if (!fName || !fName.value.trim()) markInvalid(fName, 'err_first_name', 'First Name is required.');
-
     const lName = document.getElementById('last_name');
     if (!lName || !lName.value.trim()) markInvalid(lName, 'err_last_name', 'Last Name is required.');
-
     const bday = document.getElementById('birthdate');
     if (!bday || !bday.value) {
         markInvalid(bday, 'err_birthdate', 'Birthdate is required.');
@@ -274,17 +261,14 @@ function validateAdminCreateDepForm(e) {
         if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
         if (age >= 18) markInvalid(bday, 'err_birthdate', 'Administrative Policy: Dependents must be minors under 18 years of age.');
     }
-
     const prov = document.getElementById('province');
     const city = document.getElementById('city');
     const brgy = document.getElementById('barangay');
     const street = document.getElementById('street');
-
     if (!prov || !prov.value.trim()) markInvalid(prov, 'err_province', 'Province is required.');
     if (!city || !city.value.trim()) markInvalid(city, 'err_city', 'City is required.');
     if (!brgy || !brgy.value.trim()) markInvalid(brgy, 'err_barangay', 'Barangay is required.');
     if (!street || !street.value.trim()) markInvalid(street, 'err_street', 'Street address is required.');
-
     if (!isValid) {
         e.preventDefault();
         e.stopPropagation();
@@ -294,7 +278,6 @@ function validateAdminCreateDepForm(e) {
         }
         return false;
     }
-
     compileAdminDepAddress();
     return true;
 }

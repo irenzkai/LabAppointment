@@ -337,7 +337,6 @@ class ResultController extends Controller
             ? strtoupper(trim($request->patient_middle_name)) : 'N/A';
         $lName = strtoupper(trim($request->patient_last_name));
         $suffix = $request->filled('patient_suffix') ? strtoupper(trim($request->patient_suffix)) : '';
-
         $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
         if (!empty($suffix)) {
             $displayName .= " {$suffix}";
@@ -390,9 +389,12 @@ class ResultController extends Controller
         } elseif ($from === 'custom' && $customId) {
             return redirect()->route('workstation.custom', [$appointment->id, $customId])
                 ->with('success', 'Patient details and services revised successfully.');
+        } elseif ($from === 'hub') {
+            return redirect()->route('appointments.encode', $appointment->id)
+                ->with('success', 'Patient details and services revised successfully.');
         }
 
-        return redirect()->route('appointments.encode', $appointment->id)
+        return redirect()->route('appointments.index', ['view' => 'queue', 'id' => $appointment->id])
             ->with('success', 'Patient details and services revised successfully.');
     }
 

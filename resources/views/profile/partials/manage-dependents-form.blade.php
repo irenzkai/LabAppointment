@@ -13,59 +13,58 @@
     {{-- Family Dependents Deck --}}
     <div class="row g-3">
         @forelse($user->dependents as $dep)
-        @php
-            $isOver18 = $dep->birthdate->age >= 18;
-        @endphp
-        <div class="col-md-6 text-start">
-            <div class="p-3 rounded border {{ $isOver18 ? 'border-warning border-opacity-40' : 'border-secondary border-opacity-20' }} d-flex justify-content-between align-items-center h-100" style="background-color: var(--bg-card); color: var(--text-main);">
-                <div>
-                    <div class="text-main fw-bold small">{{ strtoupper($dep->name) }}</div>
-                    <div class="text-secondary mt-0.5" style="font-size: 0.65rem;">
-                        {{ strtoupper($dep->relationship) }} <span class="mx-1">|</span> 
-                        {{ strtoupper($dep->sex) }} <span class="mx-1">|</span> {{ $dep->birthdate->age }} YRS OLD
-                        @if($isOver18)
-                        <span class="badge bg-warning bg-opacity-10 text-warning ms-1" style="font-size: 0.6rem;">Deactivated (18+ Years Old)</span>
-                        @endif
+            @php
+                $isOver18 = $dep->birthdate->age >= 18;
+            @endphp
+            <div class="col-md-6 text-start">
+                <div class="p-3 rounded border {{ $isOver18 ? 'border-warning border-opacity-40' : 'border-secondary border-opacity-20' }} d-flex justify-content-between align-items-center h-100" style="background-color: var(--bg-card); color: var(--text-main);">
+                    <div>
+                        <div class="text-main fw-bold small">{{ strtoupper($dep->name) }}</div>
+                        <div class="text-secondary mt-0.5" style="font-size: 0.65rem;">
+                            {{ strtoupper($dep->sex) }} <span class="mx-1">|</span> {{ $dep->birthdate->age }} YRS OLD
+                            @if($isOver18)
+                                <span class="badge bg-warning bg-opacity-10 text-warning ms-1" style="font-size: 0.6rem;">Deactivated (18+ Years Old)</span>
+                            @endif
+                        </div>
+                        <div class="text-accent smaller mt-1" style="font-size: 0.75rem;">
+                            <i class="bi bi-geo-alt-fill me-1"></i> {{ $dep->address }}
+                        </div>
                     </div>
-                    <div class="text-accent smaller mt-1" style="font-size: 0.75rem;">
-                        <i class="bi bi-geo-alt-fill me-1"></i> {{ $dep->address }}
-                    </div>
-                </div>
 
-                {{-- 3-Dot Action Dropdown Menu --}}
-                <div class="dropdown">
-                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle py-1 px-2.5" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Actions">
-                        <i class="bi bi-three-dots-vertical"></i>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark shadow bg-card border-secondary">
-                        @if(!$isOver18)
-                        <li>
-                            <a class="dropdown-item small py-2" href="{{ route('dependents.edit', $dep->id) }}">
-                                <i class="bi bi-pencil-square me-2 text-info"></i>Edit Details
-                            </a>
-                        </li>
-                        @endif
-                        <li>
-                            <button type="button" class="dropdown-item small py-2 text-accent" data-bs-toggle="modal" data-bs-target="#promoteModal{{ $dep->id }}">
-                                <i class="bi bi-arrow-up-circle me-2"></i>Promote Account
-                            </button>
-                        </li>
-                        <li><hr class="dropdown-divider border-secondary border-opacity-50"></li>
-                        <li>
-                            <button type="button" class="dropdown-item small py-2 text-danger" data-bs-toggle="modal" data-bs-target="#deleteDepModal{{ $dep->id }}">
-                                <i class="bi bi-trash me-2"></i>Remove
-                            </button>
-                        </li>
-                    </ul>
+                    {{-- 3-Dot Action Dropdown Menu --}}
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle py-1 px-2.5" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Actions">
+                            <i class="bi bi-three-dots-vertical"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark shadow bg-card border-secondary">
+                            @if(!$isOver18)
+                                <li>
+                                    <a class="dropdown-item small py-2" href="{{ route('dependents.edit', $dep->id) }}">
+                                        <i class="bi bi-pencil-square me-2 text-info"></i>Edit Details
+                                    </a>
+                                </li>
+                            @endif
+                            <li>
+                                <button type="button" class="dropdown-item small py-2 text-accent" data-bs-toggle="modal" data-bs-target="#promoteModal{{ $dep->id }}">
+                                    <i class="bi bi-arrow-up-circle me-2"></i>Promote Account
+                                </button>
+                            </li>
+                            <li><hr class="dropdown-divider border-secondary border-opacity-50"></li>
+                            <li>
+                                <button type="button" class="dropdown-item small py-2 text-danger" data-bs-toggle="modal" data-bs-target="#deleteDepModal{{ $dep->id }}">
+                                    <i class="bi bi-trash me-2"></i>Remove
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </div>
-        </div>
         @empty
-        {{-- Unified Empty State Placeholder --}}
-        <div class="col-12 text-center py-5">
-            <i class="bi bi-people text-muted fs-1 mb-3 opacity-25 d-block"></i>
-            <p class="text-secondary small italic mb-0">No family members registered yet.</p>
-        </div>
+            {{-- Unified Empty State Placeholder --}}
+            <div class="col-12 text-center py-5">
+                <i class="bi bi-people text-muted fs-1 mb-3 opacity-25 d-block"></i>
+                <p class="text-secondary small italic mb-0">No family members registered yet.</p>
+            </div>
         @endforelse
     </div>
 
@@ -74,28 +73,28 @@
         $archivedDeps = auth()->user()->dependents()->onlyTrashed()->get();
     @endphp
     @if(count($archivedDeps) > 0)
-    <hr class="border-secondary border-opacity-25 my-4">
-    <h6 class="text-warning fw-bold mb-3 uppercase small">Archived Dependents (Deactivated profiles folder)</h6>
-    <div class="row g-3">
-        @foreach($archivedDeps as $archived)
-        <div class="col-md-6 text-start">
-            <div class="p-3 rounded border border-warning border-opacity-20 d-flex justify-content-between align-items-center h-100" style="background-color: var(--bg-card); color: var(--text-main); border-style: dashed !important;">
-                <div>
-                    <div class="text-warning fw-bold small">{{ strtoupper($archived->name) }}</div>
-                    <div class="text-secondary mt-0.5" style="font-size: 0.65rem;">
-                        {{ strtoupper($archived->relationship) }} <span class="mx-1">|</span> {{ strtoupper($archived->sex) }} <span class="mx-1">|</span> {{ $archived->birthdate->age }} YRS OLD (ARCHIVED)
+        <hr class="border-secondary border-opacity-25 my-4">
+        <h6 class="text-warning fw-bold mb-3 uppercase small">Archived Dependents (Deactivated profiles folder)</h6>
+        <div class="row g-3">
+            @foreach($archivedDeps as $archived)
+                <div class="col-md-6 text-start">
+                    <div class="p-3 rounded border border-warning border-opacity-20 d-flex justify-content-between align-items-center h-100" style="background-color: var(--bg-card); color: var(--text-main); border-style: dashed !important;">
+                        <div>
+                            <div class="text-warning fw-bold small">{{ strtoupper($archived->name) }}</div>
+                            <div class="text-secondary mt-0.5" style="font-size: 0.65rem;">
+                                {{ strtoupper($archived->sex) }} <span class="mx-1">|</span> {{ $archived->birthdate->age }} YRS OLD (ARCHIVED)
+                            </div>
+                        </div>
+                        <form action="{{ route('dependents.restore', $archived->id) }}" method="POST" class="m-0">
+                            @csrf
+                            <button type="submit" class="btn btn-sm btn-outline-warning py-1 px-2.5 fw-bold uppercase">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i> RESTORE
+                            </button>
+                        </form>
                     </div>
                 </div>
-                <form action="{{ route('dependents.restore', $archived->id) }}" method="POST" class="m-0">
-                    @csrf
-                    <button type="submit" class="btn btn-sm btn-outline-warning py-1 px-2.5 fw-bold uppercase">
-                        <i class="bi bi-arrow-counterclockwise me-1"></i> RESTORE
-                    </button>
-                </form>
-            </div>
+            @endforeach
         </div>
-        @endforeach
-    </div>
     @endif
 </div>
 
@@ -164,7 +163,7 @@
                             <button class="btn btn-outline-accent btn-sm fw-bold" onclick="copyPromoLink('{{ $dep->id }}')">Copy Link</button>
                         </div>
                         <div id="copy-success-{{ $dep->id }}" class="text-success small mt-1 d-none fw-bold" style="font-size: 0.75rem;">
-                            <i class="bi bi-check-circle-fill me-1"></i> Successfully copied to clipboard!
+                            <i class="bi bi-check-circle-fill me-1"></i> Link copied to clipboard!
                         </div>
                     </div>
 

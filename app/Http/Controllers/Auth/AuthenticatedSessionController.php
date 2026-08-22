@@ -35,10 +35,9 @@ class AuthenticatedSessionController extends Controller
             throw $e;
         }
 
-        // 2. Security Check: Ensure the account hasn't been disabled by an Admin [30, 31]
+        // 2. Security Check: Ensure the account hasn't been disabled by an Admin
         if (!Auth::user()->is_active) {
             Auth::logout();
-
             return back()->withErrors([
                 'email' => 'This account has been disabled by the administrator.',
             ]);
@@ -48,18 +47,18 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerate();
 
         /**
-         * 4. Redirect based on verification status [19]
-         * If the user is unverified, bypass the intended dashboard and redirect
+         * 4. Redirect based on verification status
+         * If the user is unverified, bypass the intended main menu and redirect
          * them straight to the email verification notice screen.
          */
         if (Auth::user() instanceof \Illuminate\Contracts\Auth\MustVerifyEmail && ! Auth::user()->hasVerifiedEmail()) {
             return redirect()->route('verification.notice');
         }
 
-        // Clear stale intended URLs to ensure newly verified accounts land cleanly on the dashboard [19]
+        // Clear stale intended URLs to ensure newly verified accounts land cleanly on the main menu
         $request->session()->forget('url.intended');
 
-        return redirect()->route('dashboard');
+        return redirect()->route('main');
     }
 
     /**
@@ -73,7 +72,7 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerateToken();
 
-        // Allow custom redirect targets on logout to support smooth account transitions [19]
+        // Allow custom redirect targets on logout to support smooth account transitions
         $redirectTo = $request->input('redirect_to', '/');
 
         return redirect($redirectTo);

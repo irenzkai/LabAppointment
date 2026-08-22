@@ -32,11 +32,10 @@ class AppointmentController extends Controller
 
         $services = Service::where('is_available', true)->orderBy('name')->get();
         $paymentProviders = PaymentProvider::where('is_active', true)->get();
-
         $viewMode = $request->query('view');
 
         if ($user->isPatient() || $viewMode !== 'queue') {
-            $self = Appointment::with(['services', 'user', 'dependent', 'result']) 
+            $self = Appointment::with(['services', 'user', 'dependent', 'result'])
                 ->where('user_id', $user->id)
                 ->whereNull('dependent_id')
                 ->whereNull('batch_id')
@@ -88,9 +87,9 @@ class AppointmentController extends Controller
         if ($search) {
             $query->where(function($q) use ($search) {
                 $q->where('patient_name', 'like', "%{$search}%")
-                  ->orWhere('id', 'like', "%{$search}%")
-                  ->orWhere('organization_name', 'like', "%{$search}%")
-                  ->orWhere('batch_id', 'like', "%{$search}%");
+                    ->orWhere('id', 'like', "%{$search}%")
+                    ->orWhere('organization_name', 'like', "%{$search}%")
+                    ->orWhere('batch_id', 'like', "%{$search}%");
             });
         }
 
@@ -98,33 +97,31 @@ class AppointmentController extends Controller
         $statusFilter = $request->query('status');
         if ($statusFilter) {
             if ($statusFilter === 'needs_action') {
-                // Excludes expired appointments even if previously approved or pending
                 $query->where(function($q) {
                     $q->whereIn('status', ['pending', 'approved', 'retest', 'tested', 'encoded'])
-                      ->orWhere(function($sub) {
-                          $sub->where('status', 'canceled')
-                              ->where('payment_method', 'Cashless')
-                              ->where('payment_status', 'paid');
-                      });
+                        ->orWhere(function($sub) {
+                            $sub->where('status', 'canceled')
+                                ->where('payment_method', 'Cashless')
+                                ->where('payment_status', 'paid');
+                        });
                 })->where(function($q) use ($nowSub24) {
                     $q->whereIn('status', ['tested', 'encoded'])
-                      ->orWhereRaw("TIMESTAMP(appointment_date, time_slot) >= ?", [$nowSub24]);
+                        ->orWhereRaw("TIMESTAMP(appointment_date, time_slot) >= ?", [$nowSub24]);
                 });
             } elseif ($statusFilter === 'no_action') {
                 $query->where(function($q) {
                     $q->where('status', 'released')
-                      ->orWhere(function($sub) {
-                          $sub->where('status', 'canceled')
-                              ->where(function($sub2) {
-                                  $sub2->where('payment_method', '!=', 'Cashless')
-                                       ->orWhere('payment_status', '!=', 'paid');
-                              });
-                      });
+                        ->orWhere(function($sub) {
+                            $sub->where('status', 'canceled')
+                                ->where(function($sub2) {
+                                    $sub2->where('payment_method', '!=', 'Cashless')
+                                        ->orWhere('payment_status', '!=', 'paid');
+                                });
+                        });
                 });
             } elseif ($statusFilter === 'expired') {
-                // Strictly fetches all unprogressed appointments older than 24 hours
                 $query->whereNotIn('status', ['tested', 'encoded', 'released'])
-                      ->whereRaw("TIMESTAMP(appointment_date, time_slot) < ?", [$nowSub24]);
+                    ->whereRaw("TIMESTAMP(appointment_date, time_slot) < ?", [$nowSub24]);
             } else {
                 $query->where('status', $statusFilter);
                 if (in_array($statusFilter, ['pending', 'approved', 'returned', 'retest'])) {
@@ -157,7 +154,7 @@ class AppointmentController extends Controller
             $query->orderBy('created_at', $order);
         } else {
             $query->orderBy('appointment_date', $order)
-                  ->orderBy('time_slot', $order);
+                ->orderBy('time_slot', $order);
         }
 
         $staffPaginator = $query->paginate(10, ['*'], 'staff_page')->withQueryString();
@@ -193,7 +190,6 @@ class AppointmentController extends Controller
         $nameRule = function ($attribute, $value, $fail) {
             $val = trim($value);
             if (empty($val) || $val === 'N/A') return;
-
             if (!preg_match('/^[\p{L} \s.\'-]+$/u', $val)) {
                 $fail("The " . str_replace('patient_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
                 return;
@@ -219,7 +215,7 @@ class AppointmentController extends Controller
             'patient_first_name' => ['required', 'string', 'max:60', $nameRule],
             'patient_middle_name' => ['nullable', 'string', 'max:60', $nameRule],
             'patient_last_name' => ['required', 'string', 'max:60', $nameRule],
-            'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
+            'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
             'patient_sex' => 'required|in:Male,Female',
             'patient_birthdate' => 'required|date|before_or_equal:today',
             'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
@@ -235,7 +231,7 @@ class AppointmentController extends Controller
             'payment_receipt' => 'required_if:payment_method,Cashless|nullable|file|mimes:pdf,jpg,jpeg,png|max:10240'
         ], [
             'patient_phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
-            'patient_suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.'
+            'patient_suffix.regex' => 'The suffix may only contain letters, spaces, and periods.'
         ]);
 
         $dayNum = date('w', strtotime($request->appointment_date));
@@ -326,7 +322,6 @@ class AppointmentController extends Controller
         if ($appointment->status === 'released') return redirect()->route('appointments.index')->with('error', 'Released appointments are locked and cannot be modified.');
 
         $isExpired = $appointment->isExpired();
-
         if (!($appointment->status === 'returned' || $appointment->status === 'canceled' || $isExpired)) {
             return redirect()->route('appointments.index')->with('error', 'This appointment is currently not eligible for resubmission.');
         }
@@ -347,7 +342,6 @@ class AppointmentController extends Controller
         $nameRule = function ($attribute, $value, $fail) {
             $val = trim($value);
             if (empty($val) || $val === 'N/A') return;
-
             if (!preg_match('/^[\p{L} \s.\'-]+$/u', $val)) {
                 $fail("The " . str_replace('patient_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
                 return;
@@ -370,7 +364,7 @@ class AppointmentController extends Controller
             'patient_first_name' => ['required', 'string', 'max:60', $nameRule],
             'patient_middle_name' => ['nullable', 'string', 'max:60', $nameRule],
             'patient_last_name' => ['required', 'string', 'max:60', $nameRule],
-            'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
+            'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
             'patient_sex' => 'required|in:Male,Female',
             'patient_birthdate' => 'required|date|before_or_equal:today',
             'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
@@ -395,13 +389,12 @@ class AppointmentController extends Controller
                     }
                 }
             }
-
             $rules['payment_receipt'] = $isReceiptRequired ? 'required|file|mimes:pdf,jpg,jpeg,png|max:10240' : 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240';
         }
 
         $request->validate($rules, [
             'patient_phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
-            'patient_suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
+            'patient_suffix.regex' => 'The suffix may only contain letters, spaces, and periods.',
         ]);
 
         $dayNum = date('w', strtotime($request->appointment_date));
@@ -494,6 +487,7 @@ class AppointmentController extends Controller
         }
 
         event(new QueueUpdated());
+
         return redirect()->route('appointments.index')->with('success', 'Appointment resubmitted for approval.');
     }
 
@@ -582,7 +576,7 @@ class AppointmentController extends Controller
         event(new QueueUpdated());
 
         if ($request->status === 'released') {
-            return redirect()->route('appointments.index')->with('success', 'Appointment folder has been successfully released.');
+            return redirect()->route('appointments.index', ['view' => 'queue'])->with('success', 'Appointment folder has been successfully released.');
         }
 
         return back()->with('success', 'Appointment updated to ' . strtoupper($request->status));
@@ -597,7 +591,6 @@ class AppointmentController extends Controller
         $nameRule = function ($attribute, $value, $fail) {
             $val = trim($value);
             if (empty($val) || $val === 'N/A') return;
-
             if (!preg_match('/^[\p{L} \s.\'-]+$/u', $val)) {
                 $fail("The " . str_replace('patient_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
                 return;
@@ -621,7 +614,7 @@ class AppointmentController extends Controller
                 'patient_first_name' => ['required', 'string', 'max:60', $nameRule],
                 'patient_middle_name' => ['nullable', 'string', 'max:60', $nameRule],
                 'patient_last_name' => ['required', 'string', 'max:60', $nameRule],
-                'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
+                'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
                 'patient_birthdate' => 'required|date|before_or_equal:today',
                 'patient_sex' => 'required|in:Male,Female',
                 'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
@@ -635,7 +628,7 @@ class AppointmentController extends Controller
                 'retest_custom_reason' => 'required_if:retest_reason,Others|nullable|string|min:5',
             ], [
                 'patient_phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
-                'patient_suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
+                'patient_suffix.regex' => 'The suffix may only contain letters, spaces, and periods.',
             ]);
 
             $retestReason = $request->input('retest_reason') === 'Others'
@@ -691,6 +684,7 @@ class AppointmentController extends Controller
             }
 
             event(new QueueUpdated());
+
             return redirect()->back()->with('success', 'Appointment successfully flagged for retesting.');
         }
 
@@ -698,7 +692,7 @@ class AppointmentController extends Controller
             'patient_first_name' => ['required', 'string', 'max:60', $nameRule],
             'patient_middle_name' => ['nullable', 'string', 'max:60', $nameRule],
             'patient_last_name' => ['required', 'string', 'max:60', $nameRule],
-            'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
+            'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
             'patient_birthdate' => 'required|date|before_or_equal:today',
             'patient_sex' => 'required|in:Male,Female',
             'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
@@ -712,7 +706,7 @@ class AppointmentController extends Controller
             'est_minutes' => 'nullable|integer|min:0',
         ], [
             'patient_phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
-            'patient_suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
+            'patient_suffix.regex' => 'The suffix may only contain letters, spaces, and periods.',
         ]);
 
         $h = (int)$request->input('est_hours', 0);
@@ -793,6 +787,7 @@ class AppointmentController extends Controller
         ]);
 
         ActivityLog::record('CANCELED', "Appointment canceled. Reason: {$reason}", $appointment->patient_name, $appointment->id);
+
         event(new QueueUpdated());
 
         return back()->with('success', 'Appointment successfully canceled.');
@@ -808,12 +803,14 @@ class AppointmentController extends Controller
         ]);
 
         $invalidReason = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
+
         $appointment->update([
             'payment_status' => 'invalid',
             'return_reason' => 'Invalid Payment: ' . $invalidReason
         ]);
 
         ActivityLog::record('INVALID PAYMENT', 'Payment flagged as invalid: ' . $invalidReason, $appointment->patient_name, $appointment->id);
+
         event(new QueueUpdated());
 
         return back()->with('success', 'Payment flagged as invalid.');
@@ -834,6 +831,7 @@ class AppointmentController extends Controller
         ]);
 
         ActivityLog::record('REFUNDED', "Refund manually confirmed for {$appointment->patient_name}. Processed by: {$staffName} ({$staffRole})", $appointment->patient_name, $appointment->id);
+
         event(new QueueUpdated());
 
         return back()->with('success', 'Refund confirmed successfully.');
@@ -842,12 +840,15 @@ class AppointmentController extends Controller
     public function softDelete(Appointment $appointment)
     {
         if ($appointment->user_id !== Auth::id()) abort(403);
+
         if (!$appointment->canBeDeletedByPatient()) {
             return back()->with('error', 'Paid or active appointments cannot be deleted.');
         }
 
         $appointment->update(['deleted_by_patient' => true]);
+
         ActivityLog::record('SOFT DELETED', 'Patient soft-deleted expired appointment', $appointment->patient_name, $appointment->id);
+
         event(new QueueUpdated());
 
         return redirect()->back()->with('success', 'Appointment removed from your dashboard.');
@@ -868,7 +869,9 @@ class AppointmentController extends Controller
         }
 
         $statusLabel = strtoupper($request->payment_status);
+
         ActivityLog::record('PAYMENT UPDATE', "Staff flagged appointment payment as {$statusLabel}", $appointment->patient_name, $appointment->id);
+
         event(new QueueUpdated());
 
         return redirect()->back()->with('success', "Payment status updated to {$statusLabel}.");

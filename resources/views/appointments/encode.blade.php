@@ -6,7 +6,6 @@
 @php
     $res = $appointment->result;
     $selectedTypes = $autoReportTypes;
-
     // Defined $isReadonly at the hub level so the main page and nested dynamic partials know when the folder is locked
     $isReadonly = ($appointment->status === 'released');
 
@@ -43,7 +42,7 @@
     $readyToRelease = true;
     foreach($selectedTypes as $type) {
         $p = ($type == 'med_cert' ? 'med' : $type);
-        $statusKey = $p . '_status'; 
+        $statusKey = $p . '_status';
         if(($res->$statusKey ?? 'pending') !== 'verified') {
             $readyToRelease = false;
         }
@@ -58,7 +57,6 @@
 @endphp
 
 <div id="results-hub-page" class="container text-start animate-page">
-
     {{-- 1. HUB HEADER --}}
     <div class="d-flex justify-content-between align-items-end mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
         <div>
@@ -67,7 +65,7 @@
         </div>
         
         <div class="d-flex align-items-center gap-3">
-            <a href="{{ route('appointments.index') }}" class="text-secondary small text-decoration-none hover-neon d-flex align-items-center">
+            <a href="{{ route('appointments.index', ['view' => 'queue']) }}" class="text-secondary small text-decoration-none hover-neon d-flex align-items-center">
                 <i class="bi bi-arrow-left me-1"></i> BACK TO MASTER QUEUE
             </a>
         </div>
@@ -184,7 +182,7 @@
     <div class="row g-4">
         {{-- A. Original Workstations Loop --}}
         @foreach($selectedTypes as $type)
-        @php 
+        @php
             $prefix = ($type == 'med_cert' ? 'med' : $type);
             $statusField = $prefix . '_status';
             $currentStatus = $res->$statusField ?? 'pending';
@@ -199,7 +197,7 @@
             // Formatted Timestamps
             $v1AtField = $prefix . '_v1_at';
             $v2AtField = ($type == 'lab' ? 'lab_v2_at' : $prefix . '_verified_at');
-            
+
             $encodedAt = ($res && $res->$v1AtField) ? \Carbon\Carbon::parse($res->$v1AtField) : null;
             $verifiedAt = ($res && $res->$v2AtField) ? \Carbon\Carbon::parse($res->$v2AtField) : null;
 
@@ -217,7 +215,6 @@
             $returnReasonField = $prefix . '_return_reason';
             $returnReasonValue = $res->$returnReasonField ?? '';
         @endphp
-
         <div class="col-md-6">
             <div class="card p-4 shadow-sm workstation-card h-100" style="background-color: var(--bg-card); color: var(--text-main); border-left: 4px solid {{ $theme['border'] }} !important; border-top-color: var(--border-color); border-right-color: var(--border-color); border-bottom-color: var(--border-color);">
                 <div class="d-flex justify-content-between align-items-start mb-4">
@@ -298,7 +295,6 @@
             $customTheme = $statusThemes[$customStatus] ?? $statusThemes['pending'];
             $hasFile = !empty($custom->scan_path);
         @endphp
-
         <div class="col-md-6">
             <div class="card p-4 shadow-sm workstation-card h-100" style="background-color: var(--bg-card); color: var(--text-main); border-left: 4px solid {{ $customStatus === 'verified' ? '#19d38c' : ($customStatus === 'returned' ? '#dc3545' : '#0dcaf0') }} !important; border-top-color: var(--border-color); border-right-color: var(--border-color); border-bottom-color: var(--border-color);">
                 <div class="d-flex justify-content-between align-items-start mb-4">
@@ -356,46 +352,6 @@
                 </div>
             </div>
         </div>
-
-        {{-- DELETE CUSTOM WORKSHEET MODAL --}}
-        @if(!$isReadonly && auth()->user()->isEmployee())
-        <div class="modal fade" id="deleteCustomWorksheetModal_{{ $custom->id }}" tabindex="-1" data-bs-backdrop="static">
-            <div class="modal-dialog modal-dialog-centered">
-                <form action="{{ route('workstation.custom.destroy', [$appointment->id, $custom->id]) }}" method="POST" class="modal-content shadow-lg p-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-                    @csrf
-                    @method('DELETE')
-
-                    <h5 class="text-danger fw-bold mb-1 uppercase">
-                        <i class="bi bi-trash me-2"></i>Delete Custom Worksheet?
-                    </h5>
-                    <p class="text-secondary small mb-4">
-                        Are you sure you want to remove <strong>'{{ $custom->name }}'</strong> from this folder?
-                    </p>
-
-                    <div class="mb-3 text-start">
-                        <label class="smaller fw-bold uppercase mb-1 text-danger">Select Deletion Reason</label>
-                        <select id="delete_custom_reason_select_{{ $custom->id }}" name="reason" class="form-select" onchange="toggleCustomReasonField('{{ $custom->id }}', this)" required>
-                            <option value="" disabled selected>-- Select a valid justification --</option>
-                            <option value="Accidental creation / Duplicate workstation">Accidental creation / Duplicate workstation</option>
-                            <option value="Patient requested test cancellation">Patient requested test cancellation</option>
-                            <option value="Clinician order revised / Modified billing">Clinician order revised / Modified billing</option>
-                            <option value="Others">Others (Specify below)</option>
-                        </select>
-                    </div>
-
-                    <div id="delete_custom_reason_wrapper_{{ $custom->id }}" class="mb-4 text-start d-none">
-                        <label class="smaller fw-bold uppercase mb-1 text-danger">Specify Custom Reason</label>
-                        <textarea id="delete_custom_reason_{{ $custom->id }}" class="form-control" rows="2" placeholder="Explain the deletion justification..."></textarea>
-                    </div>
-
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-outline-secondary flex-grow-1" data-bs-dismiss="modal">CANCEL</button>
-                        <button type="submit" class="btn btn-danger flex-grow-1 fw-bold uppercase">CONFIRM DELETE</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-        @endif
         @endforeach
 
         {{-- C. ADD WORKSTATION TRIGGER CARD --}}
@@ -418,7 +374,6 @@
             <h4 class="text-accent fw-bold mb-1 uppercase">Ready for Clinical Release</h4>
             <p class="text-secondary small">All internal clinical verifications are verified and signed. Proceed to finalize the patient folder.</p>
         </div>
-
         <button type="button" class="btn-custom btn-accent px-5 py-3 fs-5 shadow-lg fw-bold uppercase" data-bs-toggle="modal" data-bs-target="#releaseConfirmModal">
             Execute Final Release
         </button>
@@ -453,7 +408,6 @@
         </div>
         @endif
     </div>
-
 </div>
 
 {{-- MODALS AND OVERLAYS SECTION --}}
@@ -464,7 +418,6 @@
 
 {{-- Centralized Universal Lightbox Partial --}}
 @include('layouts.partials.lightbox-overlay')
-
 @endsection
 
 @push('scripts')
