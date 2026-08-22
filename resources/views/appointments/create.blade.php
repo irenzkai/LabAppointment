@@ -1,5 +1,4 @@
 @extends('layouts.app')
-
 @section('title', 'Create Appointment')
 
 @section('content')
@@ -16,7 +15,6 @@
                         @include('appointments.partials.wizard.dependent-wizard') {{-- Dedicated Dependent Flow --}}
                     </form>
                 </div>
-
                 {{-- RIGHT: STICKY SUMMARY SIDEBAR --}}
                 <div class="col-md-4 bg-secondary bg-opacity-10 p-4 p-md-5">
                     @include('appointments.partials.wizard.summary')
@@ -92,7 +90,6 @@
     cursor: not-allowed !important;
     pointer-events: none !important;
 }
-
 .cursor-pointer {
     cursor: pointer;
 }
@@ -102,6 +99,7 @@
 @push('scripts')
 <script>
 const user = @json(Auth::user());
+user.birthdate = "{{ Auth::user()->birthdate ? Auth::user()->birthdate->format('Y-m-d') : '' }}";
 const apiBase = "https://psgc.gitlab.io/api";
 
 let activeTargetType = 'self';
@@ -110,6 +108,12 @@ let isRestoringDraft = false;
 
 function getDraftKey(type) {
     return 'appointment_draft_' + (type || activeTargetType || 'self');
+}
+
+// Safely fetch dataset attributes from options
+function getOptData(opt, attr) {
+    if (!opt) return '';
+    return opt.getAttribute('data-' + attr) || opt.dataset[attr] || '';
 }
 
 // --- NAME, SUFFIX & BIRTHDATE VALIDATION ENGINE ---
@@ -224,6 +228,35 @@ function proceedFromStep1() {
     goToPage(2);
 }
 
+// Handle explicit dropdown selection change for dependents
+function handleDependentSelectChange() {
+    const sel = document.getElementById('dependent_id');
+    const opt = sel ? sel.options[sel.selectedIndex] : null;
+
+    if (opt && opt.value) {
+        localStorage.removeItem(getDraftKey('dependent'));
+        fillDetails(
+            'dep',
+            getOptData(opt, 'first-name'),
+            getOptData(opt, 'middle-name'),
+            getOptData(opt, 'last-name'),
+            getOptData(opt, 'suffix'),
+            getOptData(opt, 'sex'),
+            getOptData(opt, 'bday'),
+            user.phone,
+            getOptData(opt, 'street'),
+            getOptData(opt, 'barangay'),
+            getOptData(opt, 'city'),
+            getOptData(opt, 'province')
+        );
+        updateSummary();
+        saveAppointmentDraft();
+    } else {
+        clearDetails('dep');
+        updateSummary();
+    }
+}
+
 // --- TARGET TYPE SWITCHER & FLOW ISOLATION ---
 function handleTargetChange(isInitialLoad = false) {
     const typeElement = document.querySelector('input[name="target_type"]:checked');
@@ -264,18 +297,31 @@ function handleTargetChange(isInitialLoad = false) {
         disableContainerInputs(selfContainer, true);
         enableContainerInputs(depContainer, true);
 
-        const sel = document.getElementById('dependent_id');
-        const opt = sel ? sel.options[sel.selectedIndex] : null;
-
         const typeSpan = document.getElementById('sum_patient_type');
         if (typeSpan) typeSpan.innerText = "Family Dependent";
 
         if (!isInitialLoad) {
             const depDraft = getDraftData('dependent');
+            const sel = document.getElementById('dependent_id');
+            const opt = sel ? sel.options[sel.selectedIndex] : null;
+
             if (depDraft && depDraft.patient_first_name) {
                 restoreDraftIntoForm(depDraft, 'dep');
             } else if (opt && opt.value) {
-                fillDetails('dep', opt.dataset.first_name, opt.dataset.middle_name, opt.dataset.last_name, opt.dataset.suffix, opt.dataset.sex, opt.dataset.bday, user.phone, opt.dataset.street, opt.dataset.barangay, opt.dataset.city, opt.dataset.province);
+                fillDetails(
+                    'dep',
+                    getOptData(opt, 'first-name'),
+                    getOptData(opt, 'middle-name'),
+                    getOptData(opt, 'last-name'),
+                    getOptData(opt, 'suffix'),
+                    getOptData(opt, 'sex'),
+                    getOptData(opt, 'bday'),
+                    user.phone,
+                    getOptData(opt, 'street'),
+                    getOptData(opt, 'barangay'),
+                    getOptData(opt, 'city'),
+                    getOptData(opt, 'province')
+                );
             } else {
                 clearDetails('dep');
             }
@@ -307,7 +353,20 @@ function resetPatientDetails() {
 
 function resetSelfDetails() {
     localStorage.removeItem(getDraftKey('self'));
-    fillDetails('self', user.first_name, user.middle_name, user.last_name, user.suffix, user.sex, user.birthdate, user.phone, user.street, user.barangay, user.city, user.province);
+    fillDetails(
+        'self', 
+        user.first_name, 
+        user.middle_name, 
+        user.last_name, 
+        user.suffix, 
+        user.sex, 
+        user.birthdate, 
+        user.phone, 
+        user.street, 
+        user.barangay, 
+        user.city, 
+        user.province
+    );
     updateSummary();
     saveAppointmentDraft();
 }
@@ -316,8 +375,22 @@ function resetDependentDetails() {
     localStorage.removeItem(getDraftKey('dependent'));
     const sel = document.getElementById('dependent_id');
     const opt = sel ? sel.options[sel.selectedIndex] : null;
+
     if (opt && opt.value) {
-        fillDetails('dep', opt.dataset.first_name, opt.dataset.middle_name, opt.dataset.last_name, opt.dataset.suffix, opt.dataset.sex, opt.dataset.bday, user.phone, opt.dataset.street, opt.dataset.barangay, opt.dataset.city, opt.dataset.province);
+        fillDetails(
+            'dep',
+            getOptData(opt, 'first-name'),
+            getOptData(opt, 'middle-name'),
+            getOptData(opt, 'last-name'),
+            getOptData(opt, 'suffix'),
+            getOptData(opt, 'sex'),
+            getOptData(opt, 'bday'),
+            user.phone,
+            getOptData(opt, 'street'),
+            getOptData(opt, 'barangay'),
+            getOptData(opt, 'city'),
+            getOptData(opt, 'province')
+        );
     } else {
         clearDetails('dep');
     }
@@ -340,7 +413,8 @@ function fillDetails(prefix, f, m, l, suffix, sex, bday, phone, street, barangay
 
     const middleInput = document.getElementById(`${prefix}_middle_name`);
     const noneMnSwitch = document.getElementById(`${prefix}_no_mn`);
-    if (m === 'N/A' || !m) {
+
+    if (!m || m === 'N/A' || m.toUpperCase() === 'N/A') {
         if (middleInput) {
             middleInput.value = 'N/A';
             middleInput.readOnly = true;
@@ -366,7 +440,10 @@ function fillDetails(prefix, f, m, l, suffix, sex, bday, phone, street, barangay
     if (sexEl) sexEl.value = sex || '';
 
     const bdayEl = document.getElementById(`${prefix}_bday`);
-    if (bdayEl) bdayEl.value = bday ? bday.split('T')[0] : '';
+    if (bdayEl) {
+        const cleanBday = (bday || '').split('T')[0];
+        bdayEl.value = cleanBday;
+    }
 
     const hiddenPhoneVal = phone || '';
     const displayPhoneInput = document.getElementById(`${prefix}_phone_display`);
@@ -461,6 +538,7 @@ function viewReferralFile(prefixOverride = null) {
     const prefix = prefixOverride || (activeTargetType === 'dependent' ? 'dep' : 'self');
     const b64 = localStorage.getItem(`referral_base64_${prefix}`);
     const name = localStorage.getItem(`referral_name_${prefix}`) || "Doctor's Referral Note";
+
     if (b64 && typeof window.openFilePreview === 'function') {
         window.openFilePreview(b64, name);
     }
@@ -469,6 +547,7 @@ function viewReferralFile(prefixOverride = null) {
 function restoreReferralPreview(prefix) {
     const b64 = localStorage.getItem(`referral_base64_${prefix}`);
     const name = localStorage.getItem(`referral_name_${prefix}`);
+
     if (b64 && name) {
         const previewContainer = document.getElementById(`${prefix}_referral_preview_container`);
         const inputWrapper = document.getElementById(`${prefix}_referral_wrapper`);
@@ -527,6 +606,7 @@ function viewReceiptFile(prefixOverride = null) {
     const prefix = prefixOverride || (activeTargetType === 'dependent' ? 'dep' : 'self');
     const b64 = localStorage.getItem(`receipt_base64_${prefix}`);
     const name = localStorage.getItem(`receipt_name_${prefix}`) || "Proof of Payment Receipt";
+
     if (b64 && typeof window.openFilePreview === 'function') {
         window.openFilePreview(b64, name);
     }
@@ -535,6 +615,7 @@ function viewReceiptFile(prefixOverride = null) {
 function restoreReceiptPreview(prefix) {
     const b64 = localStorage.getItem(`receipt_base64_${prefix}`);
     const name = localStorage.getItem(`receipt_name_${prefix}`);
+
     if (b64 && name) {
         const previewContainer = document.getElementById(`${prefix}_receipt_preview_container`);
         const inputWrapper = document.getElementById(`${prefix}_receipt_input_wrapper`);
@@ -549,6 +630,7 @@ function restoreReceiptPreview(prefix) {
 function updateFieldLockState(prefix) {
     const receiptInput = document.getElementById(`${prefix}_in_receipt`);
     const hasReceipt = (receiptInput && receiptInput.files && receiptInput.files.length > 0) || localStorage.getItem(`receipt_base64_${prefix}`) !== null;
+
     const payCash = document.getElementById(`${prefix}_pay_cash`);
     const payCashless = document.getElementById(`${prefix}_pay_cashless`);
     const providerRadios = document.querySelectorAll(`.${prefix}-prov-radio`);
@@ -593,6 +675,7 @@ function toggleSubmitButton(prefixOverride = null) {
 function toggleTestDetails(drawerId, btn) {
     const drawer = document.getElementById(drawerId);
     if (!drawer) return;
+
     drawer.classList.toggle('d-none');
     const icon = btn.querySelector('i');
     if (icon) {
@@ -611,7 +694,9 @@ function resortTests(prefixOverride = null) {
     items.sort((a, b) => {
         const aChecked = a.querySelector('.test-checkbox')?.checked ? 1 : 0;
         const bChecked = b.querySelector('.test-checkbox')?.checked ? 1 : 0;
+
         if (aChecked !== bChecked) return bChecked - aChecked;
+
         const aName = a.dataset.name || '';
         const bName = b.dataset.name || '';
         return aName.localeCompare(bName);
@@ -694,6 +779,7 @@ function restoreDraftIntoForm(draftData, prefix) {
 
     const testIds = draftData['service_ids[]'] || [];
     const container = document.getElementById(`${prefix === 'dep' ? 'dependent' : 'self'}-wizard-container`);
+
     if (container) {
         container.querySelectorAll('.test-checkbox').forEach(cb => {
             cb.checked = testIds.includes(cb.value);
@@ -796,13 +882,17 @@ function toggleDepMN(chk) {
 function findOptionFlexibly(selectEl, searchVal) {
     if (!selectEl || !searchVal) return null;
     const target = searchVal.toString().trim().toUpperCase();
+
     return Array.from(selectEl.options).find(opt => {
         if (!opt.value && !opt.text) return false;
         const optVal = opt.value.toString().trim().toUpperCase();
         const optText = opt.text.toString().trim().toUpperCase();
+
         if (optVal === target || optText === target) return true;
+
         const normOpt = optText.replace(/\b(CITY|PROVINCE|MUNICIPALITY) OF\b/g, '').replace(/[^A-Z0-9]/g, '');
         const normTarget = target.replace(/\b(CITY|PROVINCE|MUNICIPALITY) OF\b/g, '').replace(/[^A-Z0-9]/g, '');
+
         return normOpt && normOpt === normTarget;
     });
 }
@@ -811,6 +901,7 @@ async function fetchProvinces() {
     try {
         const res = await fetch(`${apiBase}/provinces.json`);
         const data = await res.json();
+
         ['self', 'dep'].forEach(prefix => {
             const sel = document.getElementById(`${prefix}_province`);
             if (sel) {
@@ -832,11 +923,13 @@ async function fetchCities(provCode, prefix = 'self') {
 
     if (citySel) citySel.disabled = true;
     if (brgySel) brgySel.disabled = true;
+
     if (citySel) citySel.innerHTML = '<option value="">Loading Cities...</option>';
 
     try {
         const res = await fetch(`${apiBase}/provinces/${provCode}/cities-municipalities.json`);
         const data = await res.json();
+
         if (citySel) {
             citySel.innerHTML = '<option value="">Select City</option>';
             data.sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
@@ -864,6 +957,7 @@ async function fetchBarangays(cityCode, prefix = 'self') {
     try {
         const res = await fetch(`${apiBase}/cities-municipalities/${cityCode}/barangays.json`);
         const data = await res.json();
+
         if (brgySel) {
             brgySel.innerHTML = '<option value="">Select Barangay</option>';
             data.sort((a, b) => a.name.localeCompare(b.name)).forEach(b => {
@@ -886,6 +980,7 @@ async function setAddressDropdowns(prefix, provinceName, cityName, barangayName)
     const brgySel = document.getElementById(`${prefix}_brgy`);
 
     if (!provSel) return;
+
     if (provSel.options.length <= 1) {
         await fetchProvinces();
     }
@@ -1042,6 +1137,7 @@ async function fetchTimeSlots(prefix = null) {
 
         const now = new Date();
         const todayLocal = now.toLocaleDateString('en-CA');
+
         const draft = getDraftData(activeTargetType);
         const savedSlot = draft['time_slot'] || '';
 
@@ -1067,7 +1163,6 @@ async function fetchTimeSlots(prefix = null) {
                 </div>`;
                 availableCount++;
             }
-
             start.setMinutes(start.getMinutes() + data.config.slot_duration);
         }
 
@@ -1095,6 +1190,7 @@ function handleSlotSelection(prefix = null) {
         const dateEl = document.getElementById(`${currentPrefix}_wiz_date`);
         const date = dateEl ? dateEl.value : '';
         const timeLabel = selectedRadio.nextElementSibling.innerText;
+
         setSchedule(date, timeLabel);
         saveAppointmentDraft();
     }
@@ -1133,6 +1229,7 @@ async function determineHighestStep(draftData) {
     const street = document.getElementById(`${prefix}_street`)?.value?.trim();
 
     const phoneRegex = /^09\d{9}$/;
+
     if (!fn || !ln || validateSuffixString(sfx) || !sex || !bday || !phone || !phoneRegex.test(phone) || !prov || !city || !brgy || !street) {
         return 2;
     }
@@ -1152,6 +1249,7 @@ async function determineHighestStep(draftData) {
 
     const container = document.getElementById(`${targetType}-wizard-container`);
     const selectedTests = container ? container.querySelectorAll('.test-checkbox:checked') : [];
+
     if (selectedTests.length === 0) return 3;
 
     const date = document.getElementById(`${prefix}_wiz_date`)?.value;
@@ -1159,6 +1257,7 @@ async function determineHighestStep(draftData) {
     const slot = slotRadio ? slotRadio.value : '';
 
     const todayStr = today.toISOString().split('T')[0];
+
     if (!date || !slot || date < todayStr) return 4;
 
     try {
@@ -1172,9 +1271,9 @@ async function determineHighestStep(draftData) {
 
         const isFull = (data.full_slots || []).includes(slot);
         let isPast = false;
-
         const now = new Date();
         const todayLocal = now.toLocaleDateString('en-CA');
+
         if (date === todayLocal && data.config) {
             const leadTimeMs = (parseInt(data.config.lead_time_hours) || 0) * 3600 * 1000;
             const cutoffTime = now.getTime() + leadTimeMs;
@@ -1205,7 +1304,6 @@ function clearSavedSlotInDraft() {
             localStorage.setItem(getDraftKey(activeTargetType), JSON.stringify(draft));
         } catch(e) {}
     }
-
     const container = document.getElementById(`${activeTargetType}-wizard-container`);
     const radio = container ? container.querySelector('input[name="time_slot"]:checked') : null;
     if (radio) radio.checked = false;
@@ -1332,10 +1430,12 @@ function validateGenericStep2(prefix) {
 function validateStep3() {
     const container = document.getElementById(`${activeTargetType}-wizard-container`);
     const selected = container ? container.querySelectorAll('.test-checkbox:checked') : [];
+
     if (selected.length === 0) {
         showWizardAlert("Please select at least one laboratory test before proceeding.");
         return;
     }
+
     goToPage(4);
 }
 
@@ -1410,6 +1510,7 @@ function togglePaymentFields(prefix) {
 function handleProviderChange(prefix, radio) {
     const qrImg = document.getElementById(`${prefix}_selected_provider_qr`);
     const qrName = document.getElementById(`${prefix}_selected_provider_name`);
+
     if (radio && radio.checked) {
         if (qrImg) qrImg.src = radio.dataset.qr;
         if (qrName) qrName.innerText = radio.dataset.name;
@@ -1434,12 +1535,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const savedTarget = localStorage.getItem('appointment_active_target') || 'self';
     const targetRadio = document.querySelector(`input[name="target_type"][value="${savedTarget}"]`);
+
     if (targetRadio) {
         targetRadio.checked = true;
         activeTargetType = savedTarget;
     }
 
     const draftData = getDraftData(activeTargetType);
+
     if (draftData.dependent_id) {
         const depSelect = document.getElementById('dependent_id');
         if (depSelect) depSelect.value = draftData.dependent_id;
@@ -1448,6 +1551,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     handleTargetChange(true);
 
     const prefix = activeTargetType === 'dependent' ? 'dep' : 'self';
+
     if (draftData && Object.keys(draftData).length > 0) {
         restoreDraftIntoForm(draftData, prefix);
     } else {
@@ -1458,6 +1562,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const provToLoad = draftData['patient_province'] || document.getElementById(`${prefix}_province`)?.value;
         const cityToLoad = draftData['patient_city'] || '';
         const brgyToLoad = draftData['patient_barangay'] || '';
+
         if (provToLoad) {
             await setAddressDropdowns(prefix, provToLoad, cityToLoad, brgyToLoad);
         }
@@ -1473,6 +1578,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const highestStep = await determineHighestStep(draftData);
     const savedStep = parseInt(localStorage.getItem('appointment_step') || '1');
     const targetStep = Math.min(savedStep, highestStep);
+
     goToPage(targetStep > 0 ? targetStep : 1);
 
     isRestoringDraft = false;
@@ -1514,11 +1620,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         form.addEventListener('submit', function(e) {
             const prefix = activeTargetType === 'dependent' ? 'dep' : 'self';
             const submitBtn = document.getElementById(`${prefix}_submit_btn`);
+
             if (submitBtn) {
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = 'SUBMITTING... <span class="spinner-border spinner-border-sm ms-2"></span>';
             }
+
             compileAppointmentAddress();
+
             localStorage.removeItem(getDraftKey('self'));
             localStorage.removeItem(getDraftKey('dependent'));
             localStorage.removeItem('appointment_active_target');

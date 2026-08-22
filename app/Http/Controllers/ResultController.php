@@ -33,7 +33,6 @@ class ResultController extends Controller
     public function hub(Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
-
         if ($appointment->status === 'released') {
             if (!session()->has("access_granted_{$appointment->id}_hub")) {
                 if (request()->ajax() || request()->wantsJson() || request()->headers->has('X-Requested-With')) {
@@ -55,7 +54,6 @@ class ResultController extends Controller
         }
 
         $autoReportTypes = array_unique($autoReportTypes);
-
         $res = $appointment->result()->firstOrCreate(['appointment_id' => $appointment->id]);
 
         // Only initialize included_reports if it's empty to allow persistent deletion/addition
@@ -81,9 +79,7 @@ class ResultController extends Controller
     public function editDemographics(Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
-
         $services = Service::where('is_available', true)->orderBy('name')->get();
-
         return view('appointments.edit-details', compact('appointment', 'services'));
     }
 
@@ -93,7 +89,6 @@ class ResultController extends Controller
     public function verify(Request $request, Appointment $appointment, $type)
     {
         if (Gate::denies('isStaff')) abort(403);
-
         $request->validate(['sig_name' => 'required|string|max:255']);
 
         $res = $appointment->result;
@@ -180,7 +175,6 @@ class ResultController extends Controller
         }
 
         $reports = $res->included_reports ?? [];
-
         if (($key = array_search($type, $reports)) !== false) {
             unset($reports[$key]);
             $res->included_reports = array_values($reports);
@@ -290,7 +284,6 @@ class ResultController extends Controller
 
             $reports[] = $type;
             $res->included_reports = $reports;
-
             $prefix = ($type == 'med_cert' ? 'med' : $type);
             $res->{"{$prefix}_status"} = 'pending';
             $res->save();
@@ -337,6 +330,7 @@ class ResultController extends Controller
             ? strtoupper(trim($request->patient_middle_name)) : 'N/A';
         $lName = strtoupper(trim($request->patient_last_name));
         $suffix = $request->filled('patient_suffix') ? strtoupper(trim($request->patient_suffix)) : '';
+
         $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
         if (!empty($suffix)) {
             $displayName .= " {$suffix}";
@@ -436,7 +430,7 @@ class ResultController extends Controller
     {
         $user = Auth::user();
 
-        // 1. Expanded ownership check: User is owner if user ID matches appointment user_id, 
+        // 1. Expanded ownership check: User is owner if user ID matches appointment user_id,
         // OR patient_email matches user's email, OR patient is a family dependent of the user.
         $isOwner = ($user->id === $appointment->user_id)
             || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email))
@@ -486,6 +480,7 @@ class ResultController extends Controller
                     return Storage::disk('public')->download($filePath, $filename);
                 }
             }
+
             abort(404, 'Scanned worksheet file not found on storage server.');
         }
 
@@ -513,7 +508,6 @@ class ResultController extends Controller
                 $mimeType = 'image/' . $ext;
                 if ($ext === 'jpg' || $ext === 'jfif') $mimeType = 'image/jpeg';
                 $base64Image = 'data:' . $mimeType . ';base64,' . $imageData;
-
                 $dimensions = @getimagesizefromstring($fileContents);
                 $imgWidth = $dimensions[0] ?? null;
                 $imgHeight = $dimensions[1] ?? null;
@@ -523,6 +517,7 @@ class ResultController extends Controller
                     'imgWidth' => $imgWidth,
                     'imgHeight' => $imgHeight
                 ]);
+
                 $filename = "Result_{$type}_{$appointment->id}.pdf";
                 return $mode === 'preview' ? $pdf->stream($filename) : $pdf->download($filename);
             }
@@ -561,7 +556,6 @@ class ResultController extends Controller
         ]);
 
         $filename = "Result_{$type}_{$appointment->id}.pdf";
-
         return $mode === 'preview' ? $pdf->stream($filename) : $pdf->download($filename);
     }
 
@@ -571,7 +565,6 @@ class ResultController extends Controller
     public function forwardToEmail(Appointment $appointment)
     {
         $user = auth()->user();
-
         $isOwner = ($user->id === $appointment->user_id)
             || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email))
             || ($appointment->dependent_id && $user->dependents()->where('id', $appointment->dependent_id)->exists());
@@ -604,16 +597,57 @@ class ResultController extends Controller
             $appointment->update(['user_id' => $existingUser->id]);
         }
 
-        $birthdate = $appointment->patient_birthdate;
-        $m = $birthdate ? $birthdate->format('m') : '01';
-        $d = $birthdate ? $birthdate->format('d') : '01';
-        $y = $birthdate ? $birthdate->format('Y') : '2000';
+        // 1. Resolve Birthdate cleanly (fallback chain: appointment -> dependent -> user)
+        $rawBirthdate = $appointment->patient_birthdate 
+            ?? $appointment->dependent?->birthdate 
+            ?? $appointment->user?->birthdate;
 
-        $fInit = $appointment->patient_first_name ? substr($appointment->patient_first_name, 0, 1) : 'X';
-        $mInit = ($appointment->patient_middle_name && $appointment->patient_middle_name !== 'N/A') ? substr($appointment->patient_middle_name, 0, 1) : '';
-        $lInit = $appointment->patient_last_name ? substr($appointment->patient_last_name, 0, 1) : 'Y';
+        if ($rawBirthdate instanceof \DateTimeInterface) {
+            $dateStr = $rawBirthdate->format('Y-m-d');
+        } elseif (!empty($rawBirthdate)) {
+            $dateStr = date('Y-m-d', strtotime((string)$rawBirthdate));
+        } else {
+            $dateStr = '2000-01-01';
+        }
 
-        $password = strtoupper("{$m}{$d}{$y}{$fInit}{$mInit}{$lInit}");
+        // Extract YYYY, MM, DD directly from ISO string YYYY-MM-DD to avoid timezone shifting or locale format inversion
+        $dateParts = explode('-', $dateStr);
+        $y = $dateParts[0] ?? '2000';
+        $m = $dateParts[1] ?? '01';
+        $d = $dateParts[2] ?? '01';
+
+        // 2. Resolve Full Name parts & extract first letter of every word for initials
+        $nameParts = [];
+        if (!empty($appointment->patient_first_name)) {
+            $nameParts[] = trim($appointment->patient_first_name);
+        }
+        if (!empty($appointment->patient_middle_name) && strtoupper(trim($appointment->patient_middle_name)) !== 'N/A') {
+            $nameParts[] = trim($appointment->patient_middle_name);
+        }
+        if (!empty($appointment->patient_last_name)) {
+            $nameParts[] = trim($appointment->patient_last_name);
+        }
+        if (!empty($appointment->patient_suffix)) {
+            $nameParts[] = trim($appointment->patient_suffix);
+        }
+
+        $rawFullName = !empty($nameParts) 
+            ? implode(' ', $nameParts) 
+            : ($appointment->patient_name ?? '');
+
+        // Extract first letter of every word (letters only)
+        preg_match_all('/\b\p{L}/u', $rawFullName, $matches);
+        $initials = !empty($matches[0]) ? implode('', $matches[0]) : '';
+        $initials = mb_strtoupper($initials, 'UTF-8');
+
+        if (empty($initials)) {
+            $initials = 'PATIENT';
+        }
+
+        $password = "{$m}{$d}{$y}{$initials}";
+
+        // Log generated password for local testing & debugging
+        Log::info("PDF Decryption Password generated for Appointment #{$appointment->id} ({$rawFullName}): {$password}");
 
         $promoUrl = route('register', [
             'promote' => Crypt::encryptString($appointment->id),
@@ -645,7 +679,6 @@ class ResultController extends Controller
                 $controller = new self();
                 $reportPages = $controller->fileToBase64Pages($res->radio_scan);
                 $xrayPages = $controller->fileToBase64Pages($res->xray_image);
-
                 $hasManualFindings = !empty($res->radio_data['findings']) || !empty($res->radio_data['impression']);
                 $renderManualReport = empty($reportPages) && ($hasManualFindings || !$res->radio_scan);
 
@@ -669,7 +702,6 @@ class ResultController extends Controller
 
             $column = $fileMap[$type] ?? null;
             $filePath = $res->$column;
-
             $isImage = false;
             if ($column && $filePath) {
                 $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
@@ -682,7 +714,6 @@ class ResultController extends Controller
                 $mimeType = 'image/' . $ext;
                 if ($ext === 'jpg' || $ext === 'jfif') $mimeType = 'image/jpeg';
                 $base64Image = 'data:' . $mimeType . ';base64,' . $imageData;
-
                 $dimensions = @getimagesizefromstring($fileContents);
                 $imgWidth = $dimensions[0] ?? null;
                 $imgHeight = $dimensions[1] ?? null;
@@ -716,14 +747,12 @@ class ResultController extends Controller
             $filePath = $custom->scan_path;
             if ($filePath && Storage::disk('public')->exists($filePath)) {
                 $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
-
                 if (in_array($ext, ['jpg', 'jpeg', 'png', 'jfif'])) {
                     $fileContents = Storage::disk('public')->get($filePath);
                     $imageData = base64_encode($fileContents);
                     $mimeType = 'image/' . $ext;
                     if ($ext === 'jpg' || $ext === 'jfif') $mimeType = 'image/jpeg';
                     $base64Image = 'data:' . $mimeType . ';base64,' . $imageData;
-
                     $dimensions = @getimagesizefromstring($fileContents);
                     $imgWidth = $dimensions[0] ?? null;
                     $imgHeight = $dimensions[1] ?? null;
@@ -733,6 +762,7 @@ class ResultController extends Controller
                         'imgWidth' => $imgWidth,
                         'imgHeight' => $imgHeight
                     ]);
+
                     $pdf->setEncryption($password);
 
                     $attachments[] = [
@@ -757,31 +787,31 @@ class ResultController extends Controller
             $message->to($email)
                 ->subject('Your Medical Results are Ready - Medscreen')
                 ->html("
-                <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
-                    <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
-                        <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
-                    </div>
-                    <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
-                        <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$patientFirstName},</h3>
-                        <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Your secure, password-protected clinical results have been successfully released. Please find the encrypted PDF documents attached to this email.</p>
-                        <div style='background-color: #f8fafc; border-left: 4px solid #19D38C; padding: 20px; margin: 30px 0; border-radius: 6px;'>
-                            <strong style='color: #1c232d; display: block; margin-bottom: 8px; font-size: 16px;'>PDF Decryption Password:</strong>
-                            <span style='font-size: 14px; color: #4a5568; line-height: 1.5;'>
-                                Your files are secured using your personal password pattern:<br>
-                                <strong style='color: #15b376; font-size: 15px;'>MMDDYYYY + Capitalized Initials</strong><br>
-                                <span style='color: #718096; font-size: 12px; display: block; margin-top: 6px;'>Example: For birthdate October 24, 2005 & initials JDC, the password is <strong>10242005JDC</strong></span>
-                            </span>
+                    <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
+                        <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
+                            <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
                         </div>
-                        " . (($hasAccount || $isForward) ? "" : "
-                        <div style='border: 1.5px dashed #19D38C; background-color: rgba(25, 211, 140, 0.03); padding: 25px; text-align: center; border-radius: 8px; margin: 30px 0;'>
-                            <h4 style='margin-top: 0; color: #1c232d; font-size: 18px;'>Activate Your Permanent Portal</h4>
-                            <p style='font-size: 14px; color: #4a5568; margin-bottom: 20px; line-height: 1.5;'>A temporary profile has been registered for you. Click below to secure your credentials and access your lifetime clinical history logs.</p>
-                            <a href='{$promoUrl}' style='display: inline-block; background-color: #19D38C; color: #1C232D; font-weight: bold; text-decoration: none; padding: 12px 30px; border-radius: 6px;'>ACTIVATE PROFILE</a>
+                        <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
+                            <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$patientFirstName},</h3>
+                            <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Your secure, password-protected clinical results have been successfully released. Please find the encrypted PDF documents attached to this email.</p>
+                            <div style='background-color: #f8fafc; border-left: 4px solid #19D38C; padding: 20px; margin: 30px 0; border-radius: 6px;'>
+                                <strong style='color: #1c232d; display: block; margin-bottom: 8px; font-size: 16px;'>PDF Decryption Password:</strong>
+                                <span style='font-size: 14px; color: #4a5568; line-height: 1.5;'>
+                                    Your files are secured using your personal password pattern:<br>
+                                    <strong style='color: #15b376; font-size: 15px;'>MMDDYYYY + Capitalized Initials</strong><br>
+                                    <span style='color: #718096; font-size: 12px; display: block; margin-top: 6px;'>Example: For birthdate October 24, 2005 & initials JDC, the password is <strong>10242005JDC</strong></span>
+                                </span>
+                            </div>
+                            " . (($hasAccount || $isForward) ? "" : "
+                            <div style='border: 1.5px dashed #19D38C; background-color: rgba(25, 211, 140, 0.03); padding: 25px; text-align: center; border-radius: 8px; margin: 30px 0;'>
+                                <h4 style='margin-top: 0; color: #1c232d; font-size: 18px;'>Activate Your Permanent Portal</h4>
+                                <p style='font-size: 14px; color: #4a5568; margin-bottom: 20px; line-height: 1.5;'>A temporary profile has been registered for you. Click below to secure your credentials and access your lifetime clinical history logs.</p>
+                                <a href='{$promoUrl}' style='display: inline-block; background-color: #19D38C; color: #1C232D; font-weight: bold; text-decoration: none; padding: 12px 30px; border-radius: 6px;'>ACTIVATE PROFILE</a>
+                            </div>
+                            ") . "
+                            <p style='margin-top: 30px; line-height: 1.6; color: #4a5568; font-size: 15px;'>Best regards,<br><strong>Medscreen Diagnostic Laboratory</strong></p>
                         </div>
-                        ") . "
-                        <p style='margin-top: 30px; line-height: 1.6; color: #4a5568; font-size: 15px;'>Best regards,<br><strong>Medscreen Diagnostic Laboratory</strong></p>
                     </div>
-                </div>
                 ");
 
             foreach ($attachments as $file) {
@@ -798,7 +828,6 @@ class ResultController extends Controller
                     'url' => route('patient.history'),
                     'type' => 'success'
                 ]));
-
                 event(new \App\Events\NotificationSent($patientUser->id, 'Clinical Record Corrected', "Your clinical results for Appointment #{$appointment->id} have been updated."));
             }
         }
@@ -813,7 +842,6 @@ class ResultController extends Controller
     {
         $reportPages = $this->fileToBase64Pages($res->radio_scan);
         $xrayPages = $this->fileToBase64Pages($res->xray_image);
-
         $hasManualFindings = !empty($res->radio_data['findings']) || !empty($res->radio_data['impression']);
         $renderManualReport = empty($reportPages) && ($hasManualFindings || !$res->radio_scan);
 
@@ -826,7 +854,6 @@ class ResultController extends Controller
         ]);
 
         $filename = "Result_radio_{$appointment->id}.pdf";
-
         return $mode === 'preview' ? $pdf->stream($filename) : $pdf->download($filename);
     }
 
@@ -880,7 +907,6 @@ class ResultController extends Controller
     public function verifySearch(Request $request)
     {
         $query = $request->query('query');
-
         if (empty($query)) {
             return view('verify-search');
         }

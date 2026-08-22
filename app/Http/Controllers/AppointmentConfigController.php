@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{Appointment, AppointmentConfig, Dependent};
+use App\Models\{Appointment, AppointmentConfig, Dependent, ActivityLog};
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\{Auth, DB, Log};
+use Illuminate\Support\Facades\{Auth, Gate, DB, Log};
 
 class AppointmentConfigController extends Controller
 {
@@ -71,7 +71,9 @@ class AppointmentConfigController extends Controller
             'max_patients_per_slot' => 'required|integer|min:1',
             'lead_time_hours' => 'required|integer|min:0',
             'day_of_week' => 'nullable|integer|between:0,6',
-            'specific_date' => 'nullable|date'
+            'specific_date' => 'nullable|date',
+            'reason' => 'required|string',
+            'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
         ]);
 
         $data = $request->only([
@@ -83,18 +85,26 @@ class AppointmentConfigController extends Controller
         $data['is_open'] = $request->has('is_open');
         $data['has_lunch_break'] = $request->has('has_lunch_break');
 
+        $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
+
         if ($request->mode === 'all') {
             // Update all 7 recurring day rules
             AppointmentConfig::whereNotNull('day_of_week')->update($data);
             $msg = "Global rules updated for all standard operating days.";
+            ActivityLog::record('SCHEDULE UPDATE', "Global schedule rules updated for all operating days. Reason: {$reasonText}");
         } elseif ($request->mode === 'date') {
             // Create or Update a one-off override (e.g., Holiday or special schedule)
             AppointmentConfig::updateOrCreate(['specific_date' => $request->specific_date], $data);
-            $msg = "Schedule override set for " . date('M d, Y', strtotime($request->specific_date));
+            $formattedDate = date('M d, Y', strtotime($request->specific_date));
+            $msg = "Schedule override set for " . $formattedDate;
+            ActivityLog::record('SCHEDULE OVERRIDE', "Schedule override set for {$formattedDate}. Reason: {$reasonText}");
         } else {
             // Update a standard recurring day (e.g., Every Monday)
             AppointmentConfig::updateOrCreate(['day_of_week' => $request->day_of_week], $data);
-            $msg = "Recurring rules updated.";
+            $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            $dayName = $days[$request->day_of_week] ?? 'Day';
+            $msg = "Recurring rules updated for {$dayName}.";
+            ActivityLog::record('SCHEDULE UPDATE', "Recurring schedule rules updated for {$dayName}. Reason: {$reasonText}");
         }
 
         return back()->with('success', $msg);
@@ -174,7 +184,6 @@ class AppointmentConfigController extends Controller
                 'server_time' => date('H:i:s'),
                 'server_date' => date('Y-m-d')
             ]);
-
         } catch (\Exception $e) {
             Log::error("Occupancy Check Error: " . $e->getMessage());
             return response()->json(['error' => 'Internal Server Error'], 500);

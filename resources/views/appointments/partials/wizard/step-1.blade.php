@@ -33,21 +33,21 @@
             </label>
         </div>
         <div id="dep_selector_div" class="mt-3 d-none animate-fade-in">
-            <select name="dependent_id" id="dependent_id" class="form-select py-3 shadow-none fw-bold" onchange="handleTargetChange()">
+            <select name="dependent_id" id="dependent_id" class="form-select py-3 shadow-none fw-bold" onchange="handleDependentSelectChange()">
                 <option value="">-- SELECT FAMILY MEMBER --</option>
                 @foreach(Auth::user()->dependents as $dep)
                 <option value="{{ $dep->id }}" 
-                    data-first_name="{{ $dep->first_name }}"
-                    data-middle_name="{{ $dep->middle_name }}"
-                    data-last_name="{{ $dep->last_name }}"
-                    data-suffix="{{ $dep->suffix }}" 
+                    data-first-name="{{ $dep->first_name }}"
+                    data-middle-name="{{ $dep->middle_name }}"
+                    data-last-name="{{ $dep->last_name }}"
+                    data-suffix="{{ $dep->suffix ?? '' }}" 
                     data-sex="{{ $dep->sex }}" 
-                    data-bday="{{ $dep->birthdate->format('Y-m-d') }}"
+                    data-bday="{{ $dep->birthdate ? $dep->birthdate->format('Y-m-d') : '' }}"
                     data-street="{{ $dep->street }}"
                     data-barangay="{{ $dep->barangay }}"
                     data-city="{{ $dep->city }}"
                     data-province="{{ $dep->province }}">
-                    {{ strtoupper($dep->name) }} ({{ $dep->sex === 'Male' ? 'SON' : 'DAUGHTER' }})
+                    {{ strtoupper($dep->name) }} ({{ $dep->sex === 'Male' ? 'SON / DEPENDENT' : 'DAUGHTER / DEPENDENT' }})
                 </option>
                 @endforeach
             </select>

@@ -65,12 +65,11 @@ class ProfileController extends Controller
         $user->save();
 
         // 4. Record security audit log per RA 10173 compliance guidelines
-        ActivityLog::record('PROFILE UPDATED', "User updated their clinical profile details.", $user->name, $user->id);
+        ActivityLog::record('PROFILE UPDATED', "User updated their clinical profile details.", $user->name);
 
         if ($emailChanged) {
             // Clear current OTP session to trigger a fresh OTP email upon prompt redirection
             session()->forget('email_otp_code');
-
             return redirect()->route('verification.notice')->with('status', 'verification-code-sent');
         }
 
@@ -123,7 +122,7 @@ class ProfileController extends Controller
             'password' => Hash::make($validated['password']),
         ]);
 
-        ActivityLog::record('PASSWORD UPDATED', "User updated their account password.", $request->user()->name, $request->user()->id);
+        ActivityLog::record('PASSWORD UPDATED', "User updated their account password.", $request->user()->name);
 
         return back()->with('status', 'password-updated');
     }
@@ -150,7 +149,7 @@ class ProfileController extends Controller
         $user->email_verified_at = null;
         $user->save();
 
-        ActivityLog::record('EMAIL CORRECTED', "User changed their unverified email address to {$user->email}.", $user->name, $user->id);
+        ActivityLog::record('EMAIL CORRECTED', "User changed their unverified email address to {$user->email}.", $user->name);
 
         // Clear current OTP session to trigger a fresh OTP email upon prompt redirection
         session()->forget('email_otp_code');
