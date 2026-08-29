@@ -1,9 +1,9 @@
 @extends('layouts.app')
+
 @section('title', 'Laboratory Appointments')
 
 @section('content')
 <div class="container-fluid text-start animate-page">
-
 {{-- Page Header --}}
 <div class="d-flex justify-content-between align-items-center mb-5 border-bottom pb-3" style="border-color: var(--border-color) !important;">
     <div>
@@ -194,6 +194,7 @@
 @php
 $isExpired = $app->isExpired();
 @endphp
+
 {{-- A. DELETE EXPIRED APPOINTMENT MODAL --}}
 @if(Auth::id() == $app->user_id)
 <div class="modal fade" id="deleteExpiredModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
@@ -216,18 +217,87 @@ $isExpired = $app->isExpired();
 </div>
 @endif
 
-{{-- C. CANCEL APPOINTMENT MODAL --}}
+{{-- C. CANCEL APPOINTMENT MODAL WITH CASHLESS CONFIRMED VS UNCONFIRMED STATUS NOTICES --}}
 @if(Auth::id() == $app->user_id)
 <div class="modal fade" id="cancelAppointmentModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 450px;">
         <form action="{{ route('appointments.cancel', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
             @csrf
             <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
-                <h5 class="text-danger fw-bold uppercase small m-0">Cancel Appointment?</h5>
+                <h5 class="text-danger fw-bold uppercase small m-0 d-flex align-items-center gap-2">
+                    <i class="bi bi-x-circle-fill fs-5"></i>
+                    <span>Cancel Appointment?</span>
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4 text-start">
-                <p class="small text-muted mb-0">Are you sure you want to cancel this appointment? This action is irreversible, but you can reschedule/resubmit it later if needed.</p>
+                <p class="small text-main mb-3">Are you sure you want to cancel this appointment?</p>
+                
+                @php
+                    $scheduledAt = \Carbon\Carbon::parse($app->appointment_date->format('Y-m-d') . ' ' . $app->time_slot);
+                    $hoursUntil = \Carbon\Carbon::now()->diffInHours($scheduledAt, false);
+                    $isWithin24Hours = ($hoursUntil >= 0 && $hoursUntil < 24);
+                    $isPaid = ($app->payment_status === 'paid');
+                @endphp
+
+                @if($app->payment_method === 'Cashless')
+                    @if($isPaid)
+                        {{-- Confirmed Paid Cashless Booking --}}
+                        @if($isWithin24Hours)
+                            <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-0 smaller">
+                                <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
+                                    <i class="bi bi-patch-check-fill text-success"></i>
+                                    <span>Payment Status: Confirmed Paid</span>
+                                </div>
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                <strong>50% Fee Applies:</strong> Because cancellation is requested within 24 hours of your slot ({{ $scheduledAt->format('M d, Y h:i A') }}), a <strong>50% administrative cancellation fee</strong> applies. 50% will be refunded to your account.
+                            </div>
+                        @else
+                            <div class="alert alert-clinical border-success bg-success bg-opacity-10 text-success p-3 rounded-3 mb-0 smaller">
+                                <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
+                                    <i class="bi bi-patch-check-fill text-success"></i>
+                                    <span>Payment Status: Confirmed Paid</span>
+                                </div>
+                                <i class="bi bi-check-circle-fill me-1"></i>
+                                <strong>100% Full Refund Eligible:</strong> You are canceling more than 24 hours in advance. Your paid cashless transaction is eligible for a <strong>100% full refund</strong>.
+                            </div>
+                        @endif
+                    @else
+                        {{-- Unconfirmed / Pending Cashless Booking --}}
+                        @if($isWithin24Hours)
+                            <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-0 smaller">
+                                <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
+                                    <i class="bi bi-clock-history text-warning"></i>
+                                    <span>Payment Status: Not Confirmed Yet (Pending Verification)</span>
+                                </div>
+                                <i class="bi bi-info-circle-fill me-1"></i>
+                                <span>Your uploaded payment receipt has not been confirmed yet. Since you are canceling within 24 hours of your slot ({{ $scheduledAt->format('M d, Y h:i A') }}), a <strong>50% administrative cancellation fee</strong> applies. 50% will be refunded to your account upon confirmation.</span>
+                            </div>
+                        @else
+                            <div class="alert alert-clinical border-info bg-info bg-opacity-10 text-info p-3 rounded-3 mb-0 smaller">
+                                <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
+                                    <i class="bi bi-clock-history text-info"></i>
+                                    <span>Payment Status: Not Confirmed Yet (Pending Verification)</span>
+                                </div>
+                                <i class="bi bi-info-circle-fill me-1"></i>
+                                <span>Your uploaded payment receipt has not been confirmed yet. Since you are canceling more than 24 hours in advance, the booking will be canceled with no charge.</span>
+                            </div>
+                        @endif
+                    @endif
+                @else
+                    {{-- Cash on Site Booking --}}
+                    @if($isWithin24Hours)
+                        <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-0 smaller">
+                            <i class="bi bi-exclamation-triangle-fill me-1.5"></i>
+                            <strong>Notice:</strong> Canceling within 24 hours of your scheduled appointment time ({{ $scheduledAt->format('M d, Y h:i A') }}).
+                        </div>
+                    @else
+                        <div class="alert alert-clinical border-secondary bg-secondary bg-opacity-10 text-secondary p-3 rounded-3 mb-0 smaller">
+                            <i class="bi bi-info-circle-fill me-1.5"></i>
+                            <span>Free cancellation available for this cash booking (more than 24 hours in advance).</span>
+                        </div>
+                    @endif
+                @endif
             </div>
             <div class="modal-footer p-3 border-top border-secondary border-opacity-10 d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card);">
                 <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Go Back</button>
@@ -394,12 +464,8 @@ $isExpired = $app->isExpired();
 @push('scripts')
 <script src="https://js.pusher.com/8.0.1/pusher.min.js"></script>
 <script>
-// Global variable to hold active details selection
 let activeRowIdx = null;
 
-/**
- * Reveal clinical details workspace card smoothly
- */
 function showAppointmentDetails(appId) {
     const placeholder = document.getElementById('details-placeholder');
     if (placeholder) placeholder.classList.add('d-none');
@@ -415,9 +481,6 @@ function showAppointmentDetails(appId) {
     }
 }
 
-/**
- * Reset active detail workspace view to default placeholder state
- */
 function resetActiveDetail() {
     const placeholder = document.getElementById('details-placeholder');
     if (placeholder) placeholder.classList.remove('d-none');
@@ -425,30 +488,23 @@ function resetActiveDetail() {
     document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
 }
 
-/**
- * DYNAMIC SYNC QUEUE: Silently fetches updated HTML, updates containers,
- * and preserves the employee's active focused record card and workspace view
- */
 function syncMasterQueue() {
     fetch("{{ route('appointments.index', ['view' => 'queue']) }}")
         .then(response => response.text())
         .then(html => {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
-            // 1. Sync active queue lists
             const newContent = doc.getElementById('listContent');
             const oldContent = document.getElementById('listContent');
             if (newContent && oldContent) {
                 oldContent.innerHTML = newContent.innerHTML;
             }
-            // 2. Sync pre-rendered workspace cards silently
             const newWorkspace = doc.getElementById('workspace-container');
             const oldWorkspace = document.getElementById('workspace-container');
             if (newWorkspace && oldWorkspace) {
                 const activePane = document.querySelector('.appointment-detail-pane:not(.d-none)');
                 const activeId = activePane ? activePane.id : null;
                 oldWorkspace.innerHTML = newWorkspace.innerHTML;
-                // Restore active card view if it existed before sync
                 if (activeId) {
                     const placeholder = document.getElementById('details-placeholder');
                     if (placeholder) placeholder.classList.add('d-none');
@@ -459,15 +515,11 @@ function syncMasterQueue() {
                     if (listCard) listCard.classList.add('border-accent', 'shadow-neon');
                 }
             }
-            // 3. Re-initialize filters and input listeners on the new DOM elements
             initializeFilters();
         })
         .catch(error => console.error('Queue sync failed:', error));
 }
 
-/**
- * Initializes filter listeners for the live search input
- */
 function initializeFilters() {
     const queueSearch = document.getElementById('queueSearch');
     if (queueSearch) {
@@ -483,7 +535,6 @@ function initializeFilters() {
 
 document.addEventListener('DOMContentLoaded', () => {
     initializeFilters();
-    // Auto-select appointment if 'id' parameter is passed in the URL
     const urlParams = new URLSearchParams(window.location.search);
     const selectId = urlParams.get('id');
     if (selectId) {
@@ -503,7 +554,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Modal Trigger Configuration Linkage
     document.querySelectorAll('.return-form-element').forEach(form => {
         const appId = form.dataset.appId;
         const select = document.getElementById(`return_reason_select_${appId}`);
@@ -531,7 +581,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Pusher real-time syncing receiver
     if (typeof Pusher !== 'undefined') {
         const pusher = new Pusher("{{ env('PUSHER_APP_KEY') }}", {
             cluster: "{{ env('PUSHER_APP_CLUSTER') }}"
@@ -561,7 +610,6 @@ window.toggleInvalidReasonField = function(appId, select) {
 
 @push('styles')
 <style>
-/* High-contrast overrides for Light Mode Compatibility */
 #appTabs .nav-link,
 .nav-pills .nav-link {
     color: var(--text-muted) !important;
@@ -587,8 +635,6 @@ button.nav-link.active {
 #listContent .custom-scroll {
     padding: 6px 12px 6px 6px !important;
 }
-
-/* High-contrast Selected & Hover Highlights for Queue Cards */
 .app-list-card {
     transition: all 0.2s ease;
     cursor: pointer;
