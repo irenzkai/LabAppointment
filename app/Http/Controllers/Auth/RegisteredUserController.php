@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
+use Carbon\Carbon;
 
 class RegisteredUserController extends Controller
 {
@@ -32,25 +33,62 @@ class RegisteredUserController extends Controller
                 if ($request->query('type') === 'shadow') {
                     $appointment = Appointment::find($decryptedId);
                     if ($appointment) {
+                        $fName = $appointment->patient_first_name;
+                        $mName = $appointment->patient_middle_name;
+                        $lName = $appointment->patient_last_name;
+                        $suffix = $appointment->patient_suffix ?? null;
+
+                        // Fallback decomposition if individual name fields are not atomic
+                        if (empty($fName) || empty($lName)) {
+                            $nameParts = explode(' ', trim($appointment->patient_name ?? ''));
+                            $fName = $nameParts[0] ?? '';
+                            $lName = count($nameParts) > 1 ? end($nameParts) : '';
+                            $mName = count($nameParts) > 2 ? implode(' ', array_slice($nameParts, 1, -1)) : 'N/A';
+                        }
+
+                        $bday = $appointment->patient_birthdate 
+                            ?? $appointment->dependent?->birthdate 
+                            ?? null;
+
                         $promotedDependent = (object) [
                             'id' => null,
-                            'first_name' => $appointment->patient_first_name,
-                            'middle_name' => $appointment->patient_middle_name,
-                            'last_name' => $appointment->patient_last_name,
-                            'suffix' => $appointment->patient_suffix ?? null,
-                            'birthdate' => $appointment->patient_birthdate,
-                            'sex' => $appointment->patient_sex,
-                            'street' => $appointment->patient_street,
-                            'province' => $appointment->patient_province,
-                            'city' => $appointment->patient_city,
-                            'barangay' => $appointment->patient_barangay,
-                            'email' => $appointment->patient_email,
-                            'phone' => $appointment->patient_phone,
-                            'shadow_appointment_id' => $appointment->id
+                            'first_name' => $fName,
+                            'middle_name' => $mName ?: 'N/A',
+                            'last_name' => $lName,
+                            'suffix' => $suffix,
+                            'birthdate' => $bday ? Carbon::parse($bday) : null,
+                            'sex' => $appointment->patient_sex ?? 'Male',
+                            'street' => $appointment->patient_street ?? '',
+                            'province' => $appointment->patient_province ?? '',
+                            'city' => $appointment->patient_city ?? '',
+                            'barangay' => $appointment->patient_barangay ?? '',
+                            'email' => $appointment->patient_email ?: ($appointment->user?->email ?? ''),
+                            'phone' => $appointment->patient_phone ?: ($appointment->user?->phone ?? ''),
+                            'shadow_appointment_id' => $appointment->id,
+                            'is_shadow' => true,
                         ];
                     }
                 } else {
-                    $promotedDependent = Dependent::find($decryptedId);
+                    $dependent = Dependent::find($decryptedId);
+                    if ($dependent) {
+                        $promotedDependent = (object) [
+                            'id' => $dependent->id,
+                            'first_name' => $dependent->first_name,
+                            'middle_name' => $dependent->middle_name ?: 'N/A',
+                            'last_name' => $dependent->last_name,
+                            'suffix' => $dependent->suffix,
+                            'birthdate' => $dependent->birthdate ? Carbon::parse($dependent->birthdate) : null,
+                            'sex' => $dependent->sex,
+                            'street' => $dependent->street ?: ($dependent->user?->street ?? ''),
+                            'province' => $dependent->province ?: ($dependent->user?->province ?? ''),
+                            'city' => $dependent->city ?: ($dependent->user?->city ?? ''),
+                            'barangay' => $dependent->barangay ?: ($dependent->user?->barangay ?? ''),
+                            'email' => $dependent->user?->email ?? '',
+                            'phone' => $dependent->phone ?: ($dependent->user?->phone ?? ''),
+                            'shadow_appointment_id' => null,
+                            'is_shadow' => false,
+                        ];
+                    }
                 }
             } catch (\Exception $e) {
                 // Return generic registration view silently if token was tampered with
@@ -68,7 +106,6 @@ class RegisteredUserController extends Controller
         $nameRule = function ($attribute, $value, $fail) {
             $val = trim($value);
             if (empty($val)) return;
-
             if (!preg_match('/^[a-zA-ZñÑ\s.\'-]+$/u', $val)) {
                 $fail("The " . str_replace('_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
                 return;
@@ -143,7 +180,7 @@ class RegisteredUserController extends Controller
             'email_verified_at' => null,
         ]);
 
-        // HISTORICAL RECORD TRANSITION (If promoted from a family dependent)
+        // HISTORICAL RECORD TRANSITION (If promoted from a family dependent or activated from shadow appointment)
         if ($request->filled('promoted_dependent_id')) {
             $depId = $request->input('promoted_dependent_id');
             Appointment::where('dependent_id', $depId)
@@ -151,15 +188,23 @@ class RegisteredUserController extends Controller
                     'user_id' => $user->id,
                     'dependent_id' => null,
                 ]);
-
             Dependent::destroy($depId);
             ActivityLog::record('ACCOUNT PROMOTED', "Dependent account successfully promoted to independent user profile for {$user->name}", $user->name);
         } elseif ($request->filled('shadow_appointment_id')) {
             $appId = $request->input('shadow_appointment_id');
-            Appointment::where('id', $appId)->update([
-                'user_id' => $user->id,
-            ]);
+            Appointment::where('id', $appId)
+                ->orWhere('patient_email', $user->email)
+                ->update([
+                    'user_id' => $user->id,
+                ]);
             ActivityLog::record('SHADOW ACCOUNT ACTIVATED', 'Shadow account registered and linked to clinical folder', $user->name);
+        } else {
+            // Link any pending unassigned appointments matching this registered email
+            Appointment::where('patient_email', $user->email)
+                ->whereNull('user_id')
+                ->update([
+                    'user_id' => $user->id,
+                ]);
         }
 
         event(new Registered($user));

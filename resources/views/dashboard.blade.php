@@ -1,9 +1,7 @@
 @extends('layouts.app')
 @section('title', 'Main Menu')
-
 @section('content')
 <div class="container-fluid text-start animate-page">
-    
     {{-- 1. UNIFORM HEADER SECTION FOR ALL USERS --}}
     <div class="row mb-5 align-items-center">
         <div class="col-md-8">
@@ -54,7 +52,7 @@
                 </div>
                 <h5 class="fw-bold text-main">Dependent Records</h5>
                 <p class="text-muted small mb-4">Add, register, and manage account details for your child dependents.</p>
-                <a href="{{ route('profile.edit') }}" class="btn-custom btn-outline-accent w-100 mt-auto">Manage Dependents</a>
+                <a href="{{ route('profile.edit') }}#tab-dependents" class="btn-custom btn-outline-accent w-100 mt-auto">Manage Dependents</a>
             </div>
         </div>
     </div>
@@ -83,29 +81,44 @@
                             </thead>
                             <tbody>
                                 @forelse($recentAppointments as $app)
-                                <tr class="border-secondary border-opacity-10 align-middle" style="cursor: pointer;" onclick="window.location.href='{{ route('appointments.index') }}?id={{ $app->id }}'">
-                                    <td class="ps-4">
-                                        <div class="text-main fw-bold small">{{ strtoupper($app->patient_name) }}</div>
-                                        <div class="text-muted x-small" style="font-size: 0.65rem;">ID: #{{ $app->id }}</div>
-                                    </td>
-                                    <td class="small text-main">
-                                        {{ Str::limit($app->services->pluck('name')->implode(', '), 35) }}
-                                    </td>
-                                    <td class="small text-muted">
-                                        {{ $app->appointment_date ? $app->appointment_date->format('M d, Y') : 'N/A' }}
-                                    </td>
-                                    <td class="text-end pe-4">
-                                        <span class="badge border border-info text-info uppercase x-small" style="font-size: 0.65rem; letter-spacing: 0.5px;">
-                                            {{ strtoupper($app->status) }}
-                                        </span>
-                                    </td>
-                                </tr>
+                                    @php
+                                        $isExpired = $app->isExpired();
+                                        $statusColor = $isExpired ? 'danger' : match($app->status) {
+                                            'pending' => 'warning',
+                                            'approved' => 'info',
+                                            'tested' => 'info',
+                                            'encoded' => 'info',
+                                            'released' => 'accent',
+                                            'returned' => 'danger',
+                                            'retest' => 'danger',
+                                            'canceled' => 'danger',
+                                            default => 'secondary'
+                                        };
+                                        $statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
+                                    @endphp
+                                    <tr class="border-secondary border-opacity-10 align-middle" style="cursor: pointer;" onclick="window.location.href='{{ route('appointments.index') }}?id={{ $app->id }}'">
+                                        <td class="ps-4">
+                                            <div class="text-main fw-bold small">{{ strtoupper($app->patient_name) }}</div>
+                                            <div class="text-muted x-small" style="font-size: 0.65rem;">ID: #{{ $app->id }}</div>
+                                        </td>
+                                        <td class="small text-main">
+                                            {{ Str::limit($app->services->pluck('name')->implode(', '), 35) }}
+                                        </td>
+                                        <td class="small text-muted">
+                                            {{ $app->appointment_date ? $app->appointment_date->format('M d, Y') : 'N/A' }}
+                                        </td>
+                                        <td class="text-end pe-4">
+                                            <span class="badge border border-{{ $statusColor }} text-{{ $statusColor == 'accent' ? 'success' : $statusColor }} uppercase x-small" style="font-size: 0.65rem; letter-spacing: 0.5px;">
+                                                {{ $statusLabel }}
+                                            </span>
+                                        </td>
+                                    </tr>
                                 @empty
-                                <tr>
-                                    <td colspan="4" class="text-center py-5 text-muted small italic">
-                                        No recent appointment inquiries found.
-                                    </td>
-                                </tr>
+                                    <tr>
+                                        <td colspan="4" class="text-center py-5 text-muted small italic">
+                                            No recent appointment inquiries found.
+                                        </td>
+                                    </tr>
                                 @endforelse
                             </tbody>
                         </table>
@@ -124,14 +137,14 @@
                 </div>
                 <div class="card-body p-4">
                     @foreach($popularServices as $service)
-                    <div class="mb-3 pb-3 border-bottom border-secondary border-opacity-10 text-start">
-                        <div class="d-flex justify-content-between align-items-start mb-1">
-                            <div class="text-main fw-bold small uppercase">{{ $service->name }}</div>
-                            <div class="text-accent small fw-bold">₱{{ number_format($service->price, 2) }}</div>
+                        <div class="mb-3 pb-3 border-bottom border-secondary border-opacity-10 text-start">
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <div class="text-main fw-bold small uppercase">{{ $service->name }}</div>
+                                <div class="text-accent small fw-bold">₱{{ number_format($service->price, 2) }}</div>
+                            </div>
+                            <div class="x-small text-muted mb-2" style="font-size: 0.7rem;">{{ Str::limit($service->description, 65) }}</div>
+                            <a href="{{ route('appointments.create') }}" class="text-accent x-small fw-bold text-decoration-none" style="font-size: 0.7rem;">BOOK TEST <i class="bi bi-chevron-right"></i></a>
                         </div>
-                        <div class="x-small text-muted mb-2" style="font-size: 0.7rem;">{{ Str::limit($service->description, 65) }}</div>
-                        <a href="{{ route('appointments.create') }}" class="text-accent x-small fw-bold text-decoration-none" style="font-size: 0.7rem;">BOOK TEST <i class="bi bi-chevron-right"></i></a>
-                    </div>
                     @endforeach
                     <div class="text-center mt-3">
                         <a href="{{ route('services.index') }}" class="text-muted small text-decoration-none">Browse all services...</a>
@@ -141,7 +154,6 @@
         </div>
     </div>
 </div>
-
 @push('scripts')
 <script>
 function updateClock() {

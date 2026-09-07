@@ -105,7 +105,7 @@ class AppointmentController extends Controller
                                 ->where('payment_status', 'paid');
                         });
                 })->where(function($q) use ($nowSub24) {
-                    $q->whereIn('status', ['tested', 'encoded'])
+                    $q->whereIn('status', ['retest', 'tested', 'encoded'])
                         ->orWhereRaw("TIMESTAMP(appointment_date, time_slot) >= ?", [$nowSub24]);
                 });
             } elseif ($statusFilter === 'no_action') {
@@ -120,11 +120,11 @@ class AppointmentController extends Controller
                         });
                 });
             } elseif ($statusFilter === 'expired') {
-                $query->whereNotIn('status', ['tested', 'encoded', 'released'])
+                $query->whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])
                     ->whereRaw("TIMESTAMP(appointment_date, time_slot) < ?", [$nowSub24]);
             } else {
                 $query->where('status', $statusFilter);
-                if (in_array($statusFilter, ['pending', 'approved', 'returned', 'retest'])) {
+                if (in_array($statusFilter, ['pending', 'approved', 'returned'])) {
                     $query->whereRaw("TIMESTAMP(appointment_date, time_slot) >= ?", [$nowSub24]);
                 }
             }
@@ -140,7 +140,8 @@ class AppointmentController extends Controller
         $query->select('*')
             ->selectRaw("
                 CASE 
-                    WHEN status IN ('pending', 'approved', 'retest', 'tested', 'encoded') AND TIMESTAMP(appointment_date, time_slot) >= ? THEN 2
+                    WHEN status IN ('retest', 'tested', 'encoded') THEN 2
+                    WHEN status IN ('pending', 'approved') AND TIMESTAMP(appointment_date, time_slot) >= ? THEN 2
                     WHEN status = 'canceled' AND payment_method = 'Cashless' AND payment_status = 'paid' THEN 2
                     ELSE 1
                 END as action_priority
@@ -311,7 +312,6 @@ class AppointmentController extends Controller
             DB::rollback();
             if (isset($data['referral_note'])) Storage::disk('public')->delete($data['referral_note']);
             if (isset($data['payment_receipt'])) Storage::disk('public')->delete($data['payment_receipt']);
-
             return back()->with('error', 'Booking failed: ' . $e->getMessage())->withInput();
         }
     }
@@ -369,15 +369,16 @@ class AppointmentController extends Controller
             'patient_birthdate' => 'required|date|before_or_equal:today',
             'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
             'patient_street' => 'required|string|max:150',
+            'patient_barangay' => 'required|string|max:100',
+            'patient_city' => 'required|string|max:100',
+            'patient_province' => 'required|string|max:100',
             'service_ids' => 'required|array|min:1',
             'appointment_date' => 'required|date|after_or_equal:today',
             'time_slot' => 'required',
         ];
 
+        // Single appointments require payment method and optional referral/receipt verification
         if (!$isBulk) {
-            $rules['patient_barangay'] = 'required|string|max:100';
-            $rules['patient_city'] = 'required|string|max:100';
-            $rules['patient_province'] = 'required|string|max:100';
             $rules['payment_method'] = 'required|string';
             $rules['referral_note'] = 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240';
 
@@ -389,6 +390,7 @@ class AppointmentController extends Controller
                     }
                 }
             }
+
             $rules['payment_receipt'] = $isReceiptRequired ? 'required|file|mimes:pdf,jpg,jpeg,png|max:10240' : 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240';
         }
 
@@ -405,7 +407,7 @@ class AppointmentController extends Controller
             ->where('id', '!=', $appointment->id)->count();
 
         if ($booked >= ($config->max_patients_per_slot ?? 1)) {
-            return back()->withErrors(['time_slot' => 'Slot is full.']);
+            return back()->withErrors(['time_slot' => 'Slot is full.'])->withInput();
         }
 
         $mName = $request->patient_middle_name;
@@ -416,15 +418,18 @@ class AppointmentController extends Controller
         if (!empty($suffix)) $fullName .= ' ' . $suffix;
 
         $street = strtoupper(trim($request->patient_street));
-        $barangay = $isBulk ? 'N/A' : strtoupper(trim($request->patient_barangay));
-        $city = $isBulk ? 'N/A' : strtoupper(trim($request->patient_city));
-        $province = $isBulk ? 'N/A' : strtoupper(trim($request->patient_province));
+        $barangay = strtoupper(trim($request->patient_barangay));
+        $city = strtoupper(trim($request->patient_city));
+        $province = strtoupper(trim($request->patient_province));
 
-        $paymentStatus = ($appointment->status === 'canceled' && $appointment->payment_status === 'paid') ? 'paid' : 'unpaid';
+        // For bulk, maintain the current payment status and payment method from the batch
+        $paymentStatus = $isBulk 
+            ? $appointment->payment_status 
+            : (($appointment->status === 'canceled' && $appointment->payment_status === 'paid') ? 'paid' : 'unpaid');
 
         $updateData = [
             'patient_first_name' => strtoupper($request->patient_first_name),
-            'patient_middle_name' => $mName ? strtoupper($mName) : 'N/A',
+            'patient_middle_name' => ($mName && strtoupper($mName) !== 'N/A') ? strtoupper($mName) : 'N/A',
             'patient_last_name' => strtoupper($lName),
             'patient_suffix' => $suffix ?: null,
             'patient_name' => strtoupper($fullName),
@@ -444,6 +449,7 @@ class AppointmentController extends Controller
 
         if (!$isBulk) {
             $updateData['payment_method'] = $request->payment_method;
+
             if ($request->payment_method === 'Cash') {
                 if ($appointment->payment_receipt) Storage::disk('public')->delete($appointment->payment_receipt);
                 $updateData['payment_receipt'] = null;
@@ -510,6 +516,7 @@ class AppointmentController extends Controller
         if ($appointment->batch_id && $request->input('batch') === 'true') {
             Appointment::where('batch_id', $appointment->batch_id)->update($updatePayload);
             $batchApps = Appointment::where('batch_id', $appointment->batch_id)->get();
+
             foreach ($batchApps as $app) {
                 $patient = $app->user;
                 if ($patient) {
@@ -770,15 +777,46 @@ class AppointmentController extends Controller
     public function cancel(Request $request, Appointment $appointment)
     {
         $user = Auth::user();
-        if ($user->isEmployee()) abort(403, 'Employees/Staff are not authorized to cancel appointments.');
-        if ($appointment->user_id !== $user->id) abort(403, 'Unauthorized action.');
 
-        if (in_array($appointment->status, ['tested', 'encoded', 'released'])) {
-            return back()->with('error', 'Appointments that have progressed to sampling cannot be canceled.');
+        if ($user->isEmployee()) {
+            abort(403, 'Employees/Staff are not authorized to cancel appointments.');
+        }
+
+        if ($appointment->user_id !== $user->id) {
+            abort(403, 'Unauthorized action.');
         }
 
         $reason = 'Canceled by patient';
         $paymentStatus = $appointment->payment_status === 'paid' ? 'paid' : 'unpaid';
+
+        // BATCH CANCELLATION: Cancel all cancelable records in this batch
+        if ($appointment->batch_id && $request->input('batch') === 'true') {
+            $cancelableApps = Appointment::where('batch_id', $appointment->batch_id)
+                ->whereNotIn('status', ['retest', 'tested', 'encoded', 'released', 'canceled'])
+                ->get();
+
+            if ($cancelableApps->isEmpty()) {
+                return back()->with('error', 'No active appointments in this batch can be canceled.');
+            }
+
+            foreach ($cancelableApps as $app) {
+                $app->update([
+                    'status' => 'canceled',
+                    'payment_status' => $paymentStatus,
+                    'return_reason' => $reason
+                ]);
+                ActivityLog::record('CANCELED', "Appointment canceled. Reason: {$reason}", $app->patient_name, $app->id);
+            }
+
+            event(new QueueUpdated());
+
+            return back()->with('success', 'All eligible appointments in this batch have been successfully canceled.');
+        }
+
+        // INDIVIDUAL CANCELLATION
+        if (in_array($appointment->status, ['retest', 'tested', 'encoded', 'released'])) {
+            return back()->with('error', 'Appointments that have progressed to sampling or retesting cannot be canceled.');
+        }
 
         $appointment->update([
             'status' => 'canceled',
@@ -869,7 +907,6 @@ class AppointmentController extends Controller
         }
 
         $statusLabel = strtoupper($request->payment_status);
-
         ActivityLog::record('PAYMENT UPDATE', "Staff flagged appointment payment as {$statusLabel}", $appointment->patient_name, $appointment->id);
 
         event(new QueueUpdated());

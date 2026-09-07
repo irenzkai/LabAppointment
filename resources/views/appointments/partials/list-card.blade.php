@@ -1,7 +1,6 @@
 @php
 // Determine badge color mappings based on clinical and expiration status
 $groupCount = $groupCount ?? 1;
-
 $statusPriority = [
     'expired' => 1,
     'returned' => 2,
@@ -20,10 +19,8 @@ if ($app->batch_id) {
         $batchAppsQuery->where('deleted_by_patient', false);
     }
     $batchApps = $batchAppsQuery->get();
-
     $lowestPriority = 999;
     $lowestStatus = $app->status;
-
     foreach ($batchApps as $subApp) {
         $effStatus = $subApp->isExpired() ? 'expired' : $subApp->status;
         $priority = $statusPriority[$effStatus] ?? 99;
@@ -32,7 +29,6 @@ if ($app->batch_id) {
             $lowestStatus = $effStatus;
         }
     }
-
     $isExpired = ($lowestStatus === 'expired');
     $finalStatus = $lowestStatus;
 } else {
@@ -89,7 +85,7 @@ if ($app->batch_id) {
         <div class="fw-bold text-main fs-6 text-truncate" style="max-width: 180px;">
             {{ $groupCount > 1 ? $app->organization_name : $app->patient_name }}
         </div>
-        <span class="badge border border-{{ $statusColor }} text-{{ $statusColor == 'accent' ? 'success' : $statusColor }} uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">
+        <span class="badge border border-{{ $statusColor }} text-{{ $statusColor }} uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">
             {{ $statusLabel }}
         </span>
     </div>
@@ -104,12 +100,12 @@ if ($app->batch_id) {
                 <i class="bi bi-pencil-square me-1"></i>Edited: {{ $latestCardEditTimestamp->format('M d, Y | h:i A') }}
             </div>
             @endif
-            @if($app->status == 'retest')
+            @if($finalStatus == 'retest')
             <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;">
-                <i class="bi bi-exclamation-triangle-fill me-1"></i>Retest Required: Please return to lab
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>Retest Required
             </div>
             @endif
-            @if($app->status == 'canceled')
+            @if($finalStatus == 'canceled')
             <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;">
                 <i class="bi bi-x-circle-fill me-1"></i>Appointment Canceled
             </div>

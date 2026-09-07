@@ -79,8 +79,8 @@ class DashboardController extends Controller
         // 1. All Patient Accounts Count
         $totalPatientAccounts = User::count();
 
-        // 2. Expired Count Calculation
-        $expiredCount = Appointment::whereNotIn('status', ['tested', 'encoded', 'released'])
+        // 2. Expired Count Calculation (Excludes retest, tested, encoded, released)
+        $expiredCount = Appointment::whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])
             ->whereRaw("TIMESTAMP(appointment_date, time_slot) < ?", [$nowSub24])
             ->count();
 
@@ -92,7 +92,7 @@ class DashboardController extends Controller
             'encoded' => Appointment::where('status', 'encoded')->count(),
             'released' => Appointment::where('status', 'released')->count(),
             'returned' => Appointment::where('status', 'returned')->whereRaw("TIMESTAMP(appointment_date, time_slot) >= ?", [$nowSub24])->count(),
-            'retest' => Appointment::where('status', 'retest')->whereRaw("TIMESTAMP(appointment_date, time_slot) >= ?", [$nowSub24])->count(),
+            'retest' => Appointment::where('status', 'retest')->count(),
             'canceled' => Appointment::where('status', 'canceled')->count(),
             'expired' => $expiredCount,
         ];
@@ -101,15 +101,15 @@ class DashboardController extends Controller
         $needingActionQuery = Appointment::with(['services', 'user'])
             ->where(function($q) {
                 $q->whereIn('status', ['pending', 'approved', 'retest', 'tested', 'encoded'])
-                    ->orWhere(function($sub) {
-                        $sub->where('status', 'canceled')
-                            ->where('payment_method', 'Cashless')
-                            ->where('payment_status', 'paid');
-                    });
+                ->orWhere(function($sub) {
+                    $sub->where('status', 'canceled')
+                    ->where('payment_method', 'Cashless')
+                    ->where('payment_status', 'paid');
+                });
             })
             ->where(function($q) use ($nowSub24) {
-                $q->whereIn('status', ['tested', 'encoded'])
-                    ->orWhereRaw("TIMESTAMP(appointment_date, time_slot) >= ?", [$nowSub24]);
+                $q->whereIn('status', ['retest', 'tested', 'encoded'])
+                ->orWhereRaw("TIMESTAMP(appointment_date, time_slot) >= ?", [$nowSub24]);
             });
 
         $needingActionCount = (clone $needingActionQuery)->count();
@@ -197,14 +197,13 @@ class DashboardController extends Controller
         $txYear = $request->query('tx_year', Carbon::now()->format('Y'));
         $txStatus = $request->query('tx_status', 'all');
         $txSearch = $request->query('tx_search');
-
         $txQuery = Appointment::with('services');
 
         if ($txSearch) {
             $txQuery->where(function($q) use ($txSearch) {
                 $q->where('patient_name', 'like', "%{$txSearch}%")
-                    ->orWhere('id', 'like', "%{$txSearch}%")
-                    ->orWhere('organization_name', 'like', "%{$txSearch}%");
+                ->orWhere('id', 'like', "%{$txSearch}%")
+                ->orWhere('organization_name', 'like', "%{$txSearch}%");
             });
         }
 

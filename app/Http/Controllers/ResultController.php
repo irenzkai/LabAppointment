@@ -33,6 +33,7 @@ class ResultController extends Controller
     public function hub(Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
+
         if ($appointment->status === 'released') {
             if (!session()->has("access_granted_{$appointment->id}_hub")) {
                 if (request()->ajax() || request()->wantsJson() || request()->headers->has('X-Requested-With')) {
@@ -79,7 +80,9 @@ class ResultController extends Controller
     public function editDemographics(Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
+
         $services = Service::where('is_available', true)->orderBy('name')->get();
+
         return view('appointments.edit-details', compact('appointment', 'services'));
     }
 
@@ -89,8 +92,8 @@ class ResultController extends Controller
     public function verify(Request $request, Appointment $appointment, $type)
     {
         if (Gate::denies('isStaff')) abort(403);
-        $request->validate(['sig_name' => 'required|string|max:255']);
 
+        $request->validate(['sig_name' => 'required|string|max:255']);
         $res = $appointment->result;
         $prefix = ($type == 'med_cert' ? 'med' : $type);
 
@@ -111,7 +114,6 @@ class ResultController extends Controller
         $res->update($updateData);
 
         ActivityLog::record('VERIFIED', "Clinical sign-off for $type", $appointment->patient_name, $appointment->id);
-
         event(new QueueUpdated());
 
         return redirect()->route('appointments.encode', $appointment->id)
@@ -124,7 +126,6 @@ class ResultController extends Controller
     public function return(Request $request, Appointment $appointment)
     {
         $request->validate(['reason' => 'required|min:5']);
-
         $type = $request->query('type', 'lab');
         $prefix = ($type == 'med_cert' ? 'med' : $type);
 
@@ -151,7 +152,6 @@ class ResultController extends Controller
         }
 
         ActivityLog::record('RETURNED', "Form ($type) sent back: " . $request->reason, $appointment->patient_name, $appointment->id);
-
         event(new QueueUpdated());
 
         return redirect()->route('appointments.encode', $appointment->id)
@@ -440,7 +440,7 @@ class ResultController extends Controller
 
         // 2. Privacy Shield for Batch Coordinators: ONLY restricts viewing unreleased individual raw worksheets of other people.
         // Once released, or if the user is the actual patient, access is permitted.
-        if ($appointment->status !== 'released' && $appointment->batch_id && $user->id === $appointment->user_id && strtolower($appointment->patient_email) !== strtolower($user->email)) {
+        if ($appointment->status !== 'released' && $appointment->batch_id && $user->id === $appointment->user_id && strtolower($appointment->patient_email ?? '') !== strtolower($user->email)) {
             abort(403, 'Privacy Shield: Batch coordinators are restricted from viewing individual patient worksheets prior to clinical release.');
         }
 
@@ -480,7 +480,6 @@ class ResultController extends Controller
                     return Storage::disk('public')->download($filePath, $filename);
                 }
             }
-
             abort(404, 'Scanned worksheet file not found on storage server.');
         }
 
@@ -523,7 +522,6 @@ class ResultController extends Controller
             }
 
             $filename = "Result_{$type}_{$appointment->id}.{$ext}";
-
             if ($mode === 'preview') {
                 $contentType = $ext === 'pdf' ? 'application/pdf' : 'image/' . $ext;
                 return response()->stream(function() use ($filePath) {
@@ -548,7 +546,6 @@ class ResultController extends Controller
         ];
 
         $viewName = $viewMap[$type] ?? 'pdf.labreport';
-
         $pdf = Pdf::loadView($viewName, [
             'app' => $appointment,
             'res' => $res,
@@ -560,9 +557,9 @@ class ResultController extends Controller
     }
 
     /**
-     * FORWARD TO EMAIL: Triggers compiler to bundle and mail password-protected PDFs to patient.
+     * FORWARD TO EMAIL: Triggers compiler to bundle and mail password-protected PDFs to patient with optional staff email update and reason logging.
      */
-    public function forwardToEmail(Appointment $appointment)
+    public function forwardToEmail(Request $request, Appointment $appointment)
     {
         $user = auth()->user();
         $isOwner = ($user->id === $appointment->user_id)
@@ -577,10 +574,51 @@ class ResultController extends Controller
             return back()->with('error', 'Results must be clinically released before they can be forwarded.');
         }
 
+        // Handle Admin/Staff updating recipient email before forward
+        if ($user->isEmployee() && $request->filled('target_email')) {
+            $newEmail = strtolower(trim($request->input('target_email')));
+            $currentEmail = strtolower(trim($appointment->patient_email ?: ($appointment->user?->email ?? '')));
+
+            if ($newEmail !== $currentEmail) {
+                $request->validate([
+                    'target_email' => ['required', 'email', 'regex:/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
+                    'reason' => 'required|string|min:5',
+                    'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
+                ]);
+
+                $reasonText = $request->input('reason') === 'Others' 
+                    ? $request->input('custom_reason') 
+                    : $request->input('reason');
+
+                $oldEmailDisplay = $appointment->patient_email ?: ($appointment->user?->email ?? 'None');
+                $appointment->patient_email = $newEmail;
+                $appointment->save();
+
+                ActivityLog::record(
+                    'EMAIL UPDATED',
+                    "Forward recipient email updated from {$oldEmailDisplay} to {$newEmail}. Reason: {$reasonText}",
+                    $appointment->patient_name,
+                    $appointment->id
+                );
+            }
+        }
+
+        $email = $appointment->patient_email ?: ($appointment->user?->email);
+        if (!$email) {
+            return back()->with('error', 'No valid recipient email address on file.');
+        }
+
         // Deliver results securely using background PDF compiler
         self::deliverResult($appointment, true);
 
-        return back()->with('success', "Pristine clinical results forwarded to your registered email: {$appointment->patient_email}.");
+        ActivityLog::record(
+            'FORWARD RESULT',
+            "Dispatched released clinical results to {$email}",
+            $appointment->patient_name,
+            $appointment->id
+        );
+
+        return back()->with('success', "Pristine clinical results forwarded to {$email}.");
     }
 
     /**
@@ -691,7 +729,6 @@ class ResultController extends Controller
                 ]);
 
                 $pdf->setEncryption($password);
-
                 $attachments[] = [
                     'data' => $pdf->output(),
                     'name' => "Medscreen_Result_Radiology_{$appointment->id}.pdf",
@@ -703,6 +740,7 @@ class ResultController extends Controller
             $column = $fileMap[$type] ?? null;
             $filePath = $res->$column;
             $isImage = false;
+
             if ($column && $filePath) {
                 $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
                 $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'jfif']);
@@ -733,7 +771,6 @@ class ResultController extends Controller
             }
 
             $pdf->setEncryption($password);
-
             $attachments[] = [
                 'data' => $pdf->output(),
                 'name' => "Medscreen_Result_{$type}_{$appointment->id}.pdf",
@@ -762,7 +799,6 @@ class ResultController extends Controller
                         'imgWidth' => $imgWidth,
                         'imgHeight' => $imgHeight
                     ]);
-
                     $pdf->setEncryption($password);
 
                     $attachments[] = [
@@ -794,6 +830,7 @@ class ResultController extends Controller
                         <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
                             <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$patientFirstName},</h3>
                             <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Your secure, password-protected clinical results have been successfully released. Please find the encrypted PDF documents attached to this email.</p>
+                            
                             <div style='background-color: #f8fafc; border-left: 4px solid #19D38C; padding: 20px; margin: 30px 0; border-radius: 6px;'>
                                 <strong style='color: #1c232d; display: block; margin-bottom: 8px; font-size: 16px;'>PDF Decryption Password:</strong>
                                 <span style='font-size: 14px; color: #4a5568; line-height: 1.5;'>
@@ -802,6 +839,7 @@ class ResultController extends Controller
                                     <span style='color: #718096; font-size: 12px; display: block; margin-top: 6px;'>Example: For birthdate October 24, 2005 & initials JDC, the password is <strong>10242005JDC</strong></span>
                                 </span>
                             </div>
+
                             " . (($hasAccount || $isForward) ? "" : "
                             <div style='border: 1.5px dashed #19D38C; background-color: rgba(25, 211, 140, 0.03); padding: 25px; text-align: center; border-radius: 8px; margin: 30px 0;'>
                                 <h4 style='margin-top: 0; color: #1c232d; font-size: 18px;'>Activate Your Permanent Portal</h4>
@@ -809,6 +847,7 @@ class ResultController extends Controller
                                 <a href='{$promoUrl}' style='display: inline-block; background-color: #19D38C; color: #1C232D; font-weight: bold; text-decoration: none; padding: 12px 30px; border-radius: 6px;'>ACTIVATE PROFILE</a>
                             </div>
                             ") . "
+
                             <p style='margin-top: 30px; line-height: 1.6; color: #4a5568; font-size: 15px;'>Best regards,<br><strong>Medscreen Diagnostic Laboratory</strong></p>
                         </div>
                     </div>
@@ -819,7 +858,7 @@ class ResultController extends Controller
             }
         });
 
-        if ($appointment->results_released_at) {
+        if (!$isForward && $appointment->results_released_at) {
             $patientUser = $appointment->user;
             if ($patientUser) {
                 $patientUser->notify(new \App\Notifications\AppointmentNotification([
@@ -881,7 +920,6 @@ class ResultController extends Controller
                     $imagick = new \Imagick();
                     $imagick->setResolution(150, 150);
                     $imagick->readImage($fullPath);
-
                     foreach ($imagick as $image) {
                         $image->setImageFormat('jpeg');
                         $data = base64_encode($image->getImageBlob());
@@ -897,6 +935,7 @@ class ResultController extends Controller
             }
             return $pages;
         }
+
         return [];
     }
 
@@ -965,6 +1004,7 @@ class ResultController extends Controller
     {
         $labHistory = LaboratoryHistory::where('user_id', $user->id)->first();
         $existingRecords = $labHistory ? (is_array($labHistory->dynamic_data) ? array_reverse($labHistory->dynamic_data) : []) : [];
+
         return view('verify-history', compact('user', 'existingRecords', 'labHistory'));
     }
 }

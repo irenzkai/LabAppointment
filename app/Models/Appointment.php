@@ -24,11 +24,10 @@ class Appointment extends Model
         'patient_middle_name',
         'patient_last_name',
         'patient_name', // Compiled string representation
-
-        'patient_email', 
-        'patient_phone', 
-        'patient_sex', 
-        'patient_birthdate', 
+        'patient_email',
+        'patient_phone',
+        'patient_sex',
+        'patient_birthdate',
 
         // Referral Attachments (Optional)
         'referral_note',
@@ -41,9 +40,9 @@ class Appointment extends Model
 
         // Settlement Methods & Audit Records
         'payment_method', // Cash, Cashless
-        'payment_status', // unpaid, paid
+        'payment_status', // unpaid, paid, invalid, refunded
         'payment_receipt', // Stores path for uploaded proof of payment receipts
-        'payment_amount',  // Persists confirmed payment amount collected on-site
+        'payment_amount', // Persists confirmed payment amount collected on-site
 
         // STATUS LOGIC & SOFT DELETION
         'status',
@@ -62,7 +61,7 @@ class Appointment extends Model
         'patient_birthdate' => 'date',
         'deleted_by_patient' => 'boolean',
         'tested_at' => 'datetime',
-        'result_estimated_at' => 'datetime', 
+        'result_estimated_at' => 'datetime',
         'results_released_at' => 'datetime',
         'payment_amount' => 'decimal:2',
     ];
@@ -70,7 +69,6 @@ class Appointment extends Model
     /** 
      * --- RELATIONSHIPS --- 
      */
-
     public function user() 
     {
         return $this->belongsTo(User::class);
@@ -107,12 +105,12 @@ class Appointment extends Model
     }
 
     /**
-     * Determine if an appointment is dynamically expired (24-hour unprogressed rule)
+     * Determine if an appointment is dynamically expired (24-hour unprogressed rule).
+     * Once an appointment has progressed to sampling ('tested', 'retest', 'encoded', 'released'), it can never expire.
      */
-    public function isExpired(): bool
+    public function isExpired(): bool 
     {
-        // If it progressed to sampling, it can never expire
-        if (in_array($this->status, ['tested', 'encoded', 'released'])) {
+        if (in_array($this->status, ['retest', 'tested', 'encoded', 'released'])) {
             return false;
         }
 
@@ -121,7 +119,7 @@ class Appointment extends Model
     }
 
     /**
-     * Checks if the patient is allowed to soft-delete this record from their dashboard
+     * Checks if the patient is allowed to soft-delete this record from their dashboard.
      */
     public function canBeDeletedByPatient(): bool
     {
