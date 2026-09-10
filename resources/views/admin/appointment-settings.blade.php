@@ -18,7 +18,7 @@
             </div>
             
             <div class="d-flex align-items-center gap-2">
-                <div class="card p-2.5 px-3 border-secondary bg-card shadow-sm d-flex flex-row align-items-center gap-3">
+                <div class="card p-2 px-3 border-secondary bg-card shadow-sm d-flex flex-row align-items-center gap-3">
                     <div>
                         <small class="text-muted d-block uppercase fw-bold" style="font-size: 0.65rem;">Active Target Date</small>
                         <span class="fw-bold text-main small">{{ date('F d, Y', strtotime($selectedDate)) }}</span>
@@ -70,11 +70,11 @@
                         
                         {{-- Clean Inline Legend Toolbar --}}
                         <div class="d-flex align-items-center gap-3 smaller uppercase fw-bold" style="font-size: 0.7rem;">
-                            <span class="d-flex align-items-center gap-1.5 text-main">
+                            <span class="d-flex align-items-center gap-2 text-main">
                                 <span class="rounded-circle d-inline-block" style="width: 8px; height: 8px; background-color: var(--brand-accent);"></span>
                                 Available
                             </span>
-                            <span class="d-flex align-items-center gap-1.5 text-main">
+                            <span class="d-flex align-items-center gap-2 text-main">
                                 <span class="rounded-circle d-inline-block bg-danger" style="width: 8px; height: 8px;"></span>
                                 Full / Closed
                             </span>
@@ -102,7 +102,7 @@
                                              <div class="p-1 text-start">
                                                  @foreach($s['patients'] as $p)
                                                      <div class="smaller mb-2 pb-2 border-bottom border-secondary border-opacity-25">
-                                                         <div class="fw-bold text-white uppercase">{{ $p->patient_name }}</div>
+                                                         <div class="fw-bold text-main uppercase">{{ $p->patient_name }}</div>
                                                          <div class="text-neon x-small">REF: #{{ $p->id }} | <span class="text-secondary">{{ strtoupper($p->status) }}</span></div>
                                                      </div>
                                                  @endforeach
@@ -222,7 +222,7 @@
                             </div>
 
                             <div class="mb-4">
-                                <label class="smaller text-secondary fw-bold mb-1.5 uppercase d-flex align-items-center gap-1.5">
+                                <label class="smaller text-secondary fw-bold mb-1.5 uppercase d-flex align-items-center gap-2">
                                     <i class="bi bi-calendar-event text-accent"></i>
                                     <span>Target Date for Override</span>
                                 </label>

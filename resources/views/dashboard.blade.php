@@ -95,11 +95,36 @@
                                             default => 'secondary'
                                         };
                                         $statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
+                                        
+                                        // If the user is the maker of the appointment, navigate to My Appointments;
+                                        // if this is a bulk booking where the user was booked by another maker, navigate to Patient History.
+                                        $isMaker = (Auth::id() == $app->user_id);
+                                        $targetRoute = ($app->batch_id && !$isMaker)
+                                            ? route('patient.history', ['id' => $app->id])
+                                            : route('appointments.index', ['id' => $app->id]);
                                     @endphp
-                                    <tr class="border-secondary border-opacity-10 align-middle" style="cursor: pointer;" onclick="window.location.href='{{ route('appointments.index') }}?id={{ $app->id }}'">
+                                    <tr class="border-secondary border-opacity-10 align-middle" style="cursor: pointer;" onclick="window.location.href='{{ $targetRoute }}'">
                                         <td class="ps-4">
-                                            <div class="text-main fw-bold small">{{ strtoupper($app->patient_name) }}</div>
-                                            <div class="text-muted x-small" style="font-size: 0.65rem;">ID: #{{ $app->id }}</div>
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                {{-- Always show the individual person's name --}}
+                                                <span class="text-main fw-bold small">
+                                                    {{ strtoupper($app->patient_name) }}
+                                                </span>
+                                                @if($app->batch_id)
+                                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-1.5 py-0.5 rounded uppercase" style="font-size: 0.6rem;">BULK</span>
+                                                @elseif($app->dependent_id)
+                                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-1.5 py-0.5 rounded uppercase" style="font-size: 0.6rem;">DEPENDENT</span>
+                                                @endif
+                                            </div>
+                                            <div class="text-muted x-small mt-0.5" style="font-size: 0.65rem;">
+                                                ID: #{{ $app->id }}
+                                                @if($app->batch_id)
+                                                    @if($app->organization_name)
+                                                        <span class="mx-1">&bull;</span><span class="text-secondary fw-semibold">{{ strtoupper($app->organization_name) }}</span>
+                                                    @endif
+                                                    <span class="mx-1">&bull;</span><span class="text-secondary font-monospace">BATCH #{{ $app->batch_id }}</span>
+                                                @endif
+                                            </div>
                                         </td>
                                         <td class="small text-main">
                                             {{ Str::limit($app->services->pluck('name')->implode(', '), 35) }}
@@ -154,6 +179,7 @@
         </div>
     </div>
 </div>
+
 @push('scripts')
 <script>
 function updateClock() {

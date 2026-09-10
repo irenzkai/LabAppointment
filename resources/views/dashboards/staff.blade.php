@@ -1,9 +1,7 @@
 @extends('layouts.app')
 @section('title', 'Staff Panel')
-
 @section('content')
 <div class="container-fluid text-start animate-page py-4">
-    
     {{-- Staff Header --}}
     <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
         <div>
@@ -171,6 +169,7 @@
                 </div>
             </div>
         </div>
+
         {{-- Status Distribution Chart (Redesigned Hover Tooltips) --}}
         <div class="col-lg-6">
             <div class="card p-4 border-secondary bg-card shadow-sm h-100 text-start">
@@ -203,8 +202,23 @@
                     @forelse($latestNeedingAction as $app)
                         <tr class="border-secondary border-opacity-10">
                             <td class="ps-4">
-                                <div class="fw-bold text-main small">{{ $app->patient_name }}</div>
-                                <small class="text-muted">Ref: #{{ $app->id }}</small>
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <span class="fw-bold text-main small">{{ $app->batch_id && $app->organization_name ? strtoupper($app->organization_name) : $app->patient_name }}</span>
+                                    @if($app->batch_id)
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-1.5 py-0.5 rounded uppercase" style="font-size: 0.6rem;">BULK</span>
+                                    @elseif($app->dependent_id)
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-1.5 py-0.5 rounded uppercase" style="font-size: 0.6rem;">DEPENDENT</span>
+                                    @endif
+                                </div>
+                                <div class="text-muted x-small mt-0.5" style="font-size: 0.65rem;">
+                                    Ref: #{{ $app->id }}
+                                    @if($app->batch_id)
+                                        <span class="mx-1">&bull;</span><span class="text-secondary font-monospace">BATCH #{{ $app->batch_id }}</span>
+                                        @if($app->organization_name && $app->patient_name && $app->patient_name !== $app->organization_name)
+                                            <span class="mx-1">&bull;</span><span>{{ $app->patient_name }}</span>
+                                        @endif
+                                    @endif
+                                </div>
                             </td>
                             <td>
                                 <div class="small fw-semibold">{{ $app->appointment_date ? $app->appointment_date->format('M d, Y') : 'N/A' }}</div>
@@ -226,7 +240,9 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="text-center py-4 text-muted small italic">No appointments currently require action.</td>
+                            <td colspan="5" class="text-center py-4 text-muted small italic">
+                                No appointments currently require action.
+                            </td>
                         </tr>
                     @endforelse
                 </tbody>

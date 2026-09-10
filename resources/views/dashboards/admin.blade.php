@@ -1,6 +1,5 @@
 @extends('layouts.app')
 @section('title', 'Admin Panel')
-
 @section('content')
 <div class="container text-start animate-page py-4">
     {{-- Admin Header --}}
@@ -155,6 +154,7 @@
                 </div>
             </div>
         </div>
+
         {{-- Appointment Status Distribution Chart --}}
         <div class="col-lg-6">
             <div class="card p-4 border-secondary bg-card shadow-sm h-100 text-start">
@@ -179,7 +179,7 @@
                     <table class="table table-hover align-middle mb-0" style="color: var(--text-main);">
                         <thead class="small uppercase bg-black text-secondary" style="font-size: 0.7rem;">
                             <tr>
-                                <th class="ps-3 py-2">Patient</th>
+                                <th class="ps-3 py-2">Patient / Entity</th>
                                 <th>Schedule</th>
                                 <th>Status</th>
                                 <th class="pe-3 text-end">Action</th>
@@ -189,8 +189,23 @@
                             @forelse($latestNeedingAction->take(6) as $app)
                                 <tr class="border-secondary border-opacity-10">
                                     <td class="ps-3">
-                                        <div class="fw-bold text-main small">{{ $app->patient_name }}</div>
-                                        <small class="text-muted">Ref: #{{ $app->id }}</small>
+                                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                                            <span class="fw-bold text-main small">{{ $app->batch_id && $app->organization_name ? strtoupper($app->organization_name) : $app->patient_name }}</span>
+                                            @if($app->batch_id)
+                                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-1.5 py-0.5 rounded uppercase" style="font-size: 0.6rem;">BULK</span>
+                                            @elseif($app->dependent_id)
+                                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-1.5 py-0.5 rounded uppercase" style="font-size: 0.6rem;">DEPENDENT</span>
+                                            @endif
+                                        </div>
+                                        <div class="text-muted x-small mt-0.5" style="font-size: 0.65rem;">
+                                            Ref: #{{ $app->id }}
+                                            @if($app->batch_id)
+                                                <span class="mx-1">&bull;</span><span class="text-secondary font-monospace">BATCH #{{ $app->batch_id }}</span>
+                                                @if($app->organization_name && $app->patient_name && $app->patient_name !== $app->organization_name)
+                                                    <span class="mx-1">&bull;</span><span>{{ $app->patient_name }}</span>
+                                                @endif
+                                            @endif
+                                        </div>
                                     </td>
                                     <td>
                                         <div class="small fw-semibold">{{ $app->appointment_date ? $app->appointment_date->format('M d, Y') : 'N/A' }}</div>
@@ -217,6 +232,7 @@
                 </div>
             </div>
         </div>
+
         {{-- System Account Distribution Chart --}}
         <div class="col-lg-5">
             <div class="card p-4 border-secondary bg-card shadow-sm h-100 text-start">
@@ -241,7 +257,6 @@
                 </a>
             </div>
         </div>
-
         {{-- Table --}}
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0" id="transactionsTable" style="color: var(--text-main);">
@@ -249,7 +264,7 @@
                     <tr>
                         <th class="ps-4 py-3">DATE (M/D/Y)</th>
                         <th>REF #</th>
-                        <th>PATIENT NAME</th>
+                        <th>PATIENT / ENTITY</th>
                         <th>SERVICES REQUESTED</th>
                         <th>METHOD</th>
                         <th>PAYMENT STATUS</th>
@@ -265,7 +280,22 @@
                         <tr class="border-secondary border-opacity-10 tx-row">
                             <td class="ps-4 small fw-semibold">{{ $txDateFormatted }}</td>
                             <td class="font-monospace text-accent small">#{{ $tx->id }}</td>
-                            <td class="fw-bold uppercase small">{{ $tx->patient_name }}</td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <span class="fw-bold uppercase small">{{ $tx->batch_id && $tx->organization_name ? strtoupper($tx->organization_name) : $tx->patient_name }}</span>
+                                    @if($tx->batch_id)
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-1.5 py-0.5 rounded uppercase" style="font-size: 0.6rem;">BULK</span>
+                                    @endif
+                                </div>
+                                @if($tx->batch_id)
+                                    <div class="text-muted x-small mt-0.5" style="font-size: 0.65rem;">
+                                        BATCH #{{ $tx->batch_id }}
+                                        @if($tx->organization_name && $tx->patient_name && $tx->patient_name !== $tx->organization_name)
+                                            <span class="mx-1">&bull;</span><span>{{ $tx->patient_name }}</span>
+                                        @endif
+                                    </div>
+                                @endif
+                            </td>
                             <td class="small text-secondary">{{ Str::limit($tx->services->pluck('name')->implode(', '), 40) }}</td>
                             <td class="small">{{ $tx->payment_method }}</td>
                             <td>

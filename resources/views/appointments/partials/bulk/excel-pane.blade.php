@@ -9,6 +9,17 @@
                         <i class="bi bi-file-earmark-spreadsheet-fill text-accent me-2"></i>DOWNLOAD TEMPLATE
                     </h5>
                     <p class="text-muted small mb-3">Download our pre-formatted Microsoft Excel template equipped with built-in data validations and cell guidance prompts.</p>
+                    
+                    {{-- Reminder / Duplicate Row Guidance Notice --}}
+                    <div class="alert alert-clinical p-3 mb-3 border border-secondary border-opacity-10 rounded-3 text-start" style="background-color: rgba(25, 211, 140, 0.04);">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <i class="bi bi-copy text-accent fs-6"></i>
+                            <strong class="text-accent small uppercase" style="font-size: 0.72rem; letter-spacing: 0.5px;">Formatting & Row Copy Reminder:</strong>
+                        </div>
+                        <p class="small text-muted mb-0" style="font-size: 0.75rem; line-height: 1.45;">
+                            When entering multiple patients, please <strong>copy and duplicate the sample guide row</strong> down across your spreadsheet. This ensures all cell dropdowns, date formatting rules (YYYY-MM-DD), and phone number leading zeros are strictly preserved.
+                        </p>
+                    </div>
                 </div>
                 
                 <div class="d-grid">

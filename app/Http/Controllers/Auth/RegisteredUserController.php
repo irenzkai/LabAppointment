@@ -29,7 +29,6 @@ class RegisteredUserController extends Controller
         if ($request->has('promote')) {
             try {
                 $decryptedId = Crypt::decryptString($request->query('promote'));
-
                 if ($request->query('type') === 'shadow') {
                     $appointment = Appointment::find($decryptedId);
                     if ($appointment) {
@@ -38,7 +37,6 @@ class RegisteredUserController extends Controller
                         $lName = $appointment->patient_last_name;
                         $suffix = $appointment->patient_suffix ?? null;
 
-                        // Fallback decomposition if individual name fields are not atomic
                         if (empty($fName) || empty($lName)) {
                             $nameParts = explode(' ', trim($appointment->patient_name ?? ''));
                             $fName = $nameParts[0] ?? '';
@@ -180,7 +178,7 @@ class RegisteredUserController extends Controller
             'email_verified_at' => null,
         ]);
 
-        // HISTORICAL RECORD TRANSITION (If promoted from a family dependent or activated from shadow appointment)
+        // HISTORICAL RECORD TRANSITION
         if ($request->filled('promoted_dependent_id')) {
             $depId = $request->input('promoted_dependent_id');
             Appointment::where('dependent_id', $depId)
@@ -192,16 +190,18 @@ class RegisteredUserController extends Controller
             ActivityLog::record('ACCOUNT PROMOTED', "Dependent account successfully promoted to independent user profile for {$user->name}", $user->name);
         } elseif ($request->filled('shadow_appointment_id')) {
             $appId = $request->input('shadow_appointment_id');
+            // Only update user_id if the shadow appointment is a single (non-bulk) booking
             Appointment::where('id', $appId)
-                ->orWhere('patient_email', $user->email)
+                ->whereNull('batch_id')
                 ->update([
                     'user_id' => $user->id,
                 ]);
             ActivityLog::record('SHADOW ACCOUNT ACTIVATED', 'Shadow account registered and linked to clinical folder', $user->name);
         } else {
-            // Link any pending unassigned appointments matching this registered email
+            // Link any pending unassigned single appointments matching this registered email
             Appointment::where('patient_email', $user->email)
                 ->whereNull('user_id')
+                ->whereNull('batch_id')
                 ->update([
                     'user_id' => $user->id,
                 ]);

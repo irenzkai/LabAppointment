@@ -11,10 +11,9 @@
         </div>
     </div>
 
-    {{-- Hours of Operation --}}
+    {{-- Hours of Operation --}}    
     <div class="col-6">
         <label class="smaller text-muted fw-bold mb-1.5 uppercase d-flex align-items-center gap-1.5">
-            <i class="bi bi-clock me-1 text-accent"></i>
             <span>Opening Time</span>
         </label>
         <input type="time" name="opening_time" class="form-control py-2.5 fw-semibold" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" 
@@ -23,7 +22,6 @@
 
     <div class="col-6">
         <label class="smaller text-muted fw-bold mb-1.5 uppercase d-flex align-items-center gap-1.5">
-            <i class="bi bi-clock-history me-1 text-accent "></i>
             <span>Closing Time</span>
         </label>
         <input type="time" name="closing_time" class="form-control py-2.5 fw-semibold" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" 
@@ -66,7 +64,6 @@
     {{-- Slot Mechanics --}}
     <div class="col-6 mt-2">
         <label class="smaller text-muted fw-bold mb-1.5 uppercase d-flex align-items-center gap-2">
-            <i class="bi bi-hourglass-split text-accent"></i>
             <span>Slot Duration</span>
         </label>
         <div class="input-group input-group-sm">
@@ -82,7 +79,6 @@
 
     <div class="col-6 mt-2">
         <label class="smaller text-muted fw-bold mb-1.5 uppercase d-flex align-items-center gap-2">
-            <i class="bi bi-people-fill text-accent"></i>
             <span>Slot Quota</span>
         </label>
         <div class="input-group input-group-sm">
@@ -95,7 +91,6 @@
     {{-- Booking Buffer --}}
     <div class="col-12 mt-2">
         <label class="smaller text-muted fw-bold mb-1.5 uppercase d-flex align-items-center gap-2">
-            <i class="bi bi-shield-check text-accent"></i>
             <span>Lead-Time Buffer</span>
         </label>
         <div class="input-group">

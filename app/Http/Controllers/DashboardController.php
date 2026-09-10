@@ -54,11 +54,41 @@ class DashboardController extends Controller
             ->take(3)
             ->get();
 
+        // Retrieve all batch IDs created by this user as the bulk maker
+        $createdBatchIds = Appointment::where('user_id', $user->id)
+            ->whereNotNull('batch_id')
+            ->pluck('batch_id')
+            ->unique();
+
+        // Fetch recent appointments:
+        // 1. Direct personal or dependent bookings created by this user (non-bulk)
+        // 2. ALL patient records in bulk batches created by this user (even if patient has an account)
+        // 3. Individual appointments where this user is the registered patient in a bulk booking made by someone else
         $recentAppointments = Appointment::with('services')
-            ->where('user_id', $user->id)
+            ->where(function($q) use ($user, $createdBatchIds) {
+                // Personal & dependent individual bookings
+                $q->where(function($sub) use ($user) {
+                    $sub->where('user_id', $user->id)
+                        ->whereNull('batch_id');
+                })
+                // All patient entries in batches created by this user
+                ->orWhere(function($sub) use ($createdBatchIds) {
+                    $sub->whereIn('batch_id', $createdBatchIds);
+                });
+
+                // Bulk entries where another maker booked for this user as a patient
+                if (!empty($user->email)) {
+                    $q->orWhere(function($sub) use ($user, $createdBatchIds) {
+                        $sub->whereNotNull('batch_id')
+                            ->whereNotIn('batch_id', $createdBatchIds)
+                            ->whereNotNull('patient_email')
+                            ->whereRaw('LOWER(patient_email) = ?', [strtolower($user->email)]);
+                    });
+                }
+            })
             ->where('deleted_by_patient', false)
             ->latest()
-            ->take(3)
+            ->take(6)
             ->get();
 
         return view('dashboard', compact('stats', 'popularServices', 'recentAppointments'));
@@ -101,15 +131,15 @@ class DashboardController extends Controller
         $needingActionQuery = Appointment::with(['services', 'user'])
             ->where(function($q) {
                 $q->whereIn('status', ['pending', 'approved', 'retest', 'tested', 'encoded'])
-                ->orWhere(function($sub) {
-                    $sub->where('status', 'canceled')
-                    ->where('payment_method', 'Cashless')
-                    ->where('payment_status', 'paid');
-                });
+                    ->orWhere(function($sub) {
+                        $sub->where('status', 'canceled')
+                            ->where('payment_method', 'Cashless')
+                            ->where('payment_status', 'paid');
+                    });
             })
             ->where(function($q) use ($nowSub24) {
                 $q->whereIn('status', ['retest', 'tested', 'encoded'])
-                ->orWhereRaw("TIMESTAMP(appointment_date, time_slot) >= ?", [$nowSub24]);
+                    ->orWhereRaw("TIMESTAMP(appointment_date, time_slot) >= ?", [$nowSub24]);
             });
 
         $needingActionCount = (clone $needingActionQuery)->count();
@@ -160,7 +190,8 @@ class DashboardController extends Controller
     }
 
     /**
-     * Admin Panel View: System-wide analytics, user breakdown, status stats, needing action, revenue, transactions, and system logs.
+     * Admin Panel View: System-wide analytics, user breakdown, status stats, needing action,
+     * revenue, transactions, and system logs.
      */
     public function adminPanel(Request $request)
     {
@@ -197,20 +228,18 @@ class DashboardController extends Controller
         $txYear = $request->query('tx_year', Carbon::now()->format('Y'));
         $txStatus = $request->query('tx_status', 'all');
         $txSearch = $request->query('tx_search');
-        $txQuery = Appointment::with('services');
 
+        $txQuery = Appointment::with('services');
         if ($txSearch) {
             $txQuery->where(function($q) use ($txSearch) {
                 $q->where('patient_name', 'like', "%{$txSearch}%")
-                ->orWhere('id', 'like', "%{$txSearch}%")
-                ->orWhere('organization_name', 'like', "%{$txSearch}%");
+                    ->orWhere('id', 'like', "%{$txSearch}%")
+                    ->orWhere('organization_name', 'like', "%{$txSearch}%");
             });
         }
-
         if ($txStatus && $txStatus !== 'all') {
             $txQuery->where('payment_status', $txStatus);
         }
-
         if ($txPeriod === 'daily' && $txDate) {
             $txQuery->whereDate('appointment_date', $txDate);
         } elseif ($txPeriod === 'monthly' && $txMonth) {

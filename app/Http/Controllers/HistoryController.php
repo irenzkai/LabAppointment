@@ -32,8 +32,42 @@ class HistoryController extends Controller
         }
 
         $labHistory = LaboratoryHistory::firstOrCreate(['user_id' => $targetUser->id]);
-        $appointments = Appointment::where('user_id', $targetUser->id)
-            ->with('services')
+
+        // Fetch the user's personal appointments as well as any appointments where they are the patient in a bulk booking
+        $appointments = Appointment::with(['services', 'result', 'dependent', 'user'])
+            ->where(function($q) use ($targetUser) {
+                // Direct personal bookings by the user for self
+                $q->where(function($sub) use ($targetUser) {
+                    $sub->where('user_id', $targetUser->id)
+                        ->whereNull('dependent_id')
+                        ->whereNull('batch_id');
+                });
+
+                // OR bulk bookings where the targetUser's email matches the patient email
+                if (!empty($targetUser->email)) {
+                    $q->orWhere(function($sub) use ($targetUser) {
+                        $sub->whereNotNull('batch_id')
+                            ->whereNotNull('patient_email')
+                            ->whereRaw('LOWER(patient_email) = ?', [strtolower($targetUser->email)]);
+                    });
+                }
+
+                // OR bulk bookings made by target user where target user is the registered patient
+                $q->orWhere(function($sub) use ($targetUser) {
+                    $sub->where('user_id', $targetUser->id)
+                        ->whereNotNull('batch_id')
+                        ->where(function($s2) use ($targetUser) {
+                            $s2->whereNull('patient_email')
+                               ->orWhere('patient_email', '')
+                               ->orWhereRaw('LOWER(patient_email) = ?', [strtolower($targetUser->email)]);
+                        })
+                        ->where(function($s3) use ($targetUser) {
+                            $s3->whereRaw('LOWER(patient_name) = ?', [strtolower($targetUser->name)])
+                               ->orWhere('patient_first_name', $targetUser->first_name);
+                        });
+                });
+            })
+            ->where('deleted_by_patient', false)
             ->latest()
             ->get();
 
@@ -82,6 +116,7 @@ class HistoryController extends Controller
         $user = Auth::user();
         $history = LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
         $history->update(['permission_status' => 'pending_staff']);
+
         ActivityLog::record('HISTORY REQUEST', 'Patient requested data import', $user->name);
 
         $internalStaff = User::whereIn('role', ['staff', 'lab_tech', 'admin'])->get();
@@ -92,7 +127,6 @@ class HistoryController extends Controller
                 'url' => route('admin.users.history', $user->id),
                 'type' => 'info'
             ]));
-
             event(new NotificationSent($staff->id, 'Lab History Request', "Patient {$user->name} is requesting a historical data import."));
         }
 
@@ -114,7 +148,6 @@ class HistoryController extends Controller
             'url' => route('patient.history'),
             'type' => 'info'
         ]));
-
         event(new NotificationSent($user->id, 'Data Import Permission', 'The laboratory is asking for permission to digitize your previous physical records.'));
 
         return back()->with('success', 'Permission request sent to patient.');
@@ -130,7 +163,6 @@ class HistoryController extends Controller
         }
 
         $targetUser = $user ?: Auth::user();
-
         if (Auth::user()->isEmployee()) {
             session()->put("access_granted_{$targetUser->id}_history", true);
         }
@@ -188,7 +220,6 @@ class HistoryController extends Controller
         $suffix = $request->filled('patient_suffix') ? strtoupper(trim($request->patient_suffix)) : null;
 
         $fullName = $fName . ($mName !== 'N/A' ? ' ' . $mName : '') . ' ' . $lName . ($suffix ? ' ' . $suffix : '');
-
         $street = strtoupper(trim($request->patient_street));
         $barangay = strtoupper(trim($request->patient_barangay));
         $city = strtoupper(trim($request->patient_city));
@@ -276,7 +307,6 @@ class HistoryController extends Controller
             'url' => route('patient.history'),
             'type' => 'success'
         ]));
-
         event(new NotificationSent($user->id, 'Laboratory Records Digitized', 'The laboratory staff has successfully digitized and archived your historical medical records.'));
 
         ActivityLog::record('NOTIFIED PATIENT', 'Dispatched historical records digitization completion alert', $user->name);

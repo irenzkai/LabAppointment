@@ -208,18 +208,49 @@
                                         <option value="ESR">ESR</option>
                                         <option value="RDW">RDW</option>
                                         <option value="Reticulocyte CT">Reticulocyte CT</option>
+                                        <option value="Neutrophils">Neutrophils</option>
+                                        <option value="Lymphocytes">Lymphocytes</option>
+                                        <option value="Monocytes">Monocytes</option>
+                                        <option value="Eosinophils">Eosinophils</option>
+                                        <option value="Basophils">Basophils</option>
+                                        <option value="Stabs">Stabs</option>
+                                        <option value="Blood Type">Blood Type</option>
+                                        <option value="Rh Typing">Rh Typing</option>
                                     </optgroup>
+
                                     <optgroup label="URINALYSIS">
                                         <option value="Urine Color">Urine Color</option>
                                         <option value="Transparency">Transparency</option>
                                         <option value="Urine Pus Cells">Urine Pus Cells</option>
                                         <option value="Urine RBC">Urine RBC</option>
-                                        <option value="Specific Gravity">Specific Gravity</option>
+                                        <option value="Epithelial Cells">Epithelial Cells</option>
+                                        <option value="Mucus Threads">Mucus Threads</option>
                                         <option value="Urine pH">Urine pH</option>
+                                        <option value="Specific Gravity">Specific Gravity</option>
                                         <option value="Urine Sugar">Urine Sugar</option>
                                         <option value="Urine Protein">Urine Protein</option>
+                                        <option value="Ketone">Ketone</option>
+                                        <option value="Urine Blood">Urine Blood</option>
+                                        <option value="Nitrite">Nitrite</option>
+                                        <option value="Urobilinogen">Urobilinogen</option>
+                                        <option value="Fine Granular Cast">Fine Granular Cast</option>
+                                        <option value="Coarse Granular Cast">Coarse Granular Cast</option>
+                                        <option value="Hyaline Cast">Hyaline Cast</option>
+                                        <option value="Crystals: Calcium Oxalate">Crystals: Calcium Oxalate</option>
+                                        <option value="Crystals: Amorphous Urates">Crystals: Amorphous Urates</option>
                                     </optgroup>
-                                    <optgroup label="SEROLOGY">
+
+                                    <optgroup label="FECALYSIS">
+                                        <option value="Fecal Color">Fecal Color</option>
+                                        <option value="Consistency">Consistency</option>
+                                        <option value="Fecal WBC">Fecal WBC</option>
+                                        <option value="Fecal RBC">Fecal RBC</option>
+                                        <option value="Fat Globule">Fat Globule</option>
+                                        <option value="Ova / Parasites">Ova / Parasites</option>
+                                        <option value="Occult Blood">Occult Blood</option>
+                                    </optgroup>
+
+                                    <optgroup label="SEROLOGY & OTHERS">
                                         <option value="HBsAg">HBsAg (Hepatitis B)</option>
                                         <option value="HAV">HAV (Hepatitis A)</option>
                                         <option value="VDRL / RPR">VDRL / RPR (Syphilis)</option>
@@ -397,9 +428,10 @@
 <script>
 // 1. Reference ranges lookup map
 const refMap = {
-    'WBC Count': '5-10 x 10^9/L',
+    // Hematology
+    'WBC Count': '5-10 x 10 /L',
     'Hemoglobin': '(M) 140-170 / (F) 120-150 G/L',
-    'Platelet Count': '150-400 x 10^9/L',
+    'Platelet Count': '150-400 x 10 /L',
     'MCH': '25.0-35.0 pg',
     'MCHC': '310-380 g/dl',
     'MCV': '75.0-100.0 fl',
@@ -410,14 +442,46 @@ const refMap = {
     'ESR': '(M) 0-10 / (F) 0-20 mm/hr',
     'RDW': '11.0-16.0%',
     'Reticulocyte CT': '0.5-1.5%',
+    'Neutrophils': '0.40 - 0.65',
+    'Lymphocytes': '0.20 - 0.40',
+    'Monocytes': '0.02 - 0.06',
+    'Eosinophils': '0.01 - 0.03',
+    'Basophils': '0.00 - 0.01',
+    'Stabs': '0.01 - 0.04',
+    'Blood Type': 'NONE',
+    'Rh Typing': 'NONE',
+
+    // Urinalysis
     'Urine Color': 'NONE',
     'Transparency': 'NONE',
     'Urine Pus Cells': '0-2 / (0-5)',
     'Urine RBC': '0-2 / (0-2)',
-    'Specific Gravity': 'NONE',
+    'Epithelial Cells': 'NONE',
+    'Mucus Threads': 'NONE',
     'Urine pH': 'NONE',
+    'Specific Gravity': 'NONE',
     'Urine Sugar': 'NONE',
     'Urine Protein': 'NONE',
+    'Ketone': 'NONE',
+    'Urine Blood': 'NONE',
+    'Nitrite': 'NONE',
+    'Urobilinogen': 'NONE',
+    'Fine Granular Cast': 'NONE',
+    'Coarse Granular Cast': 'NONE',
+    'Hyaline Cast': 'NONE',
+    'Crystals: Calcium Oxalate': 'NONE',
+    'Crystals: Amorphous Urates': 'NONE',
+
+    // Fecalysis
+    'Fecal Color': 'NONE',
+    'Consistency': 'NONE',
+    'Fecal WBC': 'NONE',
+    'Fecal RBC': 'NONE',
+    'Fat Globule': 'NONE',
+    'Ova / Parasites': 'NONE',
+    'Occult Blood': 'NONE',
+
+    // Serology
     'HBsAg': 'NONE',
     'HAV': 'NONE',
     'VDRL / RPR': 'NONE',

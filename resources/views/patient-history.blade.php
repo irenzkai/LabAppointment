@@ -7,9 +7,6 @@ if (!isset($availableServices)) {
     $availableServices = \App\Models\Service::where('is_available', true)->orderBy('category')->orderBy('name')->get();
 }
 
-// Dynamically group legacy appointments by batch_id to consolidate multi-pax corporate bookings
-$groupedAppointments = $appointments->groupBy(fn($item) => $item->batch_id ?? 'single_' . $item->id);
-
 // FIXED: Protect controller-passed $existingRecords from being clobbered by empty dynamic_data array
 $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? array_reverse($labHistory->dynamic_data) : []);
 @endphp
@@ -43,12 +40,8 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
             {{-- Left Side: Historical Appointment Deck --}}
             <div class="col-lg-5 col-xl-4">
                 <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
-                    @forelse($groupedAppointments as $item)
-                        @php
-                            $first = $item->first();
-                            $groupCount = $item->count();
-                        @endphp
-                        @include('appointments.partials.list-card', ['app' => $first, 'groupCount' => $groupCount])
+                    @forelse($appointments as $app)
+                        @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1, 'isHistory' => true])
                     @empty
                         <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
                             <i class="bi bi-calendar-x text-accent fs-1 mb-3 opacity-75"></i>
@@ -70,10 +63,9 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
                         <p class="text-muted small mb-0" style="max-width: 380px;">Select any clinical entry from the left-hand panel to review its test breakdowns, billing summaries, and context actions.</p>
                     </div>
 
-                    {{-- Hidden Detail Panels (Explicitly forcing is_staff => false for archive view) --}}
-                    @foreach($groupedAppointments as $item)
-                        @php $first = $item->first(); @endphp
-                        @include('appointments.partials.detail-card', ['app' => $first, 'is_staff' => false])
+                    {{-- Hidden Detail Panels (Rendered individually with isHistory => true so other batch members are never seen) --}}
+                    @foreach($appointments as $app)
+                        @include('appointments.partials.detail-card', ['app' => $app, 'is_staff' => false, 'isHistory' => true])
                     @endforeach
                 </div>
             </div>
@@ -246,11 +238,11 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
         <div id="lightbox_viewer_container" class="position-relative d-flex align-items-center justify-content-center bg-white rounded p-2 border border-secondary shadow-lg" style="max-width: 85vw; max-height: 80vh; overflow: auto; min-width: 300px; min-height: 300px;">
             <!-- Render Image Scan -->
             <img src="" id="lightbox_qr_img" alt="Zoomed Asset" class="img-fluid rounded transition-all" style="max-height: 75vh; max-width: 80vw; object-fit: contain; transform: scale(1); transform-origin: center; cursor: grab;">
-            
+
             <!-- Render PDF Document Scan -->
             <iframe id="lightbox_pdf_viewer" class="d-none rounded" style="width: 80vw; height: 75vh; border: none;"></iframe>
         </div>
-        
+
         {{-- Interactive Document Control Toolbar --}}
         <div id="lightbox_zoom_controls" class="mt-3 d-flex gap-3 align-items-center bg-dark bg-opacity-75 px-4 py-2 rounded-pill border border-secondary">
             <button type="button" class="btn btn-sm btn-outline-light rounded-circle px-2.5 py-1" onclick="zoomImage(-0.15, event)" title="Zoom Out"><i class="bi bi-zoom-out"></i></button>
@@ -264,9 +256,8 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
 </div>
 
 {{-- 5. THEME-ADAPTIVE MODALS LOOP --}}
-@foreach($groupedAppointments as $item)
+@foreach($appointments as $app)
 @php
-    $app = $item->first();
     $isExpired = $app->isExpired();
 @endphp
 {{-- A. DELETE EXPIRED APPOINTMENT MODAL --}}
@@ -301,7 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('details-placeholder').classList.add('d-none');
         document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
         document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
-        
+
         const detailPanel = document.getElementById(`details-${appId}`);
         if(detailPanel) {
             detailPanel.classList.remove('d-none');
@@ -325,7 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
         document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
         document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
-        
+
         const addRecordPanel = document.getElementById('add-record-panel');
         if (addRecordPanel) {
             addRecordPanel.classList.add('d-none');
@@ -340,7 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
         document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
-        
+
         const addRecordPanel = document.getElementById('add-record-panel');
         if (addRecordPanel) {
             addRecordPanel.classList.remove('d-none');
@@ -355,7 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
         document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
-        
+
         const addRecordPanel = document.getElementById('add-record-panel');
         if (addRecordPanel) {
             addRecordPanel.classList.add('d-none');
@@ -388,15 +379,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const imgEl = document.getElementById(`image-img-${recordId}`);
         const pdfContainer = document.getElementById(`pdf-container-${recordId}`);
         const pdfIframe = document.getElementById(`pdf-iframe-${recordId}`);
-        
+
         if (!previewArea || !title) return;
-        
+
         title.innerText = labelName.toUpperCase();
         previewArea.classList.remove('d-none');
-        
+
         // Parse file extension formatting safely
         const isPdf = fileUrl.toLowerCase().endsWith('.pdf') || fileUrl.startsWith('data:application/pdf');
-        
+
         if (isPdf) {
             if (imgContainer) imgContainer.classList.add('d-none');
             if (imgEl) imgEl.src = '';
@@ -409,7 +400,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (pdfIframe) pdfIframe.src = '';
             if (imgContainer && imgEl) {
                 imgEl.src = fileUrl;
-                imgContainer.dataset.url = fileUrl; // Stores asset source key for zoomQR
+                imgContainer.dataset.url = fileUrl;
                 imgContainer.classList.remove('d-none');
             }
         }
@@ -425,7 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function zoomImage(amount, event) {
         if (event) event.stopPropagation();
         currentScale += amount;
-        currentScale = Math.max(0.5, Math.min(3, currentScale)); // Cap zoom between 50% and 300%
+        currentScale = Math.max(0.5, Math.min(3, currentScale));
         const img = document.getElementById('lightbox_qr_img');
         if (img) {
             img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${currentScale})`;
@@ -462,7 +453,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const img = document.getElementById('lightbox_qr_img');
         const iframe = document.getElementById('lightbox_pdf_viewer');
         const controls = document.getElementById('lightbox_zoom_controls');
-        
+
         resetZoom();
         if (isPdf) {
             img.classList.add('d-none');
@@ -537,7 +528,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Fullscreen wheel-to-zoom mapping (Fixed: triggers whenever the modal overlay is active)
     const lightbox = document.getElementById('qr_lightbox');
     const container = document.getElementById('lightbox_viewer_container');
     if (container && lightbox) {
@@ -550,7 +540,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, { passive: false });
     }
 
-    // Globally hoist the functions so they are accessible to inline HTML onclick handlers
+    // Globally hoist functions
     window.showAppointmentDetails = showAppointmentDetails;
     window.resetActiveDetail = resetActiveDetail;
     window.showAddRecordForm = showAddRecordForm;
@@ -583,7 +573,6 @@ document.addEventListener('DOMContentLoaded', () => {
 .shadow-neon { box-shadow: 0 0 10px rgba(25, 211, 140, 0.15) !important; }
 .app-list-card { transition: all 0.2s ease; cursor: pointer; }
 .app-list-card:hover { border-color: var(--brand-accent) !important; transform: translateX(2px); }
-
 /* Custom zoom elements wrapper overrides */
 .image-preview-wrapper {
     position: relative;

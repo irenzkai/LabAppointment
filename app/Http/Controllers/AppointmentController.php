@@ -35,6 +35,7 @@ class AppointmentController extends Controller
         $viewMode = $request->query('view');
 
         if ($user->isPatient() || $viewMode !== 'queue') {
+            // Myself: Individual appointments booked by user for self
             $self = Appointment::with(['services', 'user', 'dependent', 'result'])
                 ->where('user_id', $user->id)
                 ->whereNull('dependent_id')
@@ -44,6 +45,7 @@ class AppointmentController extends Controller
                 ->paginate(10, ['*'], 'self_page')
                 ->withQueryString();
 
+            // Family Dependents tab
             $dependents = Appointment::with(['services', 'user', 'dependent', 'result'])
                 ->where('user_id', $user->id)
                 ->whereNotNull('dependent_id')
@@ -52,6 +54,7 @@ class AppointmentController extends Controller
                 ->paginate(10, ['*'], 'dependents_page')
                 ->withQueryString();
 
+            // Bulk tab: ONLY for the creator/maker of the bulk appointment batch
             $bulkPaginator = Appointment::with(['services', 'user', 'dependent', 'result'])
                 ->where('user_id', $user->id)
                 ->whereNotNull('batch_id')
@@ -61,7 +64,6 @@ class AppointmentController extends Controller
                 ->withQueryString();
 
             $bulkGroups = $bulkPaginator->getCollection()->groupBy('batch_id');
-
             $allApps = $self->getCollection()
                 ->concat($dependents->getCollection())
                 ->concat($bulkPaginator->getCollection());
@@ -318,7 +320,12 @@ class AppointmentController extends Controller
 
     public function editResubmit(Appointment $appointment)
     {
-        if ($appointment->user_id !== Auth::id()) abort(403, 'Unauthorized action.');
+        $user = Auth::user();
+        $isOwner = ($appointment->user_id === $user->id)
+            || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email))
+            || ($appointment->dependent_id && $user->dependents()->where('id', $appointment->dependent_id)->exists());
+
+        if (!$isOwner) abort(403, 'Unauthorized action.');
         if ($appointment->status === 'released') return redirect()->route('appointments.index')->with('error', 'Released appointments are locked and cannot be modified.');
 
         $isExpired = $appointment->isExpired();
@@ -334,7 +341,12 @@ class AppointmentController extends Controller
 
     public function update(Request $request, Appointment $appointment)
     {
-        if ($appointment->user_id !== Auth::id()) abort(403, 'Unauthorized action.');
+        $user = Auth::user();
+        $isOwner = ($appointment->user_id === $user->id)
+            || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email))
+            || ($appointment->dependent_id && $user->dependents()->where('id', $appointment->dependent_id)->exists());
+
+        if (!$isOwner) abort(403, 'Unauthorized action.');
         if ($appointment->status === 'released') return redirect()->route('appointments.index')->with('error', 'Released appointments cannot be updated.');
 
         $isBulk = !is_null($appointment->batch_id);
@@ -377,12 +389,11 @@ class AppointmentController extends Controller
             'time_slot' => 'required',
         ];
 
-        // Single appointments require payment method and optional referral/receipt verification
         if (!$isBulk) {
             $rules['payment_method'] = 'required|string';
             $rules['referral_note'] = 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240';
-
             $isReceiptRequired = false;
+
             if ($request->payment_method === 'Cashless' && $appointment->payment_status !== 'paid') {
                 if (in_array($appointment->status, ['canceled', 'returned']) || in_array($appointment->payment_status, ['invalid', 'refunded'])) {
                     if (!$appointment->payment_receipt || $request->input('remove_receipt') === '1') {
@@ -390,7 +401,6 @@ class AppointmentController extends Controller
                     }
                 }
             }
-
             $rules['payment_receipt'] = $isReceiptRequired ? 'required|file|mimes:pdf,jpg,jpeg,png|max:10240' : 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240';
         }
 
@@ -422,7 +432,6 @@ class AppointmentController extends Controller
         $city = strtoupper(trim($request->patient_city));
         $province = strtoupper(trim($request->patient_province));
 
-        // For bulk, maintain the current payment status and payment method from the batch
         $paymentStatus = $isBulk 
             ? $appointment->payment_status 
             : (($appointment->status === 'canceled' && $appointment->payment_status === 'paid') ? 'paid' : 'unpaid');
@@ -449,27 +458,22 @@ class AppointmentController extends Controller
 
         if (!$isBulk) {
             $updateData['payment_method'] = $request->payment_method;
-
             if ($request->payment_method === 'Cash') {
                 if ($appointment->payment_receipt) Storage::disk('public')->delete($appointment->payment_receipt);
                 $updateData['payment_receipt'] = null;
             }
-
             if ($request->input('remove_referral') === '1') {
                 if ($appointment->referral_note) Storage::disk('public')->delete($appointment->referral_note);
                 $updateData['referral_note'] = null;
             }
-
             if ($request->hasFile('referral_note') && $request->file('referral_note')->isValid()) {
                 if ($appointment->referral_note) Storage::disk('public')->delete($appointment->referral_note);
                 $updateData['referral_note'] = $request->file('referral_note')->store('referrals', 'public');
             }
-
             if ($request->input('remove_receipt') === '1') {
                 if ($appointment->payment_receipt) Storage::disk('public')->delete($appointment->payment_receipt);
                 $updateData['payment_receipt'] = null;
             }
-
             if ($request->hasFile('payment_receipt') && $request->file('payment_receipt')->isValid()) {
                 if ($appointment->payment_receipt) Storage::disk('public')->delete($appointment->payment_receipt);
                 $updateData['payment_receipt'] = $request->file('payment_receipt')->store('receipts', 'public');
@@ -478,7 +482,6 @@ class AppointmentController extends Controller
 
         $appointment->update($updateData);
         $appointment->services()->sync($request->service_ids);
-
         ActivityLog::record('RESUBMITTED', 'Patient corrected schedule', $appointment->patient_name, $appointment->id);
 
         $notifiables = User::whereIn('role', ['staff', 'lab_tech', 'admin'])->get();
@@ -516,7 +519,6 @@ class AppointmentController extends Controller
         if ($appointment->batch_id && $request->input('batch') === 'true') {
             Appointment::where('batch_id', $appointment->batch_id)->update($updatePayload);
             $batchApps = Appointment::where('batch_id', $appointment->batch_id)->get();
-
             foreach ($batchApps as $app) {
                 $patient = $app->user;
                 if ($patient) {
@@ -594,7 +596,6 @@ class AppointmentController extends Controller
         if (Gate::denies('isLabTech')) abort(403, 'Clinical personnel only.');
 
         $action = $request->input('action', 'tested');
-
         $nameRule = function ($attribute, $value, $fail) {
             $val = trim($value);
             if (empty($val) || $val === 'N/A') return;
@@ -777,20 +778,22 @@ class AppointmentController extends Controller
     public function cancel(Request $request, Appointment $appointment)
     {
         $user = Auth::user();
-
         if ($user->isEmployee()) {
             abort(403, 'Employees/Staff are not authorized to cancel appointments.');
         }
 
-        if ($appointment->user_id !== $user->id) {
+        $isOwner = ($appointment->user_id === $user->id)
+            || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email));
+
+        if (!$isOwner) {
             abort(403, 'Unauthorized action.');
         }
 
         $reason = 'Canceled by patient';
         $paymentStatus = $appointment->payment_status === 'paid' ? 'paid' : 'unpaid';
 
-        // BATCH CANCELLATION: Cancel all cancelable records in this batch
-        if ($appointment->batch_id && $request->input('batch') === 'true') {
+        // BATCH CANCELLATION: Cancel all cancelable records in this batch (Allowed for batch creator)
+        if ($appointment->batch_id && $request->input('batch') === 'true' && $appointment->user_id === $user->id) {
             $cancelableApps = Appointment::where('batch_id', $appointment->batch_id)
                 ->whereNotIn('status', ['retest', 'tested', 'encoded', 'released', 'canceled'])
                 ->get();
@@ -877,7 +880,11 @@ class AppointmentController extends Controller
 
     public function softDelete(Appointment $appointment)
     {
-        if ($appointment->user_id !== Auth::id()) abort(403);
+        $user = Auth::user();
+        $isOwner = ($appointment->user_id === $user->id)
+            || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email));
+
+        if (!$isOwner) abort(403);
 
         if (!$appointment->canBeDeletedByPatient()) {
             return back()->with('error', 'Paid or active appointments cannot be deleted.');

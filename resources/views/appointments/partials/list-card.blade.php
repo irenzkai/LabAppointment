@@ -13,12 +13,20 @@ $statusPriority = [
     'released' => 9,
 ];
 
-if ($app->batch_id) {
+$isStaff = !empty($is_staff) && auth()->check() && auth()->user()->isEmployee();
+$isHistoryView = !empty($isHistory);
+
+// A card is only rendered as a consolidated bulk batch if it has a batch_id, we are NOT in History view,
+// and the user is either Staff or the Creator/Maker of that bulk batch.
+$isBulkCard = ($app->batch_id && !$isHistoryView && ($isStaff || (auth()->check() && auth()->id() === $app->user_id)));
+
+if ($isBulkCard) {
     $batchAppsQuery = \App\Models\Appointment::where('batch_id', $app->batch_id);
     if (auth()->check() && auth()->user()->isPatient()) {
         $batchAppsQuery->where('deleted_by_patient', false);
     }
     $batchApps = $batchAppsQuery->get();
+    $groupCount = $batchApps->count();
     $lowestPriority = 999;
     $lowestStatus = $app->status;
     foreach ($batchApps as $subApp) {
@@ -48,12 +56,11 @@ $statusColor = match($finalStatus) {
     'canceled' => 'danger',
     default => 'secondary'
 };
-
 $statusLabel = strtoupper($finalStatus);
 
 // Determine the latest card edit timestamp in the queue list (ONLY if edited after clinical release)
 $latestCardEditTimestamp = null;
-if ($app->batch_id) {
+if ($isBulkCard) {
     $groupedApps = \App\Models\Appointment::where('batch_id', $app->batch_id)->get();
     foreach ($groupedApps as $groupedApp) {
         if ($groupedApp->results_released_at && $groupedApp->result && $groupedApp->result->audits->isNotEmpty()) {
@@ -83,7 +90,7 @@ if ($app->batch_id) {
     {{-- Card Header: Patient Name & Status Badge --}}
     <div class="d-flex justify-content-between align-items-center mb-2">
         <div class="fw-bold text-main fs-6 text-truncate" style="max-width: 180px;">
-            {{ $groupCount > 1 ? $app->organization_name : $app->patient_name }}
+            {{ ($isBulkCard && $groupCount > 1) ? $app->organization_name : $app->patient_name }}
         </div>
         <span class="badge border border-{{ $statusColor }} text-{{ $statusColor }} uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">
             {{ $statusLabel }}
@@ -96,34 +103,38 @@ if ($app->batch_id) {
             <div><i class="bi bi-calendar2 me-1"></i> {{ $app->appointment_date->format('M d, Y') }}</div>
             <div class="text-accent mt-0.5"><i class="bi bi-clock me-1"></i> {{ date('h:i A', strtotime($app->time_slot)) }}</div>
             @if($latestCardEditTimestamp)
-            <div class="text-warning fw-bold mt-0.5" style="font-size: 0.7rem;">
-                <i class="bi bi-pencil-square me-1"></i>Edited: {{ $latestCardEditTimestamp->format('M d, Y | h:i A') }}
-            </div>
+                <div class="text-warning fw-bold mt-0.5" style="font-size: 0.7rem;">
+                    <i class="bi bi-pencil-square me-1"></i>Edited: {{ $latestCardEditTimestamp->format('M d, Y | h:i A') }}
+                </div>
             @endif
             @if($finalStatus == 'retest')
-            <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;">
-                <i class="bi bi-exclamation-triangle-fill me-1"></i>Retest Required
-            </div>
+                <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>Retest Required
+                </div>
             @endif
             @if($finalStatus == 'canceled')
-            <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;">
-                <i class="bi bi-x-circle-fill me-1"></i>Appointment Canceled
-            </div>
+                <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;">
+                    <i class="bi bi-x-circle-fill me-1"></i>Appointment Canceled
+                </div>
             @endif
         </div>
         <div class="text-end">
-            @if($app->batch_id)
-            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-1 rounded">
-                BULK ({{ $groupCount }} PAX)
-            </span>
+            @if($isBulkCard)
+                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-1 rounded">
+                    BULK ({{ $groupCount }} PAX)
+                </span>
+            @elseif($app->batch_id)
+                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-1 rounded">
+                    BULK
+                </span>
             @elseif($app->dependent_id)
-            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-1 rounded">
-                DEPENDENT
-            </span>
+                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-1 rounded">
+                    DEPENDENT
+                </span>
             @else
-            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-1 rounded">
-                PERSONAL
-            </span>
+                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-1 rounded">
+                    PERSONAL
+                </span>
             @endif
         </div>
     </div>
