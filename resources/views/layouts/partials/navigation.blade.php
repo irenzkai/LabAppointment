@@ -141,7 +141,7 @@
                 <a class="dropdown-item p-3 border-bottom border-secondary border-opacity-25 {{ $notification->read_at ? 'opacity-50' : 'bg-dark border-start border-accent' }}" href="{{ route('notifications.markAsRead', $notification->id) }}">
                   <div class="fw-bold fs-x-small text-accent mb-1 uppercase">{{ $notification->data['title'] }}</div>
                   <div class="text-wrap small text-white-50">{{ $notification->data['message'] }}</div>
-                  <div class="mt-2 text-muted" style="font-size: 0.65rem;">{{ $notification->created_at->diffForHumans() }}</div>
+                  <div class="mt-2 text-secondary" style="font-size: 0.65rem;">{{ $notification->created_at->diffForHumans() }}</div>
                 </a>
               </li>
               @empty
