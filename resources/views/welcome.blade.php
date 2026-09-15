@@ -1,10 +1,8 @@
 @extends('layouts.app')
-
 @section('title', 'Landing Page')
 
 @section('content')
 <div class="animate-page pb-5">
- 
     {{-- 1. INTRO CARD (Seamless Full-Height Image Split) --}}
     <div class="card border-0 shadow-lg overflow-hidden mb-4" style="border-radius: 24px; min-height: 520px; display: flex;">
         <div class="row g-0 flex-grow-1 align-items-stretch">
@@ -14,22 +12,20 @@
                     <div class="d-inline-flex align-items-center gap-2 px-3 py-1 rounded-pill mb-4" style="background: rgba(25, 211, 140, 0.1); border: 1px solid var(--brand-accent);">
                         <span class="text-accent fw-800 fs-x-small uppercase tracking-widest">DOH Accredited Laboratory</span>
                     </div>
-                    
+
                     <h1 class="display-4 fw-800 text-white mb-3 tracking-tight">
                         Medscreen <br><span class="text-accent">Diagnostic</span><br>Laboratory.
                     </h1>
-                    
+
                     <p class="text-white-50 fs-5 mb-5" style="max-width: 500px;">
                         Experience clinical excellence with accurate, reliable, and digital results delivered straight to you.
                     </p>
-
                     <div class="d-flex flex-wrap gap-3">
                         <a href="{{ route('register') }}" class="btn-custom btn-accent px-5 py-3">GET STARTED NOW</a>
                         <a href="{{ route('services.index') }}" class="btn-custom btn-outline-accent px-5 py-3">VIEW TEST MENU</a>
                     </div>
                 </div>
             </div>
-
             {{-- Right Column: Full Bleed fb_cover.jpg Background --}}
             <div class="col-lg-5 d-none d-lg-block position-relative">
                 <div style="background: url('{{ asset('images/fb_cover.jpg') }}') center/cover no-repeat; 
@@ -71,21 +67,32 @@
         </div>
     </div>
 
-    {{-- 3. MOBILE APK CARD --}}
+    {{-- 3. MOBILE APK DOWNLOAD CARD --}}
     <div class="card bg-brand-dark border-0 shadow-lg mb-4" style="border-radius: 20px;">
         <div class="card-body p-4 p-md-5">
             <div class="row align-items-center">
-                <div class="col-md-8 text-start">
+                <div class="col-lg-8 text-start">
+                    <div class="d-inline-flex align-items-center gap-2 px-3 py-1 rounded-pill mb-2" style="background: rgba(25, 211, 140, 0.12); border: 1px solid var(--brand-accent);">
+                        <i class="bi bi-android2 text-accent"></i>
+                        <span class="text-accent fw-800 fs-x-small uppercase tracking-wider">OFFICIAL MOBILE APP AVAILABLE</span>
+                    </div>
                     <h3 class="text-white fw-800 mb-2">Health tracking in your pocket.</h3>
-                    <p class="text-white-50 mb-0">The Medscreen Android Experience is currently in internal beta testing. Real-time notifications and instant history access coming soon.</p>
+                    <p class="text-white-50 mb-3" style="max-width: 620px;">
+                        Install the Medscreen Android App to manage appointments, track real-time slot occupancy, receive instant status notifications, and preview encrypted laboratory results directly on your device.
+                    </p>
+                    <div class="d-flex flex-wrap align-items-center gap-3 text-white-50 small">
+                        <span><i class="bi bi-check-circle-fill text-accent me-1"></i>Android 7.0+</span>
+                        <span><i class="bi bi-check-circle-fill text-accent me-1"></i>Self & Dependent Bookings</span>
+                        <span><i class="bi bi-check-circle-fill text-accent me-1"></i>Offline Result Storage</span>
+                    </div>
                 </div>
-                <div class="col-md-4 text-md-end mt-4 mt-md-0">
-                    <div class="d-inline-flex align-items-center gap-3 p-3 rounded-4 bg-black bg-opacity-25 border border-secondary border-opacity-25">
-                        <i class="bi bi-android2 text-accent fs-2"></i>
-                        <div class="text-start pe-3">
-                            <div class="text-white fw-bold small">Android APK</div>
-                            <span class="badge bg-secondary-subtle text-secondary fs-x-small">COMING SOON</span>
-                        </div>
+                <div class="col-lg-4 text-lg-end mt-4 mt-lg-0">
+                    <a href="{{ route('download.apk') }}" class="btn-custom btn-accent px-4 py-3 text-decoration-none shadow-lg d-inline-flex align-items-center gap-2">
+                        <i class="bi bi-download fs-5"></i>
+                        <span>DOWNLOAD ANDROID APK</span>
+                    </a>
+                    <div class="text-white-50 fs-x-small mt-2">
+                        File: MedscreenPatientPortal.apk (Direct Install)
                     </div>
                 </div>
             </div>
@@ -98,7 +105,7 @@
             {{-- Contact Information --}}
             <div class="col-lg-5 bg-brand-dark p-4 p-md-5 text-white text-start">
                 <h3 class="fw-800 mb-5 tracking-tight">Get in Touch</h3>
-                
+
                 <div class="mb-4">
                     <label class="text-accent fs-x-small fw-800 uppercase d-block mb-1">Clinic Location</label>
                     <p class="fw-bold opacity-75 small">Atis St, General Santos City (Dadiangas),<br>9500 South Cotabato</p>
@@ -121,7 +128,6 @@
 
             {{-- Seamless Google Map --}}
             <div class="col-lg-7 position-relative" style="min-height: 450px;">
-                {{-- FIXED: Replaced platform-rejected expired GMB link with clean query-based embed URL --}}
                 <iframe 
                     src="https://maps.google.com/maps?q=Atis%20Street%2C%20General%20Santos%20City%2C%20Philippines&t=&z=15&ie=UTF8&iwloc=&output=embed" 
                     width="100%" height="100%" style="border:0; position: absolute; top: 0; left: 0;" allowfullscreen="" loading="lazy">
@@ -130,7 +136,7 @@
         </div>
     </div>
 
-    {{-- FIXED: 5. SECURE ONLINE RESULTS VERIFICATION CARD (Now positioned at the very bottom) --}}
+    {{-- 5. SECURE ONLINE RESULTS VERIFICATION CARD --}}
     <div class="card bg-brand-dark border-0 shadow-lg" style="border-radius: 20px;">
         <div class="card-body p-4 p-md-5">
             <div class="row align-items-center">
@@ -146,7 +152,6 @@
             </div>
         </div>
     </div>
-
 </div>
 
 <style>

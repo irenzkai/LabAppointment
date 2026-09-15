@@ -33,6 +33,24 @@ Route::view('/legal/privacy', 'legal.privacy')->name('legal.privacy');
 Route::view('/legal/terms', 'legal.terms')->name('legal.terms');
 Route::view('/legal/dpa', 'legal.dpa')->name('legal.dpa');
 Route::view('/legal/cookies', 'legal.cookies')->name('legal.cookies');
+
+// Public Direct Android APK Download Route
+Route::get('/download/apk', function () {
+    $path = public_path('downloads/MedscreenPatientPortal.apk');
+    if (!file_exists($path)) {
+        $path = storage_path('app/public/downloads/MedscreenPatientPortal.apk');
+    }
+
+    if (!file_exists($path)) {
+        return redirect()->route('welcome')->with('error', 'The Android APK is currently being updated. Please try downloading again shortly.');
+    }
+
+    return response()->download($path, 'MedscreenPatientPortal.apk', [
+        'Content-Type' => 'application/vnd.android.package-archive',
+        'Cache-Control' => 'no-cache, must-revalidate',
+    ]);
+})->name('download.apk');
+
 Route::get('/verify-result', [ResultController::class, 'verifySearch'])->name('result.verify-search');
 Route::get('/verify-result/{appointment}', [ResultController::class, 'verifyPublic'])->name('result.verify-public')->middleware('signed');
 Route::get('/verify-history/{user}', [ResultController::class, 'verifyHistoryPublic'])->name('history.verify-public')->middleware('signed');

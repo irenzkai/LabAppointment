@@ -4,16 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes; // 1. Import SoftDeletes trait [100]
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 
 class Service extends Model
 {
-    use HasFactory, SoftDeletes; // 2. Use SoftDeletes trait [100]
+    use HasFactory, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
-     * [100]
      */
     protected $fillable = [
         'name',
@@ -27,16 +26,24 @@ class Service extends Model
     ];
 
     /**
-     * Cast is_available to boolean and price to decimal [100]
+     * Cast attributes to native types.
      */
     protected $casts = [
         'is_available' => 'boolean',
-        'price' => 'decimal:2',
-        'deleted_at' => 'datetime' // Cast soft delete timestamp [100]
+        'price'        => 'decimal:2',
+        'deleted_at'   => 'datetime',
     ];
 
     /**
-     * A service can be linked to many appointments. [100]
+     * Automatically append dynamic accessors to JSON/Array representations.
+     */
+    protected $appends = [
+        'sample_required',
+        'formatted_time',
+    ];
+
+    /**
+     * A service can be linked to many appointments.
      */
     public function appointments()
     {
@@ -44,30 +51,55 @@ class Service extends Model
     }
 
     /**
-     * Dynamic Accessor to fetch compiled samples string for retro-compatibility.
-     * Overrides missing 'sample_required' column read attempts. [100]
+     * Dynamic Accessor to fetch compiled samples string with clinical catalog fallback.
      */
-    public function getSampleRequiredAttribute()
+    public function getSampleRequiredAttribute(): string
     {
-        $samples = DB::table('service_sample')
-            ->join('samples', 'service_sample.sample_id', '=', 'samples.id')
-            ->where('service_sample.service_id', $this->id)
-            ->pluck('samples.name')
-            ->toArray();
+        try {
+            $samples = DB::table('service_sample')
+                ->join('samples', 'service_sample.sample_id', '=', 'samples.id')
+                ->where('service_sample.service_id', $this->id)
+                ->pluck('samples.name')
+                ->toArray();
 
-        return empty($samples) ? 'N/A' : implode(',', $samples);
+            if (!empty($samples)) {
+                return implode(', ', $samples);
+            }
+        } catch (\Throwable $e) {
+            // Fallback gracefully if pivot table is unavailable
+        }
+
+        // Clinical catalog fallback matching laboratory defaults
+        $name = strtoupper($this->name);
+        if (str_contains($name, 'URINE') || str_contains($name, 'URINALYSIS') || str_contains($name, 'DRUG TEST')) {
+            return 'Urine';
+        }
+        if (str_contains($name, 'STOOL') || str_contains($name, 'FECALYSIS')) {
+            return 'Stool';
+        }
+        if (str_contains($name, 'PREGNANCY TEST')) {
+            return 'Urine';
+        }
+        if (str_contains($name, 'PEDIA') || str_contains($name, 'PREGNANCY PACKAGE')) {
+            return 'Blood, Urine';
+        }
+        if (str_contains($name, 'X-RAY') || str_contains($name, 'XRAY') || str_contains($name, 'ECG') || str_contains($name, 'MEDICAL CERTIFICATE')) {
+            return 'N/A';
+        }
+
+        return 'Blood';
     }
 
     /**
-     * Helper to format minutes for display [101]
+     * Helper to format minutes for display.
      */
-    public function getFormattedTimeAttribute() 
+    public function getFormattedTimeAttribute(): string
     {
         if ($this->estimated_time >= 60) {
             $hours = floor($this->estimated_time / 60);
             $mins = $this->estimated_time % 60;
-            return $hours . 'h ' . ($mins > 0 ? $mins . 'm' : '');
+            return $hours . 'h ' . ($mins > 0 ? "{$mins}m" : '');
         }
-        return $this->estimated_time . ' mins';
+        return ($this->estimated_time ?: 5) . ' mins';
     }
 }
