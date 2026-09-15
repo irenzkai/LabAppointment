@@ -23,6 +23,7 @@ class Appointment extends Model
         'patient_first_name',
         'patient_middle_name',
         'patient_last_name',
+        'patient_suffix',
         'patient_name', // Compiled string representation
         'patient_email',
         'patient_phone',
@@ -57,13 +58,22 @@ class Appointment extends Model
      * The attributes that should be cast.
      */
     protected $casts = [
-        'appointment_date' => 'date',
-        'patient_birthdate' => 'date',
-        'deleted_by_patient' => 'boolean',
-        'tested_at' => 'datetime',
+        'appointment_date'    => 'date',
+        'patient_birthdate'   => 'date',
+        'deleted_by_patient'  => 'boolean',
+        'tested_at'           => 'datetime',
         'result_estimated_at' => 'datetime',
         'results_released_at' => 'datetime',
-        'payment_amount' => 'decimal:2',
+        'payment_amount'      => 'decimal:2',
+    ];
+
+    /**
+     * Appends dynamic accessors so they are always serialized to JSON for Mobile and Web APIs.
+     */
+    protected $appends = [
+        'patient_email',
+        'patient_age',
+        'patient_address',
     ];
 
     /** 
@@ -143,6 +153,17 @@ class Appointment extends Model
     }
 
     /**
+     * Get the patient email, prioritizing the snapshot data, falling back to linked User account.
+     */
+    public function getPatientEmailAttribute()
+    {
+        if (!empty($this->attributes['patient_email'])) {
+            return $this->attributes['patient_email'];
+        }
+        return $this->user ? $this->user->email : null;
+    }
+
+    /**
      * Get the patient sex, prioritizing the snapshot data.
      */
     public function getPatientSexAttribute() 
@@ -165,7 +186,6 @@ class Appointment extends Model
         } elseif ($this->user) {
             $date = $this->user->birthdate;
         }
-
         return $date ? Carbon::parse($date)->age : 'N/A';
     }
 
@@ -185,7 +205,7 @@ class Appointment extends Model
      */
     public function isFullyVerified(): bool
     {
-        $res = $this->result; 
+        $res = $this->result;
         if (!$res) return false;
 
         $reports = $res->included_reports ?? [];
@@ -194,7 +214,6 @@ class Appointment extends Model
         if (in_array('lab', $reports)) {
             if (!$res->lab_v1_at || !$res->lab_v2_at) return false;
         }
-
         if (in_array('med_cert', $reports) && !$res->med_verified_at) return false;
         if (in_array('drug', $reports) && !$res->drug_verified_at) return false;
         if (in_array('radio', $reports) && !$res->radio_verified_at) return false;

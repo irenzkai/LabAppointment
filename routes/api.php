@@ -26,8 +26,8 @@ use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 // Server Health Check / Connectivity Test
 Route::get('/ping', function () {
     return response()->json([
-        'status' => 'online',
-        'app' => 'Medscreen Laboratory API',
+        'status'    => 'online',
+        'app'       => 'Medscreen Laboratory API',
         'timestamp' => now()->toDateTimeString(),
     ]);
 });
@@ -61,7 +61,7 @@ Route::get('/media/{path}', function ($path) {
 // Mobile Authentication: Login
 Route::post('/login', function (Request $request) {
     $request->validate([
-        'email' => 'required|email',
+        'email'    => 'required|email',
         'password' => 'required',
     ]);
 
@@ -75,7 +75,7 @@ Route::post('/login', function (Request $request) {
         session()->put('reactivate_user_id', $user->id);
         return response()->json([
             'deactivated' => true,
-            'message' => 'Your account is currently deactivated. You must reactivate it to log in.',
+            'message'     => 'Your account is currently deactivated. You must reactivate it to log in.',
         ], 422);
     }
 
@@ -86,8 +86,8 @@ Route::post('/login', function (Request $request) {
     $token = $user->createToken('mobile-patient-token')->plainTextToken;
 
     return response()->json([
-        'token' => $token,
-        'user' => $user,
+        'token'      => $token,
+        'user'       => $user,
         'unverified' => is_null($user->email_verified_at),
     ]);
 });
@@ -123,32 +123,32 @@ Route::post('/register', function (Request $request) {
     }
 
     $user = User::create([
-        'first_name' => $fName,
-        'middle_name' => $mName,
-        'last_name' => $lName,
-        'suffix' => $suffix ?: null,
-        'name' => $displayName,
-        'email' => $request->email,
-        'phone' => $request->phone,
-        'birthdate' => $request->birthdate,
-        'sex' => $request->sex,
-        'street' => mb_strtoupper(trim($request->street), 'UTF-8'),
-        'barangay' => mb_strtoupper(trim($request->barangay), 'UTF-8'),
-        'city' => mb_strtoupper(trim($request->city), 'UTF-8'),
-        'province' => mb_strtoupper(trim($request->province), 'UTF-8'),
-        'password' => Hash::make($request->password),
-        'role' => 'user',
-        'is_active' => true,
+        'first_name'        => $fName,
+        'middle_name'       => $mName,
+        'last_name'         => $lName,
+        'suffix'            => $suffix ?: null,
+        'name'              => $displayName,
+        'email'             => $request->email,
+        'phone'             => $request->phone,
+        'birthdate'         => $request->birthdate,
+        'sex'               => $request->sex,
+        'street'            => mb_strtoupper(trim($request->street), 'UTF-8'),
+        'barangay'          => mb_strtoupper(trim($request->barangay), 'UTF-8'),
+        'city'              => mb_strtoupper(trim($request->city), 'UTF-8'),
+        'province'          => mb_strtoupper(trim($request->province), 'UTF-8'),
+        'password'          => Hash::make($request->password),
+        'role'              => 'user',
+        'is_active'         => true,
         'email_verified_at' => null,
     ]);
 
     $token = $user->createToken('mobile-patient-token')->plainTextToken;
 
     return response()->json([
-        'token' => $token,
-        'user' => $user,
+        'token'      => $token,
+        'user'       => $user,
         'unverified' => true,
-        'message' => 'Registration completed. Please verify your email.',
+        'message'    => 'Registration completed. Please verify your email.',
     ]);
 });
 
@@ -167,7 +167,7 @@ Route::post('/forgot-password', function (Request $request) {
     if ($status == Password::RESET_LINK_SENT) {
         return response()->json([
             'success' => true,
-            'status' => __($status),
+            'status'  => __($status),
             'message' => 'We have emailed your password reset link!',
         ], 200);
     }
@@ -206,11 +206,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/profile', function (Request $request) {
         $request->validate(['password' => 'required']);
         $user = $request->user();
+
         if (!Hash::check($request->password, $user->password)) {
             return response()->json(['message' => 'Incorrect password.'], 422);
         }
+
         $user->tokens()->delete();
         $user->delete();
+
         return response()->json(['success' => true]);
     });
 
@@ -225,10 +228,11 @@ Route::middleware('auth:sanctum')->group(function () {
         return response()->json(['message' => 'Logged out successfully.']);
     });
 
-    // Appointments Endpoints
+    // Appointments Endpoints - Eager load user and relations
     Route::get('/appointments', function (Request $request) {
         $user = $request->user();
-        $self = \App\Models\Appointment::with(['services', 'dependent', 'result'])
+
+        $self = \App\Models\Appointment::with(['services', 'dependent', 'result', 'user'])
             ->where('user_id', $user->id)
             ->whereNull('dependent_id')
             ->whereNull('batch_id')
@@ -236,7 +240,7 @@ Route::middleware('auth:sanctum')->group(function () {
             ->latest()
             ->get();
 
-        $dependents = \App\Models\Appointment::with(['services', 'dependent', 'result'])
+        $dependents = \App\Models\Appointment::with(['services', 'dependent', 'result', 'user'])
             ->where('user_id', $user->id)
             ->whereNotNull('dependent_id')
             ->where('deleted_by_patient', false)
@@ -244,7 +248,7 @@ Route::middleware('auth:sanctum')->group(function () {
             ->get();
 
         return response()->json([
-            'self' => $self,
+            'self'       => $self,
             'dependents' => $dependents,
         ]);
     });
@@ -263,7 +267,7 @@ Route::middleware('auth:sanctum')->group(function () {
         $user = $request->user();
         return response()->json([
             'dependents' => $user->dependents()->get(),
-            'archived' => $user->dependents()->onlyTrashed()->get(),
+            'archived'   => $user->dependents()->onlyTrashed()->get(),
         ]);
     });
 
@@ -276,7 +280,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/patient-history', function (Request $request) {
         $user = $request->user();
         $labHistory = \App\Models\LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
-        $appointments = \App\Models\Appointment::with(['services', 'result', 'dependent'])
+        $appointments = \App\Models\Appointment::with(['services', 'result', 'dependent', 'user'])
             ->where('user_id', $user->id)
             ->where('deleted_by_patient', false)
             ->latest()
@@ -291,25 +295,25 @@ Route::middleware('auth:sanctum')->group(function () {
 
         $existingRecords = $recordsModels->map(function ($r) {
             return [
-                'id' => $r->id,
-                'date_of_record' => $r->date_of_record ? $r->date_of_record->format('Y-m-d') : '',
-                'requested_by' => $r->requested_by,
-                'patient_name' => $r->patient_name,
-                'age' => $r->age,
-                'sex' => $r->sex,
-                'address' => $r->patient_address,
+                'id'              => $r->id,
+                'date_of_record'  => $r->date_of_record ? $r->date_of_record->format('Y-m-d') : '',
+                'requested_by'    => $r->requested_by,
+                'patient_name'    => $r->patient_name,
+                'age'             => $r->age,
+                'sex'             => $r->sex,
+                'address'         => $r->patient_address,
                 'tests_requested' => $r->procedures->pluck('procedure_name')->toArray(),
-                'scans' => $r->scans->map(fn($s) => [
-                    'label' => $s->label,
-                    'file_path' => $s->file_path,
+                'scans'           => $r->scans->map(fn($s) => [
+                    'label'          => $s->label,
+                    'file_path'      => $s->file_path,
                     'certificate_no' => $s->certificate_no ?? null,
                 ])->toArray(),
             ];
         });
 
         return response()->json([
-            'labHistory' => $labHistory,
-            'appointments' => $appointments,
+            'labHistory'      => $labHistory,
+            'appointments'    => $appointments,
             'existingRecords' => $existingRecords,
         ]);
     });
