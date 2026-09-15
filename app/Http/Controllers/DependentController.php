@@ -32,7 +32,7 @@ class DependentController extends Controller
                 return; // Handled by nullable/required constraints
             }
 
-            // 1. Allowed characters boundary validation (Letters, Spanish ñ/Ñ, periods, hyphens, spaces, apostrophes)
+            // 1. Allowed characters boundary validation
             if (!preg_match('/^[a-zA-ZñÑ\s.\'-]+$/u', $val)) {
                 $fail("The " . str_replace('_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
                 return;
@@ -44,7 +44,7 @@ class DependentController extends Controller
                 return; 
             }
 
-            // 3. Must possess at least one character letter to prevent punctuation-only values
+            // 3. Must possess at least one character letter
             if (!preg_match('/[a-zA-ZñÑ]/u', $val)) {
                 $fail("The " . str_replace('_', ' ', $attribute) . " must contain at least one letter.");
                 return;
@@ -85,7 +85,7 @@ class DependentController extends Controller
             $street = $user->street;
             $barangay = $user->barangay;
             $city = $user->city;
-            $province = $user->province;
+            $province = $user->province; 
         } else {
             $street = strtoupper(trim($request->street));
             $barangay = strtoupper(trim($request->barangay));
@@ -94,7 +94,7 @@ class DependentController extends Controller
         } 
 
         // 4. Create record with normalized fields
-        $user->dependents()->create([
+        $dependent = $user->dependents()->create([
             'first_name' => strtoupper(trim($request->first_name)),
             'middle_name' => ($request->middle_name && strtoupper($request->middle_name) !== 'N/A') 
                 ? strtoupper(trim($request->middle_name)) 
@@ -108,6 +108,15 @@ class DependentController extends Controller
             'city' => $city, 
             'province' => $province 
         ]);
+
+        // FIXED: Return JSON directly to prevent 302 redirect from logging out mobile users
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Dependent record created.',
+                'dependent' => $dependent,
+            ], 201);
+        }
 
         return redirect()->to(route('profile.edit') . '#tab-dependents')->with('success', 'Dependent record created.');
     }
@@ -139,10 +148,10 @@ class DependentController extends Controller
         $nameRule = function ($attribute, $value, $fail) {
             $val = trim($value);
             if (empty($val) || $val === 'N/A') {
-                return; // Handled by nullable/required constraints
+                return; // Handled by nullable/required constraints 
             }
 
-            // 1. Allowed characters boundary validation (Letters, Spanish ñ/Ñ, periods, hyphens, spaces, apostrophes)
+            // 1. Allowed characters boundary validation
             if (!preg_match('/^[a-zA-ZñÑ\s.\'-]+$/u', $val)) {
                 $fail("The " . str_replace('_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
                 return;
@@ -154,7 +163,7 @@ class DependentController extends Controller
                 return;
             }
 
-            // 3. Must possess at least one character letter to prevent punctuation-only values
+            // 3. Must possess at least one character letter
             if (!preg_match('/[a-zA-ZñÑ]/u', $val)) {
                 $fail("The " . str_replace('_', ' ', $attribute) . " must contain at least one letter.");
                 return;
@@ -188,7 +197,7 @@ class DependentController extends Controller
             'suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
         ]);
 
-        $user = Auth::user();
+        $user = Auth::user(); 
 
         // 3. Inherit parent addresses if toggled
         if ($request->has('inherit_address')) {
@@ -219,6 +228,15 @@ class DependentController extends Controller
             'province' => $province
         ]);
 
+        // FIXED: Return JSON directly to prevent 302 redirect from logging out mobile users
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Dependent record successfully updated.',
+                'dependent' => $dependent->fresh(),
+            ], 200);
+        }
+
         return redirect()->to(route('profile.edit') . '#tab-dependents')->with('success', 'Dependent record successfully updated.');
     }
 
@@ -230,7 +248,16 @@ class DependentController extends Controller
         if ($dependent->user_id !== Auth::id()) {
             abort(403);
         }
+
         $dependent->delete(); // Soft-deletes record (preserves audit trail)
+
+        if (request()->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Dependent removed.',
+            ]);
+        }
+
         return back()->with('success', 'Dependent removed.');
     }
 
@@ -242,8 +269,17 @@ class DependentController extends Controller
         $dependent = Dependent::onlyTrashed()->findOrFail($id);
         if ($dependent->user_id !== Auth::id()) {
             abort(403);
-        } 
+        }  
+
         $dependent->restore();
+
+        if (request()->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Dependent record successfully reactivated.',
+            ]);
+        }
+
         return back()->with('success', 'Dependent record successfully reactivated.');
     }
 }

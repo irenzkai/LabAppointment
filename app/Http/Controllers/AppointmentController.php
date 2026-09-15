@@ -68,6 +68,15 @@ class AppointmentController extends Controller
                 ->concat($dependents->getCollection())
                 ->concat($bulkPaginator->getCollection());
 
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'self' => $self,
+                    'dependents' => $dependents,
+                    'bulkGroups' => $bulkGroups,
+                    'bulkPaginator' => $bulkPaginator,
+                ]);
+            }
+
             return view('appointments.index', [
                 'self' => $self,
                 'dependents' => $dependents,
@@ -165,6 +174,14 @@ class AppointmentController extends Controller
             ->groupBy(fn($item) => $item->batch_id ?? 'single_' . $item->id);
         $allApps = $staffPaginator->getCollection();
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'staffQueue' => $staffQueue,
+                'staffPaginator' => $staffPaginator,
+                'allApps' => $allApps,
+            ]);
+        }
+
         return view('appointments.index', [
             'staffQueue' => $staffQueue,
             'staffPaginator' => $staffPaginator,
@@ -244,6 +261,12 @@ class AppointmentController extends Controller
             ->whereIn('status', ['pending', 'approved', 'tested', 'encoded', 'released'])->count();
 
         if ($bookedCount >= ($config->max_patients_per_slot ?? 1)) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'This slot is no longer available. Please select another time.',
+                    'errors' => ['time_slot' => ['This slot is no longer available. Please select another time.']]
+                ], 422);
+            }
             return back()->withErrors(['time_slot' => 'This slot is no longer available. Please select another time.'])->withInput();
         }
 
@@ -309,11 +332,28 @@ class AppointmentController extends Controller
             DB::commit();
             event(new QueueUpdated());
 
+            // Check if request expects JSON (Mobile App client request)
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Appointment successfully requested!',
+                    'appointment' => $appointment->load(['services', 'user', 'dependent'])
+                ], 200);
+            }
+
             return redirect()->route('appointments.index')->with('success', 'Appointment successfully requested!');
         } catch (\Exception $e) {
             DB::rollback();
             if (isset($data['referral_note'])) Storage::disk('public')->delete($data['referral_note']);
             if (isset($data['payment_receipt'])) Storage::disk('public')->delete($data['payment_receipt']);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Booking failed: ' . $e->getMessage(),
+                ], 500);
+            }
+
             return back()->with('error', 'Booking failed: ' . $e->getMessage())->withInput();
         }
     }
@@ -336,6 +376,15 @@ class AppointmentController extends Controller
         $services = Service::where('is_available', true)->orderBy('name')->get();
         $paymentProviders = PaymentProvider::where('is_active', true)->get();
 
+        if (request()->expectsJson()) {
+            return response()->json([
+                'appointment' => $appointment->load(['services', 'user', 'dependent']),
+                'services' => $services,
+                'paymentProviders' => $paymentProviders,
+                'isExpired' => $isExpired
+            ]);
+        }
+
         return view('appointments.resubmit', compact('appointment', 'services', 'paymentProviders', 'isExpired'));
     }
 
@@ -347,7 +396,12 @@ class AppointmentController extends Controller
             || ($appointment->dependent_id && $user->dependents()->where('id', $appointment->dependent_id)->exists());
 
         if (!$isOwner) abort(403, 'Unauthorized action.');
-        if ($appointment->status === 'released') return redirect()->route('appointments.index')->with('error', 'Released appointments cannot be updated.');
+        if ($appointment->status === 'released') {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Released appointments cannot be updated.'], 403);
+            }
+            return redirect()->route('appointments.index')->with('error', 'Released appointments cannot be updated.');
+        }
 
         $isBulk = !is_null($appointment->batch_id);
 
@@ -417,6 +471,12 @@ class AppointmentController extends Controller
             ->where('id', '!=', $appointment->id)->count();
 
         if ($booked >= ($config->max_patients_per_slot ?? 1)) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'Slot is full.',
+                    'errors' => ['time_slot' => ['Slot is full.']]
+                ], 422);
+            }
             return back()->withErrors(['time_slot' => 'Slot is full.'])->withInput();
         }
 
@@ -496,6 +556,15 @@ class AppointmentController extends Controller
         }
 
         event(new QueueUpdated());
+
+        // Check if request expects JSON (Mobile App client request)
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Appointment resubmitted for approval.',
+                'appointment' => $appointment->fresh(['services', 'user', 'dependent']),
+            ], 200);
+        }
 
         return redirect()->route('appointments.index')->with('success', 'Appointment resubmitted for approval.');
     }
@@ -583,6 +652,14 @@ class AppointmentController extends Controller
         }
 
         event(new QueueUpdated());
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Appointment updated to ' . strtoupper($request->status),
+                'appointment' => $appointment->fresh(),
+            ]);
+        }
 
         if ($request->status === 'released') {
             return redirect()->route('appointments.index', ['view' => 'queue'])->with('success', 'Appointment folder has been successfully released.');
@@ -693,6 +770,14 @@ class AppointmentController extends Controller
 
             event(new QueueUpdated());
 
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Appointment successfully flagged for retesting.',
+                    'appointment' => $appointment->fresh(),
+                ]);
+            }
+
             return redirect()->back()->with('success', 'Appointment successfully flagged for retesting.');
         }
 
@@ -772,6 +857,14 @@ class AppointmentController extends Controller
 
         event(new QueueUpdated());
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Sampling logged. Results are being processed.',
+                'appointment' => $appointment->fresh(),
+            ]);
+        }
+
         return redirect()->back()->with('success', 'Sampling logged. Results are being processed.');
     }
 
@@ -799,6 +892,12 @@ class AppointmentController extends Controller
                 ->get();
 
             if ($cancelableApps->isEmpty()) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'No active appointments in this batch can be canceled.'
+                    ], 422);
+                }
                 return back()->with('error', 'No active appointments in this batch can be canceled.');
             }
 
@@ -813,11 +912,24 @@ class AppointmentController extends Controller
 
             event(new QueueUpdated());
 
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'All eligible appointments in this batch have been successfully canceled.'
+                ]);
+            }
+
             return back()->with('success', 'All eligible appointments in this batch have been successfully canceled.');
         }
 
         // INDIVIDUAL CANCELLATION
         if (in_array($appointment->status, ['retest', 'tested', 'encoded', 'released'])) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Appointments that have progressed to sampling or retesting cannot be canceled.'
+                ], 422);
+            }
             return back()->with('error', 'Appointments that have progressed to sampling or retesting cannot be canceled.');
         }
 
@@ -830,6 +942,13 @@ class AppointmentController extends Controller
         ActivityLog::record('CANCELED', "Appointment canceled. Reason: {$reason}", $appointment->patient_name, $appointment->id);
 
         event(new QueueUpdated());
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Appointment successfully canceled.'
+            ]);
+        }
 
         return back()->with('success', 'Appointment successfully canceled.');
     }
@@ -854,6 +973,13 @@ class AppointmentController extends Controller
 
         event(new QueueUpdated());
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment flagged as invalid.'
+            ]);
+        }
+
         return back()->with('success', 'Payment flagged as invalid.');
     }
 
@@ -875,6 +1001,13 @@ class AppointmentController extends Controller
 
         event(new QueueUpdated());
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Refund confirmed successfully.'
+            ]);
+        }
+
         return back()->with('success', 'Refund confirmed successfully.');
     }
 
@@ -887,6 +1020,12 @@ class AppointmentController extends Controller
         if (!$isOwner) abort(403);
 
         if (!$appointment->canBeDeletedByPatient()) {
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Paid or active appointments cannot be deleted.'
+                ], 422);
+            }
             return back()->with('error', 'Paid or active appointments cannot be deleted.');
         }
 
@@ -895,6 +1034,13 @@ class AppointmentController extends Controller
         ActivityLog::record('SOFT DELETED', 'Patient soft-deleted expired appointment', $appointment->patient_name, $appointment->id);
 
         event(new QueueUpdated());
+
+        if (request()->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Appointment removed from your dashboard.'
+            ]);
+        }
 
         return redirect()->back()->with('success', 'Appointment removed from your dashboard.');
     }
@@ -917,6 +1063,13 @@ class AppointmentController extends Controller
         ActivityLog::record('PAYMENT UPDATE', "Staff flagged appointment payment as {$statusLabel}", $appointment->patient_name, $appointment->id);
 
         event(new QueueUpdated());
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Payment status updated to {$statusLabel}."
+            ]);
+        }
 
         return redirect()->back()->with('success', "Payment status updated to {$statusLabel}.");
     }

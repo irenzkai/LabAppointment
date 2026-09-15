@@ -15,13 +15,12 @@ class Dependent extends Model
      */
     protected $fillable = [
         'user_id', 
-        'first_name',
+        'first_name', 
         'middle_name',
         'last_name',
         'suffix',
         'birthdate', 
         'sex', 
-        'phone', 
         'street',
         'barangay',
         'city',
@@ -36,6 +35,14 @@ class Dependent extends Model
         'deleted_at' => 'datetime'
     ];
 
+    /**
+     * FIXED: Added $appends so dynamic accessors are automatically included in JSON API payloads.
+     */
+    protected $appends = [
+        'name',
+        'address'
+    ];
+
     // =========================================================================
     // DYNAMIC ACCESSORS (COMPATIBILITY LAYER - Multibyte Ñ/ñ Safe)
     // =========================================================================
@@ -48,7 +55,7 @@ class Dependent extends Model
         $mName = ($this->middle_name && mb_strtoupper($this->middle_name, 'UTF-8') !== 'N/A')
             ? ' ' . $this->middle_name : '';
         $fullName = $this->first_name . $mName . ' ' . $this->last_name;
-        
+
         if ($this->suffix) {
             $fullName .= ' ' . $this->suffix;
         }
