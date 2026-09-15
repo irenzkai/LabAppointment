@@ -10,6 +10,8 @@ use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Session\TokenMismatchException;
+use App\Models\ActivityLog;
+use Illuminate\Support\Str;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -46,6 +48,26 @@ return Application::configure(basePath: dirname(__DIR__))
                 $status = 403;
             } elseif ($e instanceof TokenMismatchException) {
                 $status = 419;
+            }
+
+            // Actively record server exceptions (500+) to the ActivityLog audit database
+            if ($status >= 500) {
+                try {
+                    $currentUser = auth()->check() ? auth()->user() : null;
+                    $performerName = $currentUser ? $currentUser->name : 'GUEST (' . $request->ip() . ')';
+                    $errorDetails = Str::limit(
+                        get_class($e) . ': ' . $e->getMessage() . ' [Route: ' . $request->method() . ' ' . $request->path() . '] in ' . $e->getFile() . ':' . $e->getLine(),
+                        480
+                    );
+
+                    ActivityLog::record(
+                        'SYSTEM EXCEPTION',
+                        $errorDetails,
+                        $performerName
+                    );
+                } catch (\Throwable $logException) {
+                    // Fail silently if database connection or schema is the cause of the exception
+                }
             }
 
             // Render the singular universal Medscreen error view
