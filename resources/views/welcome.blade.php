@@ -83,7 +83,7 @@
                     <div class="d-flex flex-wrap align-items-center gap-3 text-white-50 small">
                         <span><i class="bi bi-check-circle-fill text-accent me-1"></i>Android 7.0+</span>
                         <span><i class="bi bi-check-circle-fill text-accent me-1"></i>Self & Dependent Bookings</span>
-                        <span><i class="bi bi-check-circle-fill text-accent me-1"></i>Offline Result Storage</span>
+                        <span><i class="bi bi-check-circle-fill text-accent me-1"></i>Portable Result Storage</span>
                     </div>
                 </div>
                 <div class="col-lg-4 text-lg-end mt-4 mt-lg-0">
