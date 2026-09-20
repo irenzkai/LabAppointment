@@ -56,10 +56,11 @@ class Appointment extends Model
 
     /**
      * The attributes that should be cast.
+     * 'date:Y-m-d' enforces local date serialization across all JSON endpoints.
      */
     protected $casts = [
-        'appointment_date'    => 'date',
-        'patient_birthdate'   => 'date',
+        'appointment_date'    => 'date:Y-m-d',
+        'patient_birthdate'   => 'date:Y-m-d',
         'deleted_by_patient'  => 'boolean',
         'tested_at'           => 'datetime',
         'result_estimated_at' => 'datetime',
@@ -124,7 +125,11 @@ class Appointment extends Model
             return false;
         }
 
-        $scheduledAt = Carbon::parse($this->appointment_date->format('Y-m-d') . ' ' . $this->time_slot);
+        $dateFormatted = ($this->appointment_date instanceof \DateTimeInterface)
+            ? $this->appointment_date->format('Y-m-d')
+            : (string) $this->appointment_date;
+
+        $scheduledAt = Carbon::parse($dateFormatted . ' ' . $this->time_slot);
         return Carbon::now()->greaterThan($scheduledAt->addHours(24));
     }
 

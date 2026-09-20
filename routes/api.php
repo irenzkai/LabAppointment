@@ -228,7 +228,7 @@ Route::middleware('auth:sanctum')->group(function () {
         return response()->json(['message' => 'Logged out successfully.']);
     });
 
-    // Appointments Endpoints - Eager load user and relations
+    // Appointments Endpoints
     Route::get('/appointments', function (Request $request) {
         $user = $request->user();
 
@@ -254,7 +254,10 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::post('/appointments', [AppointmentController::class, 'store']);
-    Route::post('/appointments/{appointment}', [AppointmentController::class, 'update']);
+    
+    // FIXED: Accept both POST and PUT methods to allow method spoofing (_method=PUT) on resubmission
+    Route::match(['post', 'put'], '/appointments/{appointment}', [AppointmentController::class, 'update']);
+    
     Route::post('/appointments/{appointment}/cancel', [AppointmentController::class, 'cancel']);
     Route::post('/appointments/{appointment}/soft-delete', [AppointmentController::class, 'softDelete']);
     Route::post('/appointments/{appointment}/forward-email', [ResultController::class, 'forwardToEmail']);

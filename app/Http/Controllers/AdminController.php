@@ -37,6 +37,7 @@ class AdminController extends Controller
     public function storeUser(Request $request)
     {
         if (Auth::user()->role !== 'admin') abort(403);
+
         $nameRule = function ($attribute, $value, $fail) {
             $val = trim($value);
             if (empty($val) || $val === 'N/A') return;
@@ -64,24 +65,24 @@ class AdminController extends Controller
             : ['required', 'date', 'before_or_equal:' . now()->subYears(18)->format('Y-m-d')];
 
         $request->validate([
-            'reason' => 'required|string|min:5',
-            'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
-            'first_name' => ['required', 'string', 'max:60', $nameRule],
-            'middle_name' => ['nullable', 'string', 'max:60', $nameRule],
-            'last_name' => ['required', 'string', 'max:60', $nameRule],
-            'suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
-            'email' => ['required', 'email', 'unique:users,email', 'regex:/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
-            'phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
-            'birthdate' => $birthdateRule,
-            'sex' => 'required|string|in:Male,Female',
-            'street' => 'required|string|max:150',
-            'barangay' => 'required|string|max:100',
-            'city' => 'required|string|max:100',
-            'province' => 'required|string|max:100',
-            'role' => 'required|in:user,staff,lab_tech',
-            'password' => ['required', 'string', \Illuminate\Validation\Rules\Password::defaults(), 'confirmed'],
-            'verify_email_now' => 'nullable|boolean',
-            'promoted_dependent_id' => ['nullable', 'integer', 'exists:dependents,id'],
+            'reason'                 => 'required|string|min:5',
+            'custom_reason'          => 'required_if:reason,Others|nullable|string|min:5',
+            'first_name'             => ['required', 'string', 'max:60', $nameRule],
+            'middle_name'            => ['nullable', 'string', 'max:60', $nameRule],
+            'last_name'              => ['required', 'string', 'max:60', $nameRule],
+            'suffix'                 => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
+            'email'                  => ['required', 'email', 'unique:users,email', 'regex:/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
+            'phone'                  => ['required', 'string', 'regex:/^09\d{9}$/'],
+            'birthdate'              => $birthdateRule,
+            'sex'                    => 'required|string|in:Male,Female',
+            'street'                 => 'required|string|max:150',
+            'barangay'               => 'required|string|max:100',
+            'city'                   => 'required|string|max:100',
+            'province'               => 'required|string|max:100',
+            'role'                   => 'required|in:user,staff,lab_tech',
+            'password'               => ['required', 'string', \Illuminate\Validation\Rules\Password::defaults(), 'confirmed'],
+            'verify_email_now'       => 'nullable|boolean',
+            'promoted_dependent_id'  => ['nullable', 'integer', 'exists:dependents,id'],
         ]);
 
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
@@ -89,35 +90,36 @@ class AdminController extends Controller
         $mName = ($request->middle_name && mb_strtoupper(trim($request->middle_name), 'UTF-8') !== 'N/A') ? mb_strtoupper(trim($request->middle_name), 'UTF-8') : 'N/A';
         $lName = mb_strtoupper(trim($request->last_name), 'UTF-8');
         $suffix = $request->filled('suffix') ? mb_strtoupper(trim($request->suffix), 'UTF-8') : '';
+
         $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
         if (!empty($suffix)) $displayName .= " {$suffix}";
 
         $verifyEmailNow = $request->boolean('verify_email_now');
 
         $user = User::create([
-            'first_name' => $fName,
-            'middle_name' => $mName,
-            'last_name' => $lName,
-            'suffix' => $suffix ?: null,
-            'name' => $displayName,
-            'email' => $request->email,
-            'phone' => $request->phone,
-            'birthdate' => $request->birthdate,
-            'sex' => $request->sex,
-            'street' => mb_strtoupper(trim($request->street), 'UTF-8'),
-            'barangay' => mb_strtoupper(trim($request->barangay), 'UTF-8'),
-            'city' => mb_strtoupper(trim($request->city), 'UTF-8'),
-            'province' => mb_strtoupper(trim($request->province), 'UTF-8'),
-            'role' => $request->role,
-            'password' => Hash::make($request->password),
-            'is_active' => true,
+            'first_name'        => $fName,
+            'middle_name'       => $mName,
+            'last_name'         => $lName,
+            'suffix'            => $suffix ?: null,
+            'name'              => $displayName,
+            'email'             => $request->email,
+            'phone'             => $request->phone,
+            'birthdate'         => $request->birthdate,
+            'sex'               => $request->sex,
+            'street'            => mb_strtoupper(trim($request->street), 'UTF-8'),
+            'barangay'          => mb_strtoupper(trim($request->barangay), 'UTF-8'),
+            'city'              => mb_strtoupper(trim($request->city), 'UTF-8'),
+            'province'          => mb_strtoupper(trim($request->province), 'UTF-8'),
+            'role'              => $request->role,
+            'password'          => Hash::make($request->password),
+            'is_active'         => true,
             'email_verified_at' => $verifyEmailNow ? now() : null,
         ]);
 
         if ($request->filled('promoted_dependent_id')) {
             $depId = $request->input('promoted_dependent_id');
             Appointment::where('dependent_id', $depId)->update([
-                'user_id' => $user->id,
+                'user_id'      => $user->id,
                 'dependent_id' => null,
             ]);
             Dependent::destroy($depId);
@@ -165,24 +167,24 @@ class AdminController extends Controller
         };
 
         $request->validate([
-            'reason' => 'required|string|min:5',
-            'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
-            'first_name' => ['required', 'string', 'max:60', $nameRule],
-            'middle_name' => ['nullable', 'string', 'max:60', $nameRule],
-            'last_name' => ['required', 'string', 'max:60', $nameRule],
-            'suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
-            'phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
-            'birthdate' => ['required', 'date', 'before_or_equal:' . now()->subYears(18)->format('Y-m-d')],
-            'sex' => 'required|string|in:Male,Female',
-            'street' => 'required|string|max:150',
-            'barangay' => 'required|string|max:100',
-            'city' => 'required|string|max:100',
-            'province' => 'required|string|max:100',
-            'role' => 'required|in:user,staff,lab_tech',
-            'email' => ['required', 'email', 'unique:users,email,' . $user->id, 'regex:/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
+            'reason'          => 'required|string|min:5',
+            'custom_reason'   => 'required_if:reason,Others|nullable|string|min:5',
+            'first_name'      => ['required', 'string', 'max:60', $nameRule],
+            'middle_name'     => ['nullable', 'string', 'max:60', $nameRule],
+            'last_name'       => ['required', 'string', 'max:60', $nameRule],
+            'suffix'          => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
+            'phone'           => ['required', 'string', 'regex:/^09\d{9}$/'],
+            'birthdate'       => ['required', 'date', 'before_or_equal:' . now()->subYears(18)->format('Y-m-d')],
+            'sex'             => 'required|string|in:Male,Female',
+            'street'          => 'required|string|max:150',
+            'barangay'        => 'required|string|max:100',
+            'city'            => 'required|string|max:100',
+            'province'        => 'required|string|max:100',
+            'role'            => 'required|in:user,staff,lab_tech',
+            'email'           => ['required', 'email', 'unique:users,email,' . $user->id, 'regex:/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
             'password_option' => 'nullable|in:send_link,manual',
-            'password' => 'required_if:password_option,manual|nullable|string|min:8|confirmed',
-            'email_action' => 'nullable|in:verify_now,send_notification'
+            'password'        => 'required_if:password_option,manual|nullable|string|min:8|confirmed',
+            'email_action'    => 'nullable|in:verify_now,send_notification'
         ]);
 
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
@@ -190,26 +192,27 @@ class AdminController extends Controller
         $mName = ($request->middle_name && mb_strtoupper(trim($request->middle_name), 'UTF-8') !== 'N/A') ? mb_strtoupper(trim($request->middle_name), 'UTF-8') : 'N/A';
         $lName = mb_strtoupper(trim($request->last_name), 'UTF-8');
         $suffix = $request->filled('suffix') ? mb_strtoupper(trim($request->suffix), 'UTF-8') : '';
+
         $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
         if (!empty($suffix)) $displayName .= " {$suffix}";
 
         $user->fill([
-            'first_name' => $fName,
+            'first_name'  => $fName,
             'middle_name' => $mName,
-            'last_name' => $lName,
-            'suffix' => $suffix ?: null,
-            'name' => $displayName,
-            'phone' => $request->phone,
-            'birthdate' => $request->birthdate,
-            'sex' => $request->sex,
-            'street' => mb_strtoupper(trim($request->street), 'UTF-8'),
-            'barangay' => mb_strtoupper(trim($request->barangay), 'UTF-8'),
-            'city' => mb_strtoupper(trim($request->city), 'UTF-8'),
-            'province' => mb_strtoupper(trim($request->province), 'UTF-8'),
-            'role' => $request->role,
+            'last_name'   => $lName,
+            'suffix'      => $suffix ?: null,
+            'name'        => $displayName,
+            'phone'       => $request->phone,
+            'birthdate'   => $request->birthdate,
+            'sex'         => $request->sex,
+            'street'      => mb_strtoupper(trim($request->street), 'UTF-8'),
+            'barangay'    => mb_strtoupper(trim($request->barangay), 'UTF-8'),
+            'city'        => mb_strtoupper(trim($request->city), 'UTF-8'),
+            'province'    => mb_strtoupper(trim($request->province), 'UTF-8'),
+            'role'        => $request->role,
         ]);
 
-        if ($user->isDirty('email')) { 
+        if ($user->isDirty('email')) {
             $user->email = $request->email;
             if ($user->isPatient()) {
                 $user->email_verified_at = null;
@@ -226,12 +229,13 @@ class AdminController extends Controller
             PasswordFacade::sendResetLink(['email' => $user->email]);
         } elseif ($request->input('password_option') === 'manual') {
             $user->password = Hash::make($request->password);
-            $user->password_change_required = true; 
+            $user->password_change_required = true;
         }
 
         $user->save();
+
         ActivityLog::record('ADMIN USER EDIT', "Admin updated user {$user->name}. Reason: {$reasonText}", $user->name);
-        event(new QueueUpdated()); 
+        event(new QueueUpdated());
 
         return redirect()->route('admin.users.index')->with('success', "Account details for {$user->name} updated successfully.");
     }
@@ -240,12 +244,13 @@ class AdminController extends Controller
     {
         if (Auth::user()->role !== 'admin') abort(403);
         $request->validate([
-            'reason' => 'required|string|min:5',
+            'reason'        => 'required|string|min:5',
             'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
         ]);
 
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
         $user = User::withTrashed()->findOrFail($id);
+
         if ($user->trashed()) {
             $user->restore();
             $actionLabel = "REACTIVATED";
@@ -286,32 +291,32 @@ class AdminController extends Controller
         $eighteenYearsAgo = Carbon::now()->subYears(18)->toDateString();
 
         $request->validate([
-            'reason' => 'required|string|min:5',
+            'reason'        => 'required|string|min:5',
             'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
-            'first_name' => 'required|string|max:60',
-            'middle_name' => 'nullable|string|max:60',
-            'last_name' => 'required|string|max:60',
-            'suffix' => 'nullable|string|max:10',
-            'birthdate' => 'required|date|before_or_equal:today|after:' . $eighteenYearsAgo,
-            'sex' => 'required|in:Male,Female',
-            'street' => 'required|string|max:150',
-            'barangay' => 'required|string|max:100',
-            'city' => 'required|string|max:100',
-            'province' => 'required|string|max:100',
+            'first_name'    => 'required|string|max:60',
+            'middle_name'   => 'nullable|string|max:60',
+            'last_name'     => 'required|string|max:60',
+            'suffix'        => 'nullable|string|max:10',
+            'birthdate'     => 'required|date|before_or_equal:today|after:' . $eighteenYearsAgo,
+            'sex'           => 'required|in:Male,Female',
+            'street'        => 'required|string|max:150',
+            'barangay'      => 'required|string|max:100',
+            'city'          => 'required|string|max:100',
+            'province'      => 'required|string|max:100',
         ]);
 
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
         $dependent = $user->dependents()->create([
-            'first_name' => mb_strtoupper(trim($request->first_name), 'UTF-8'),
+            'first_name'  => mb_strtoupper(trim($request->first_name), 'UTF-8'),
             'middle_name' => ($request->middle_name && mb_strtoupper(trim($request->middle_name), 'UTF-8') !== 'N/A') ? mb_strtoupper(trim($request->middle_name), 'UTF-8') : 'N/A',
-            'last_name' => mb_strtoupper(trim($request->last_name), 'UTF-8'),
-            'suffix' => $request->filled('suffix') ? mb_strtoupper(trim($request->suffix), 'UTF-8') : null,
-            'birthdate' => $request->birthdate,
-            'sex' => $request->sex,
-            'street' => mb_strtoupper(trim($request->street), 'UTF-8'),
-            'barangay' => mb_strtoupper(trim($request->barangay), 'UTF-8'),
-            'city' => mb_strtoupper(trim($request->city), 'UTF-8'),
-            'province' => mb_strtoupper(trim($request->province), 'UTF-8'),
+            'last_name'   => mb_strtoupper(trim($request->last_name), 'UTF-8'),
+            'suffix'      => $request->filled('suffix') ? mb_strtoupper(trim($request->suffix), 'UTF-8') : null,
+            'birthdate'   => $request->birthdate,
+            'sex'         => $request->sex,
+            'street'      => mb_strtoupper(trim($request->street), 'UTF-8'),
+            'barangay'    => mb_strtoupper(trim($request->barangay), 'UTF-8'),
+            'city'        => mb_strtoupper(trim($request->city), 'UTF-8'),
+            'province'    => mb_strtoupper(trim($request->province), 'UTF-8'),
         ]);
 
         ActivityLog::record('ADMIN ADD DEPENDENT', "Admin added dependent {$dependent->name} for user {$user->name}. Reason: {$reasonText}", $user->name);
@@ -334,32 +339,32 @@ class AdminController extends Controller
         $eighteenYearsAgo = Carbon::now()->subYears(18)->toDateString();
 
         $request->validate([
-            'reason' => 'required|string|min:5',
+            'reason'        => 'required|string|min:5',
             'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
-            'first_name' => 'required|string|max:60',
-            'middle_name' => 'nullable|string|max:60',
-            'last_name' => 'required|string|max:60',
-            'suffix' => 'nullable|string|max:10',
-            'birthdate' => 'required|date|before_or_equal:today|after:' . $eighteenYearsAgo,
-            'sex' => 'required|in:Male,Female',
-            'street' => 'required|string|max:150',
-            'barangay' => 'required|string|max:100',
-            'city' => 'required|string|max:100',
-            'province' => 'required|string|max:100',
+            'first_name'    => 'required|string|max:60',
+            'middle_name'   => 'nullable|string|max:60',
+            'last_name'     => 'required|string|max:60',
+            'suffix'        => 'nullable|string|max:10',
+            'birthdate'     => 'required|date|before_or_equal:today|after:' . $eighteenYearsAgo,
+            'sex'           => 'required|in:Male,Female',
+            'street'        => 'required|string|max:150',
+            'barangay'      => 'required|string|max:100',
+            'city'          => 'required|string|max:100',
+            'province'      => 'required|string|max:100',
         ]);
 
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
         $dependent->update([
-            'first_name' => mb_strtoupper(trim($request->first_name), 'UTF-8'),
+            'first_name'  => mb_strtoupper(trim($request->first_name), 'UTF-8'),
             'middle_name' => ($request->middle_name && mb_strtoupper(trim($request->middle_name), 'UTF-8') !== 'N/A') ? mb_strtoupper(trim($request->middle_name), 'UTF-8') : 'N/A',
-            'last_name' => mb_strtoupper(trim($request->last_name), 'UTF-8'),
-            'suffix' => $request->filled('suffix') ? mb_strtoupper(trim($request->suffix), 'UTF-8') : null,
-            'birthdate' => $request->birthdate,
-            'sex' => $request->sex,
-            'street' => mb_strtoupper(trim($request->street), 'UTF-8'),
-            'barangay' => mb_strtoupper(trim($request->barangay), 'UTF-8'),
-            'city' => mb_strtoupper(trim($request->city), 'UTF-8'),
-            'province' => mb_strtoupper(trim($request->province), 'UTF-8'),
+            'last_name'   => mb_strtoupper(trim($request->last_name), 'UTF-8'),
+            'suffix'      => $request->filled('suffix') ? mb_strtoupper(trim($request->suffix), 'UTF-8') : null,
+            'birthdate'   => $request->birthdate,
+            'sex'         => $request->sex,
+            'street'      => mb_strtoupper(trim($request->street), 'UTF-8'),
+            'barangay'    => mb_strtoupper(trim($request->barangay), 'UTF-8'),
+            'city'        => mb_strtoupper(trim($request->city), 'UTF-8'),
+            'province'    => mb_strtoupper(trim($request->province), 'UTF-8'),
         ]);
 
         ActivityLog::record('ADMIN EDIT DEPENDENT', "Admin updated dependent {$dependent->name} for user {$user->name}. Reason: {$reasonText}", $user->name);
@@ -373,7 +378,7 @@ class AdminController extends Controller
         $dependent = Dependent::withTrashed()->where('user_id', $user->id)->findOrFail($dependentId);
 
         $request->validate([
-            'reason' => 'required|string|min:5',
+            'reason'        => 'required|string|min:5',
             'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
         ]);
 
@@ -391,7 +396,7 @@ class AdminController extends Controller
         $user = User::withTrashed()->findOrFail($userId);
 
         $request->validate([
-            'reason' => 'required|string|min:5',
+            'reason'        => 'required|string|min:5',
             'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
         ]);
 
@@ -410,7 +415,7 @@ class AdminController extends Controller
         $dependent = Dependent::withTrashed()->where('user_id', $user->id)->findOrFail($dependentId);
 
         $request->validate([
-            'reason' => 'required|string|min:5',
+            'reason'        => 'required|string|min:5',
             'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
         ]);
 
@@ -428,6 +433,7 @@ class AdminController extends Controller
         if (!session()->has("access_granted_{$targetUser->id}_history")) {
             return redirect()->route('admin.users.index')->with('error', 'Clinical authorization required to view patient records.');
         }
+
         $labHistory = LaboratoryHistory::firstOrCreate(['user_id' => $targetUser->id]);
         $appointments = Appointment::with(['services', 'result'])
             ->where('user_id', $targetUser->id)
@@ -435,8 +441,8 @@ class AdminController extends Controller
             ->get();
 
         ActivityLog::record('VIEWED HISTORY', 'Accessed clinical archive via User Management', $targetUser->name);
-
         $availableServices = Service::where('is_available', true)->orderBy('category')->orderBy('name')->get();
+
         $recordsModels = LaboratoryHistoryRecord::whereHas('laboratoryHistory', fn($q) => $q->where('user_id', $targetUser->id))
             ->with(['scans', 'procedures'])
             ->latest('date_of_record')
@@ -444,15 +450,15 @@ class AdminController extends Controller
 
         $existingRecords = $recordsModels->map(function($r) {
             return [
-                'id' => $r->id,
-                'date_of_record' => $r->date_of_record ? $r->date_of_record->format('Y-m-d') : '',
-                'requested_by' => $r->requested_by,
-                'patient_name' => $r->patient_name,
-                'age' => $r->age,
-                'sex' => $r->sex,
-                'address' => $r->patient_address,
+                'id'              => $r->id,
+                'date_of_record'  => $r->date_of_record ? $r->date_of_record->format('Y-m-d') : '',
+                'requested_by'    => $r->requested_by,
+                'patient_name'    => $r->patient_name,
+                'age'             => $r->age,
+                'sex'             => $r->sex,
+                'address'         => $r->patient_address,
                 'tests_requested' => $r->procedures->pluck('procedure_name')->toArray(),
-                'scans' => $r->scans->map(fn($s) => ['label' => $s->label, 'file_path' => $s->file_path, 'certificate_no' => $s->certificate_no ?? null])->toArray()
+                'scans'           => $r->scans->map(fn($s) => ['label' => $s->label, 'file_path' => $s->file_path, 'certificate_no' => $s->certificate_no ?? null])->toArray()
             ];
         })->toArray();
 
@@ -477,8 +483,8 @@ class AdminController extends Controller
     public function reports(Request $request)
     {
         if (Auth::user()->role !== 'admin') abort(403);
-        $type = $request->query('type', 'transactions'); // transactions, appointments, services, accounts, logs
-        
+        $type = $request->query('type', 'transactions');
+
         $nowSub24 = Carbon::now()->subHours(24)->toDateTimeString();
 
         // 1. Transactions Filters
@@ -488,8 +494,8 @@ class AdminController extends Controller
         $txYear = $request->query('tx_year', Carbon::now()->format('Y'));
         $txStatus = $request->query('tx_status', 'all');
         $txAppStatus = $request->query('tx_app_status', 'all');
-
         $txQuery = Appointment::with('services');
+
         if ($txStatus !== 'all') {
             $txQuery->where('payment_status', $txStatus);
         }
@@ -520,8 +526,8 @@ class AdminController extends Controller
         $appYear = $request->query('app_year', Carbon::now()->format('Y'));
         $appStatus = $request->query('app_status', 'all');
         $appType = $request->query('app_type', 'all');
-
         $appQuery = Appointment::with(['services', 'user', 'dependent']);
+
         if ($appStatus !== 'all') {
             if ($appStatus === 'expired') {
                 $appQuery->whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])
@@ -553,6 +559,7 @@ class AdminController extends Controller
         $svcCategory = $request->query('svc_category', 'all');
         $svcStatus = $request->query('svc_status', 'all');
         $svcQuery = Service::withTrashed()->withCount('appointments');
+
         if ($svcCategory !== 'all') {
             $svcQuery->where('category', $svcCategory);
         }
@@ -569,6 +576,7 @@ class AdminController extends Controller
         $accRole = $request->query('acc_role', 'all');
         $accStatus = $request->query('acc_status', 'all');
         $accQuery = User::withTrashed();
+
         if ($accRole === 'patients') {
             $accQuery->where('role', 'user');
         } elseif ($accRole === 'employees') {
@@ -576,6 +584,7 @@ class AdminController extends Controller
         } elseif ($accRole === 'admins') {
             $accQuery->where('role', 'admin');
         }
+
         if ($accStatus === 'active') {
             $accQuery->whereNull('deleted_at');
         } elseif ($accStatus === 'deactivated') {
@@ -590,6 +599,7 @@ class AdminController extends Controller
         $logYear = $request->query('log_year', Carbon::now()->format('Y'));
         $logCategory = $request->query('log_category', 'all');
         $logQuery = ActivityLog::with('user');
+
         if ($logCategory !== 'all') {
             $logQuery->where('action', 'like', "%{$logCategory}%");
         }
@@ -616,6 +626,154 @@ class AdminController extends Controller
     }
 
     /**
+     * Dedicated Printable & PDF Report Export View (Formatted Clinical Letterhead)
+     */
+    public function printReport(Request $request)
+    {
+        if (Auth::user()->role !== 'admin') abort(403);
+        $type = $request->query('type', 'transactions');
+
+        $nowSub24 = Carbon::now()->subHours(24)->toDateTimeString();
+
+        // 1. Transactions Filters
+        $txPeriod = $request->query('tx_period', 'cumulative');
+        $txDate = $request->query('tx_date', Carbon::today()->toDateString());
+        $txMonth = $request->query('tx_month', Carbon::now()->format('Y-m'));
+        $txYear = $request->query('tx_year', Carbon::now()->format('Y'));
+        $txStatus = $request->query('tx_status', 'all');
+        $txAppStatus = $request->query('tx_app_status', 'all');
+        $txQuery = Appointment::with('services');
+
+        if ($txStatus !== 'all') {
+            $txQuery->where('payment_status', $txStatus);
+        }
+        if ($txAppStatus !== 'all') {
+            if ($txAppStatus === 'expired') {
+                $txQuery->whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])
+                    ->whereRaw("TIMESTAMP(appointment_date, time_slot) < ?", [$nowSub24]);
+            } else {
+                $txQuery->where('status', $txAppStatus);
+            }
+        }
+        if ($txPeriod === 'daily' && $txDate) {
+            $txQuery->whereDate('appointment_date', $txDate);
+        } elseif ($txPeriod === 'monthly' && $txMonth) {
+            $mParts = explode('-', $txMonth);
+            if (count($mParts) === 2) {
+                $txQuery->whereYear('appointment_date', $mParts[0])->whereMonth('appointment_date', $mParts[1]);
+            }
+        } elseif ($txPeriod === 'yearly' && $txYear) {
+            $txQuery->whereYear('appointment_date', $txYear);
+        }
+        $transactions = $txQuery->latest()->get();
+
+        // 2. Appointments Master Report Filters
+        $appPeriod = $request->query('app_period', 'cumulative');
+        $appDate = $request->query('app_date', Carbon::today()->toDateString());
+        $appMonth = $request->query('app_month', Carbon::now()->format('Y-m'));
+        $appYear = $request->query('app_year', Carbon::now()->format('Y'));
+        $appStatus = $request->query('app_status', 'all');
+        $appType = $request->query('app_type', 'all');
+        $appQuery = Appointment::with(['services', 'user', 'dependent']);
+
+        if ($appStatus !== 'all') {
+            if ($appStatus === 'expired') {
+                $appQuery->whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])
+                    ->whereRaw("TIMESTAMP(appointment_date, time_slot) < ?", [$nowSub24]);
+            } else {
+                $appQuery->where('status', $appStatus);
+            }
+        }
+        if ($appType === 'self') {
+            $appQuery->whereNull('dependent_id')->whereNull('batch_id');
+        } elseif ($appType === 'dependent') {
+            $appQuery->whereNotNull('dependent_id');
+        } elseif ($appType === 'bulk') {
+            $appQuery->whereNotNull('batch_id');
+        }
+        if ($appPeriod === 'daily' && $appDate) {
+            $appQuery->whereDate('appointment_date', $appDate);
+        } elseif ($appPeriod === 'monthly' && $appMonth) {
+            $mParts = explode('-', $appMonth);
+            if (count($mParts) === 2) {
+                $appQuery->whereYear('appointment_date', $mParts[0])->whereMonth('appointment_date', $mParts[1]);
+            }
+        } elseif ($appPeriod === 'yearly' && $appYear) {
+            $appQuery->whereYear('appointment_date', $appYear);
+        }
+        $appointments = $appQuery->latest()->get();
+
+        // 3. Clinical Service / Test Utilization Report
+        $svcCategory = $request->query('svc_category', 'all');
+        $svcStatus = $request->query('svc_status', 'all');
+        $svcQuery = Service::withTrashed()->withCount('appointments');
+
+        if ($svcCategory !== 'all') {
+            $svcQuery->where('category', $svcCategory);
+        }
+        if ($svcStatus === 'active') {
+            $svcQuery->whereNull('deleted_at')->where('is_available', true);
+        } elseif ($svcStatus === 'disabled') {
+            $svcQuery->whereNull('deleted_at')->where('is_available', false);
+        } elseif ($svcStatus === 'archived') {
+            $svcQuery->onlyTrashed();
+        }
+        $services = $svcQuery->orderBy('appointments_count', 'desc')->get();
+
+        // 4. Accounts Filters
+        $accRole = $request->query('acc_role', 'all');
+        $accStatus = $request->query('acc_status', 'all');
+        $accQuery = User::withTrashed();
+
+        if ($accRole === 'patients') {
+            $accQuery->where('role', 'user');
+        } elseif ($accRole === 'employees') {
+            $accQuery->whereIn('role', ['staff', 'lab_tech']);
+        } elseif ($accRole === 'admins') {
+            $accQuery->where('role', 'admin');
+        }
+
+        if ($accStatus === 'active') {
+            $accQuery->whereNull('deleted_at');
+        } elseif ($accStatus === 'deactivated') {
+            $accQuery->onlyTrashed();
+        }
+        $accounts = $accQuery->latest()->get();
+
+        // 5. Logs Filters
+        $logPeriod = $request->query('log_period', 'cumulative');
+        $logDate = $request->query('log_date', Carbon::today()->toDateString());
+        $logMonth = $request->query('log_month', Carbon::now()->format('Y-m'));
+        $logYear = $request->query('log_year', Carbon::now()->format('Y'));
+        $logCategory = $request->query('log_category', 'all');
+        $logQuery = ActivityLog::with('user');
+
+        if ($logCategory !== 'all') {
+            $logQuery->where('action', 'like', "%{$logCategory}%");
+        }
+        if ($logPeriod === 'daily' && $logDate) {
+            $logQuery->whereDate('created_at', $logDate);
+        } elseif ($logPeriod === 'monthly' && $logMonth) {
+            $lParts = explode('-', $logMonth);
+            if (count($lParts) === 2) {
+                $logQuery->whereYear('created_at', $lParts[0])->whereMonth('created_at', $lParts[1]);
+            }
+        } elseif ($logPeriod === 'yearly' && $logYear) {
+            $logQuery->whereYear('created_at', $logYear);
+        }
+        $logs = $logQuery->latest()->get();
+
+        return view('admin.exports', compact(
+            'type',
+            'transactions', 'txPeriod', 'txDate', 'txMonth', 'txYear', 'txStatus', 'txAppStatus',
+            'appointments', 'appPeriod', 'appDate', 'appMonth', 'appYear', 'appStatus', 'appType',
+            'services', 'svcCategory', 'svcStatus',
+            'accounts', 'accRole', 'accStatus',
+            'logs', 'logPeriod', 'logDate', 'logMonth', 'logYear', 'logCategory'
+        ));
+    }
+
+    /**
      * CSV Stream Exporter for Reports Page
      */
     public function exportReport(Request $request)
@@ -625,11 +783,11 @@ class AdminController extends Controller
         $filename = "medscreen_" . $reportType . "_report_" . date('Y-m-d') . ".csv";
 
         $headers = [
-            "Content-type" => "text/csv; charset=UTF-8",
+            "Content-type"        => "text/csv; charset=UTF-8",
             "Content-Disposition" => "attachment; filename=$filename",
-            "Pragma" => "no-cache",
-            "Cache-Control" => "must-revalidate, post-check=0, pre-check=0",
-            "Expires" => "0"
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
         ];
 
         $callback = function() use ($request, $reportType) {
@@ -639,7 +797,7 @@ class AdminController extends Controller
 
             if ($reportType === 'transactions') {
                 fputcsv($file, ['Date (M/D/Y)', 'Reference ID', 'Patient Name', 'Services Requested', 'Method', 'Payment Status', 'Appointment Status', 'Amount (PHP)']);
-                
+
                 $txPeriod = $request->query('tx_period', 'cumulative');
                 $txDate = $request->query('tx_date', Carbon::today()->toDateString());
                 $txMonth = $request->query('tx_month', Carbon::now()->format('Y-m'));
@@ -726,6 +884,7 @@ class AdminController extends Controller
                 $svcCategory = $request->query('svc_category', 'all');
                 $svcStatus = $request->query('svc_status', 'all');
                 $svcQuery = Service::withTrashed()->withCount('appointments');
+
                 if ($svcCategory !== 'all') $svcQuery->where('category', $svcCategory);
                 if ($svcStatus === 'active') $svcQuery->whereNull('deleted_at')->where('is_available', true);
                 elseif ($svcStatus === 'disabled') $svcQuery->whereNull('deleted_at')->where('is_available', false);
@@ -748,10 +907,10 @@ class AdminController extends Controller
                 }
             } elseif ($reportType === 'accounts') {
                 fputcsv($file, ['ID', 'Full Name', 'Email Address', 'Phone Number', 'Role', 'Status', 'Registered Date']);
-                
                 $accRole = $request->query('acc_role', 'all');
                 $accStatus = $request->query('acc_status', 'all');
                 $accQuery = User::withTrashed();
+
                 if ($accRole === 'patients') $accQuery->where('role', 'user');
                 elseif ($accRole === 'employees') $accQuery->whereIn('role', ['staff', 'lab_tech']);
                 elseif ($accRole === 'admins') $accQuery->where('role', 'admin');
@@ -772,12 +931,12 @@ class AdminController extends Controller
                 }
             } elseif ($reportType === 'logs') {
                 fputcsv($file, ['Date & Time', 'Performer', 'Role', 'Action Event', 'Target Patient', 'Audit Reason']);
-                
                 $logPeriod = $request->query('log_period', 'cumulative');
                 $logDate = $request->query('log_date', Carbon::today()->toDateString());
                 $logMonth = $request->query('log_month', Carbon::now()->format('Y-m'));
                 $logYear = $request->query('log_year', Carbon::now()->format('Y'));
                 $logCategory = $request->query('log_category', 'all');
+
                 $logQuery = ActivityLog::with('user');
                 if ($logCategory !== 'all') $logQuery->where('action', 'like', "%{$logCategory}%");
                 if ($logPeriod === 'daily' && $logDate) $logQuery->whereDate('created_at', $logDate);

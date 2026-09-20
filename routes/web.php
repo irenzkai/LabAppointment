@@ -189,8 +189,9 @@ Route::middleware(['auth', 'verified', 'force.password'])->group(function () {
         // Audit Logs
         Route::get('/logs', [AdminController::class, 'viewLogs'])->name('admin.logs');
 
-        // Reports
+        // Reports Console & Dedicated PDF/Print Exports
         Route::get('/reports', [AdminController::class, 'reports'])->name('admin.reports');
+        Route::get('/reports/print', [AdminController::class, 'printReport'])->name('admin.reports.print');
         Route::get('/reports/export', [AdminController::class, 'exportReport'])->name('admin.reports.export');
     });
 });
