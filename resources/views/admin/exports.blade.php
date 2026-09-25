@@ -230,7 +230,7 @@
             border: 1px solid #e2e8f0;
             color: #1e293b;
             vertical-align: middle;
-            word-break: break-all !important; /* Breaks long Windows paths/exceptions at any character */
+            word-break: break-word !important;
             overflow-wrap: anywhere !important;
             word-wrap: break-word !important;
             white-space: normal !important;
@@ -244,7 +244,7 @@
         /* Badges */
         .formal-badge {
             display: inline-block;
-            padding: 2px 5px;
+            padding: 2.5px 6px;
             font-size: 6.2pt;
             font-weight: 800;
             text-transform: uppercase;
@@ -253,11 +253,13 @@
             border: 1px solid #cbd5e1;
             background-color: #f1f5f9;
             color: #334155;
-            white-space: normal;
-            word-break: break-word;
-            overflow-wrap: anywhere;
+            white-space: normal !important;
+            word-break: break-word !important;
+            overflow-wrap: anywhere !important;
             text-align: center;
-            line-height: 1.2;
+            line-height: 1.25;
+            max-width: 100% !important;
+            box-sizing: border-box;
         }
 
         .formal-badge-paid {
@@ -284,12 +286,30 @@
             color: #b91c1c;
         }
 
+        /* Explicit Action Event Wrap Alignment */
+        .action-event-cell {
+            word-break: break-word !important;
+            overflow-wrap: anywhere !important;
+            white-space: normal !important;
+        }
+
+        .action-event-badge {
+            white-space: normal !important;
+            word-break: break-word !important;
+            overflow-wrap: anywhere !important;
+            display: inline-block !important;
+            max-width: 100% !important;
+            line-height: 1.3 !important;
+            text-align: center !important;
+            box-sizing: border-box !important;
+        }
+
         /* Formatted Audit Log Reason Box */
         .log-reason-content {
             font-size: 7pt;
             line-height: 1.35;
             color: #334155;
-            word-break: break-all !important;
+            word-break: break-word !important;
             overflow-wrap: anywhere !important;
             white-space: normal !important;
             font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -427,7 +447,13 @@
                 if ($logCat !== 'all') $scopeItems[] = ['label' => 'Action Event', 'val' => strtoupper($logCat)];
             }
 
-            // 3. Keyword Search Filter
+            // 3. Custom Selected Rows Indicator
+            if (request()->filled('selected_ids')) {
+                $selectedCount = count(array_filter(explode(',', request()->query('selected_ids'))));
+                $scopeItems[] = ['label' => 'Selection', 'val' => 'FILTERED (' . $selectedCount . ' ROWS)'];
+            }
+
+            // 4. Keyword Search Filter
             $search = request()->query('search', request()->query('tx_search', request()->query('app_search', request()->query('log_search'))));
             if ($search) {
                 $scopeItems[] = ['label' => 'Search Query', 'val' => '"' . $search . '"'];
@@ -708,15 +734,15 @@
         </table>
         @endif
 
-        {{-- TAB 5: SYSTEM AUDIT LOGS (With Explicit Width Allocation and Word-Break All) --}}
+        {{-- TAB 5: SYSTEM AUDIT LOGS (With Balanced 18% Width & Strict Word-Break Wrapping) --}}
         @if($type === 'logs')
         <table class="formal-report-table">
             <thead>
                 <tr>
-                    <th style="width: 13%;">Timestamp</th>
-                    <th style="width: 15%;">Performer</th>
-                    <th style="width: 15%;">Event Action</th>
-                    <th style="width: 15%;">Target Patient</th>
+                    <th style="width: 12%;">Timestamp</th>
+                    <th style="width: 14%;">Performer</th>
+                    <th style="width: 18%;">Event Action</th>
+                    <th style="width: 14%;">Target Patient</th>
                     <th style="width: 42%;">Justification & Audit Notes</th>
                 </tr>
             </thead>
@@ -728,8 +754,8 @@
                         <div class="fw-bold uppercase">{{ $log->user->name ?? 'System/Deleted' }}</div>
                         <small class="text-muted">({{ strtoupper($log->user->role ?? 'SYSTEM') }})</small>
                     </td>
-                    <td>
-                        <span class="formal-badge">
+                    <td class="action-event-cell">
+                        <span class="formal-badge action-event-badge">
                             {{ $log->action }}
                         </span>
                     </td>

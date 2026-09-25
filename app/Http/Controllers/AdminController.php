@@ -136,6 +136,12 @@ class AdminController extends Controller
     {
         if (Auth::user()->role !== 'admin') abort(403);
         $user = User::withTrashed()->findOrFail($id);
+
+        // Security Guard: An admin cannot edit another admin account
+        if ($user->role === 'admin' && $user->id !== Auth::id()) {
+            abort(403, 'Unauthorized: Administrators cannot modify another administrator account.');
+        }
+
         $user->load(['dependents' => fn($q) => $q->withTrashed()]);
         return view('admin.users.edit', compact('user'));
     }
@@ -144,6 +150,11 @@ class AdminController extends Controller
     {
         if (Auth::user()->role !== 'admin') abort(403);
         $user = User::withTrashed()->findOrFail($id);
+
+        // Security Guard: An admin cannot update another admin account
+        if ($user->role === 'admin' && $user->id !== Auth::id()) {
+            abort(403, 'Unauthorized: Administrators cannot modify another administrator account.');
+        }
 
         $nameRule = function ($attribute, $value, $fail) {
             $val = trim($value);
@@ -250,6 +261,11 @@ class AdminController extends Controller
 
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
         $user = User::withTrashed()->findOrFail($id);
+
+        // Security Guard: An admin cannot deactivate/reactivate another admin account
+        if ($user->role === 'admin' && $user->id !== Auth::id()) {
+            abort(403, 'Unauthorized: Administrators cannot deactivate or modify another administrator account.');
+        }
 
         if ($user->trashed()) {
             $user->restore();
@@ -634,6 +650,9 @@ class AdminController extends Controller
         $type = $request->query('type', 'transactions');
 
         $nowSub24 = Carbon::now()->subHours(24)->toDateTimeString();
+        $selectedIds = $request->filled('selected_ids') 
+            ? array_filter(explode(',', $request->query('selected_ids'))) 
+            : null;
 
         // 1. Transactions Filters
         $txPeriod = $request->query('tx_period', 'cumulative');
@@ -644,6 +663,9 @@ class AdminController extends Controller
         $txAppStatus = $request->query('tx_app_status', 'all');
         $txQuery = Appointment::with('services');
 
+        if (!empty($selectedIds)) {
+            $txQuery->whereIn('id', $selectedIds);
+        }
         if ($txStatus !== 'all') {
             $txQuery->where('payment_status', $txStatus);
         }
@@ -676,6 +698,9 @@ class AdminController extends Controller
         $appType = $request->query('app_type', 'all');
         $appQuery = Appointment::with(['services', 'user', 'dependent']);
 
+        if (!empty($selectedIds)) {
+            $appQuery->whereIn('id', $selectedIds);
+        }
         if ($appStatus !== 'all') {
             if ($appStatus === 'expired') {
                 $appQuery->whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])
@@ -708,6 +733,9 @@ class AdminController extends Controller
         $svcStatus = $request->query('svc_status', 'all');
         $svcQuery = Service::withTrashed()->withCount('appointments');
 
+        if (!empty($selectedIds)) {
+            $svcQuery->whereIn('id', $selectedIds);
+        }
         if ($svcCategory !== 'all') {
             $svcQuery->where('category', $svcCategory);
         }
@@ -725,6 +753,9 @@ class AdminController extends Controller
         $accStatus = $request->query('acc_status', 'all');
         $accQuery = User::withTrashed();
 
+        if (!empty($selectedIds)) {
+            $accQuery->whereIn('id', $selectedIds);
+        }
         if ($accRole === 'patients') {
             $accQuery->where('role', 'user');
         } elseif ($accRole === 'employees') {
@@ -748,6 +779,9 @@ class AdminController extends Controller
         $logCategory = $request->query('log_category', 'all');
         $logQuery = ActivityLog::with('user');
 
+        if (!empty($selectedIds)) {
+            $logQuery->whereIn('id', $selectedIds);
+        }
         if ($logCategory !== 'all') {
             $logQuery->where('action', 'like', "%{$logCategory}%");
         }
@@ -782,6 +816,10 @@ class AdminController extends Controller
         $reportType = $request->query('report_type', 'transactions');
         $filename = "medscreen_" . $reportType . "_report_" . date('Y-m-d') . ".csv";
 
+        $selectedIds = $request->filled('selected_ids')
+            ? array_filter(explode(',', $request->input('selected_ids')))
+            : null;
+
         $headers = [
             "Content-type"        => "text/csv; charset=UTF-8",
             "Content-Disposition" => "attachment; filename=$filename",
@@ -790,7 +828,7 @@ class AdminController extends Controller
             "Expires"             => "0"
         ];
 
-        $callback = function() use ($request, $reportType) {
+        $callback = function() use ($request, $reportType, $selectedIds) {
             $file = fopen('php://output', 'w');
             fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
             $nowSub24 = Carbon::now()->subHours(24)->toDateTimeString();
@@ -806,6 +844,9 @@ class AdminController extends Controller
                 $txAppStatus = $request->query('tx_app_status', 'all');
 
                 $txQuery = Appointment::with('services');
+                if (!empty($selectedIds)) {
+                    $txQuery->whereIn('id', $selectedIds);
+                }
                 if ($txStatus !== 'all') $txQuery->where('payment_status', $txStatus);
                 if ($txAppStatus !== 'all') {
                     if ($txAppStatus === 'expired') {
@@ -845,6 +886,9 @@ class AdminController extends Controller
                 $appType = $request->query('app_type', 'all');
 
                 $appQuery = Appointment::with(['services', 'user', 'dependent']);
+                if (!empty($selectedIds)) {
+                    $appQuery->whereIn('id', $selectedIds);
+                }
                 if ($appStatus !== 'all') {
                     if ($appStatus === 'expired') {
                         $appQuery->whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])
@@ -885,6 +929,9 @@ class AdminController extends Controller
                 $svcStatus = $request->query('svc_status', 'all');
                 $svcQuery = Service::withTrashed()->withCount('appointments');
 
+                if (!empty($selectedIds)) {
+                    $svcQuery->whereIn('id', $selectedIds);
+                }
                 if ($svcCategory !== 'all') $svcQuery->where('category', $svcCategory);
                 if ($svcStatus === 'active') $svcQuery->whereNull('deleted_at')->where('is_available', true);
                 elseif ($svcStatus === 'disabled') $svcQuery->whereNull('deleted_at')->where('is_available', false);
@@ -911,6 +958,9 @@ class AdminController extends Controller
                 $accStatus = $request->query('acc_status', 'all');
                 $accQuery = User::withTrashed();
 
+                if (!empty($selectedIds)) {
+                    $accQuery->whereIn('id', $selectedIds);
+                }
                 if ($accRole === 'patients') $accQuery->where('role', 'user');
                 elseif ($accRole === 'employees') $accQuery->whereIn('role', ['staff', 'lab_tech']);
                 elseif ($accRole === 'admins') $accQuery->where('role', 'admin');
@@ -938,6 +988,9 @@ class AdminController extends Controller
                 $logCategory = $request->query('log_category', 'all');
 
                 $logQuery = ActivityLog::with('user');
+                if (!empty($selectedIds)) {
+                    $logQuery->whereIn('id', $selectedIds);
+                }
                 if ($logCategory !== 'all') $logQuery->where('action', 'like', "%{$logCategory}%");
                 if ($logPeriod === 'daily' && $logDate) $logQuery->whereDate('created_at', $logDate);
                 elseif ($logPeriod === 'monthly' && $logMonth) {

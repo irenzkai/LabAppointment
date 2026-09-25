@@ -29,17 +29,24 @@ RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 # 4. Copy the project
 COPY . .
 
-# 5. Finish Composer and set permissions
+# 5. Ensure required storage and certificate directories exist
+RUN mkdir -p /var/www/html/storage/certs \
+    && mkdir -p /var/www/html/storage/framework/sessions \
+    && mkdir -p /var/www/html/storage/framework/views \
+    && mkdir -p /var/www/html/storage/framework/cache \
+    && mkdir -p /var/www/html/bootstrap/cache
+
+# 6. Finish Composer and set permissions
 RUN composer dump-autoload --optimize \
     && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
-# 6. Prepare the Entrypoint Script
+# 7. Prepare the Entrypoint Script
 RUN chmod +x /var/www/html/entrypoint.sh
 
-# 7. Apache Config
+# 8. Apache Config
 RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf
 
 EXPOSE 80
 
-# 8. Set the Entrypoint
+# 9. Set the Entrypoint
 ENTRYPOINT ["/var/www/html/entrypoint.sh"]

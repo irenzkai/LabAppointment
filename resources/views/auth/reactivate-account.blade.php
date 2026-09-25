@@ -19,7 +19,7 @@
                             <span class="text-white uppercase fw-800 fs-3 tracking-tight">MED<span class="text-accent">SCREEN</span></span>
                         </div>
                         <h1 class="display-5 fw-800 text-white mb-3 mt-4" style="line-height: 1.15;">Reactivate your account.</h1>
-                        <p class="text-white-50 fs-5 mb-0" style="line-height: 1.6;">Welcome back! Please verify your email using the 6-digit verification code sent to your registered address to reactivate your portal and restore your clinical history.</p>
+                        <p class="text-white-50 fs-5 mb-0" style="line-height: 1.6;">Welcome back! Please verify your identity using the 6-digit verification code sent to your registered email address to reactivate your portal and restore your clinical history.</p>
                     </div>
 
                     <div class="position-relative mt-auto pt-4" style="z-index: 3;">
@@ -41,7 +41,11 @@
                                 <i class="bi bi-envelope-open-fill fs-2"></i>
                             </div>
                             <h2 class="text-main fw-800 mb-2 uppercase tracking-tighter" style="font-size: 1.85rem;">Account Reactivation</h2>
-                            <p class="text-muted small mb-0">Enter the 6-digit verification code sent to your registered email address to unlock your account.</p>
+                            <p class="text-muted small mb-0">
+                                Enter the 6-digit verification code sent to 
+                                <strong class="text-accent">{{ $email ?? 'your registered email address' }}</strong> 
+                                to unlock your account.
+                            </p>
                         </div>
 
                         {{-- Success Notification with Dynamic Status Labels --}}
@@ -51,7 +55,7 @@
                                 <div class="text-start">
                                     <div class="fw-800 uppercase fs-x-small text-success" style="font-size: 0.75rem; letter-spacing: 0.5px;">Notification Dispatched</div>
                                     <div class="small text-main" style="color: var(--text-main) !important; font-size: 0.85rem; line-height: 1.4;">
-                                        A secure 6-digit One-Time Password has been dispatched to your email address.
+                                        A secure 6-digit One-Time Password has been dispatched to your registered email address.
                                     </div>
                                 </div>
                             </div>
@@ -70,19 +74,19 @@
 
                         {{-- FORM: EMAIL OTP SUBMISSION --}}
                         <div id="form_otp_container">
-                            <form method="POST" action="{{ route('reactivate.verify-otp') }}">
+                            <form method="POST" action="{{ route('reactivate.verify-otp') }}" onsubmit="compileOtpValue()">
                                 @csrf
                                 <div class="mb-3 text-center">
                                     <label class="small text-muted fw-bold mb-1 uppercase d-block text-start">Enter 6-Digit Verification Code</label>
                                     
-                                    <!-- 6 Separated OTP Input Nodes -->
+                                    <!-- 6 Separated OTP Input Nodes with Paste Support -->
                                     <div class="d-flex justify-content-between gap-2 my-3 mx-auto" style="max-width: 320px;">
-                                        <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="0" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
-                                        <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="1" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
-                                        <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="2" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
-                                        <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="3" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
-                                        <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="4" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
-                                        <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="5" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
+                                        <input type="text" inputmode="numeric" pattern="[0-9]*" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="0" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)" onpaste="handleOtpPaste(event)">
+                                        <input type="text" inputmode="numeric" pattern="[0-9]*" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="1" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)" onpaste="handleOtpPaste(event)">
+                                        <input type="text" inputmode="numeric" pattern="[0-9]*" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="2" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)" onpaste="handleOtpPaste(event)">
+                                        <input type="text" inputmode="numeric" pattern="[0-9]*" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="3" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)" onpaste="handleOtpPaste(event)">
+                                        <input type="text" inputmode="numeric" pattern="[0-9]*" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="4" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)" onpaste="handleOtpPaste(event)">
+                                        <input type="text" inputmode="numeric" pattern="[0-9]*" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="5" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)" onpaste="handleOtpPaste(event)">
                                     </div>
                                     
                                     <!-- Hidden target input compiling code values for submit -->
@@ -107,13 +111,10 @@
                         <hr class="border-secondary border-opacity-25 my-4">
 
                         <div class="d-flex justify-content-between align-items-center mt-3">
-                            {{-- Cancel / Back to Login Option --}}
-                            <form method="POST" action="{{ route('logout') }}" class="m-0">
-                                @csrf
-                                <button type="submit" class="btn btn-link text-secondary text-decoration-none small p-0">
-                                    <i class="bi bi-box-arrow-left me-1"></i>Cancel & Exit
-                                </button>
-                            </form>
+                            {{-- Safe Unauthenticated Exit directly back to Login --}}
+                            <a href="{{ route('login') }}" class="btn btn-link text-secondary text-decoration-none small p-0">
+                                <i class="bi bi-box-arrow-left me-1"></i>Cancel & Back to Login
+                            </a>
                         </div>
 
                     </div>
@@ -131,6 +132,9 @@
         // Auto-focus first OTP block on load
         const firstBox = document.querySelector('.otp-box[data-index="0"]');
         if (firstBox) setTimeout(() => firstBox.focus(), 150);
+
+        // Setup resend cooldown timer
+        setupResendCooldown();
     });
 
     // --- 6-DIGIT OTP FIELDS CONTROLLERS ---
@@ -163,12 +167,53 @@
         }
     }
 
+    function handleOtpPaste(event) {
+        event.preventDefault();
+        const clipboardData = (event.clipboardData || window.clipboardData).getData('text');
+        const digits = clipboardData.replace(/[^0-9]/g, '').slice(0, 6);
+        
+        if (digits.length > 0) {
+            const boxes = document.querySelectorAll('.otp-box');
+            digits.split('').forEach((char, index) => {
+                if (boxes[index]) {
+                    boxes[index].value = char;
+                }
+            });
+            compileOtpValue();
+            const nextFocusIndex = Math.min(digits.length, 5);
+            boxes[nextFocusIndex]?.focus();
+        }
+    }
+
     function compileOtpValue() {
         let compiled = '';
         document.querySelectorAll('.otp-box').forEach(box => {
             compiled += box.value;
         });
         document.getElementById('otp_hidden').value = compiled;
+    }
+
+    function setupResendCooldown() {
+        const btn = document.getElementById('otp-resend-btn');
+        if (!btn) return;
+
+        let secondsRemaining = 60;
+        btn.addEventListener('click', function (e) {
+            setTimeout(() => {
+                btn.disabled = true;
+                const interval = setInterval(() => {
+                    secondsRemaining--;
+                    if (secondsRemaining <= 0) {
+                        clearInterval(interval);
+                        btn.disabled = false;
+                        btn.innerText = 'SEND CODE TO EMAIL';
+                        secondsRemaining = 60;
+                    } else {
+                        btn.innerText = `RESEND IN ${secondsRemaining}s`;
+                    }
+                }, 1000);
+            }, 50);
+        });
     }
 </script>
 @endpush

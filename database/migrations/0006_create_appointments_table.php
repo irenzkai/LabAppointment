@@ -70,7 +70,8 @@ return new class extends Migration
                 'retest'
             ])->default('pending');
             $table->boolean('deleted_by_patient')->default(false); // Soft-delete toggle for patients
-            $table->text('return_reason')->nullable();             // Auditable rejection notes
+            $table->text('return_reason')->nullable();  
+            $table->text('cancellation_reason')->nullable();           // Auditable rejection notes
 
             // 8. WORKFLOW TIMESTAMPS
             $table->timestamp('tested_at')->nullable();

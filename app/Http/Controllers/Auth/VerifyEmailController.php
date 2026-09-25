@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\View\View;
 
 class VerifyEmailController extends Controller
 {
@@ -18,7 +19,7 @@ class VerifyEmailController extends Controller
      * Mark the user's email address as verified (Link-based).
      * Validates the cryptographic URL signature so this works across ANY device.
      */
-    public function __invoke(Request $request, $id, $hash): RedirectResponse 
+    public function __invoke(Request $request, $id, $hash): RedirectResponse
     {
         // 1. Verify cryptographic signature and expiration
         if (! $request->hasValidSignature()) {
@@ -128,36 +129,101 @@ class VerifyEmailController extends Controller
     }
 
     /**
-     * Verify the reactivation OTP, restore the account, and log them in safely.
+     * Display the Account Reactivation Notice view (Web).
      */
-    public function verifyReactivationOtp(Request $request): RedirectResponse
+    public function reactivateNotice(Request $request): View|RedirectResponse
     {
-        if (!session()->has('reactivate_user_id')) {
+        $userId = session('reactivate_user_id') ?? Cache::get("reactivate_ip_{$request->ip()}");
+
+        if (!$userId && $request->filled('email')) {
+            $userByEmail = User::onlyTrashed()->where('email', $request->input('email'))->first();
+            $userId = $userByEmail?->id;
+        }
+
+        if (!$userId) {
             return redirect()->route('login');
+        }
+
+        $user = User::onlyTrashed()->find($userId);
+        if (!$user) {
+            return redirect()->route('login');
+        }
+
+        // Automatically dispatch reactivation OTP if one hasn't been generated in this session yet
+        if (!session()->has('email_otp_code')) {
+            $notificationController = app(EmailVerificationNotificationController::class);
+            $notificationController->sendReactivationOtp($request);
+        }
+
+        $email = $user->email;
+
+        // Directly render auth.reactivate-account
+        return view('auth.reactivate-account', compact('user', 'email'));
+    }
+
+    /**
+     * Verify the reactivation OTP, restore the account, and log in (Web & Mobile API).
+     */
+    public function verifyReactivationOtp(Request $request): RedirectResponse|JsonResponse
+    {
+        // Resolve user ID across Web session, Mobile IP Cache, or direct email payload
+        $userId = session('reactivate_user_id') ?? Cache::get("reactivate_ip_{$request->ip()}");
+
+        if (!$userId && $request->filled('email')) {
+            $userByEmail = User::onlyTrashed()->where('email', $request->input('email'))->first();
+            $userId = $userByEmail?->id;
+        }
+
+        if (!$userId) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No pending reactivation request found. Please log in again to restart verification.',
+                ], 422);
+            }
+            return redirect()->route('login')->withErrors(['email' => 'Session expired. Please log in again.']);
         }
 
         $request->validate([
             'otp' => 'required|string|size:6',
         ]);
 
-        $userId = session('reactivate_user_id');
         $cachedOtp = Cache::get("email_otp_{$userId}");
         $sessionOtp = session()->get('email_otp_code');
         $validOtp = $cachedOtp ?: $sessionOtp;
         $submittedOtp = trim($request->input('otp'));
 
         if (!$validOtp || $submittedOtp !== (string)$validOtp) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The entered verification code is incorrect or has expired.',
+                ], 422);
+            }
             return back()->withErrors(['otp' => 'The entered verification code is incorrect or has expired.']);
         }
 
-        $user = \App\Models\User::onlyTrashed()->findOrFail($userId);
+        $user = User::onlyTrashed()->findOrFail($userId);
         $user->restore();
-        Auth::login($user);
 
         ActivityLog::record('ACCOUNT REACTIVATED', 'User reactivated their deactivated profile.', $user->name, null);
         session()->forget(['reactivate_user_id', 'email_otp_code']);
         Cache::forget("email_otp_{$userId}");
+        Cache::forget("reactivate_ip_{$request->ip()}");
 
+        // Mobile API response with Bearer token
+        if ($request->expectsJson() || $request->is('api/*')) {
+            $token = $user->createToken('mobile-patient-token')->plainTextToken;
+            return response()->json([
+                'success' => true,
+                'token' => $token,
+                'user' => $user,
+                'message' => 'Welcome back! Your account has been reactivated.',
+            ]);
+        }
+
+        // Web session login
+        Auth::login($user);
         return redirect()->route('main')->with('success', 'Welcome back! Your account has been successfully reactivated.');
     }
 }

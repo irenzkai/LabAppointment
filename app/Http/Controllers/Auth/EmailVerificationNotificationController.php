@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -66,34 +67,34 @@ class EmailVerificationNotificationController extends Controller
             $subject = 'Your Email Reactivation Code - Medscreen';
             $headline = 'Email Reactivation';
             $messageBody = "
-                <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>You are receiving this email because you have requested to update the registered email address on your Medscreen profile.</p>
-                <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To reactivate your portal and confirm this change, please enter the following 6-digit verification code:</p>
+            <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>You are receiving this email because you have requested to update the registered email address on your Medscreen profile.</p>
+            <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To reactivate your portal and confirm this change, please enter the following 6-digit verification code:</p>
             ";
         } else {
             $subject = 'Your Account Activation Code - Medscreen';
             $headline = 'Account Activation';
             $messageBody = "
-                <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Thank you for creating an account with Medscreen Diagnostic Laboratory.</p>
-                <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To activate your clinical portal using One-Time Password verification, please enter the following 6-digit verification code:</p>
+            <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Thank you for creating an account with Medscreen Diagnostic Laboratory.</p>
+            <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To activate your clinical portal using One-Time Password verification, please enter the following 6-digit verification code:</p>
             ";
         }
 
         // 2. Dispatch the clinical OTP email template
         $htmlContent = "
-            <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
-                <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
-                    <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
+        <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
+            <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
+                <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
+            </div>
+            <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
+                <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$firstName},</h3>
+                {$messageBody}
+                <div style='text-align: center; margin: 30px 0;'>
+                    <span style='background-color: #f8fafc; border: 2px solid #19D38C; color: #1c232d; font-family: monospace; font-size: 32px; font-weight: 800; padding: 15px 30px; border-radius: 8px; letter-spacing: 5px; display: inline-block;'>{$otp}</span>
                 </div>
-                <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
-                    <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$firstName},</h3>
-                    {$messageBody}
-                    <div style='text-align: center; margin: 30px 0;'>
-                        <span style='background-color: #f8fafc; border: 2px solid #19D38C; color: #1c232d; font-family: monospace; font-size: 32px; font-weight: 800; padding: 15px 30px; border-radius: 8px; letter-spacing: 5px; display: inline-block;'>{$otp}</span>
-                    </div>
-                    <p style='line-height: 1.6; color: #718096; font-size: 12px; margin-top: 30px;'>This code is valid for 15 minutes. If you did not request this, no action is required.</p>
-                    <p style='line-height: 1.6; color: #4a5568; font-size: 15px; margin-top: 30px;'>Best regards,<br><strong>Medscreen Support Team</strong></p>
-                </div>
-            </div>";
+                <p style='line-height: 1.6; color: #718096; font-size: 12px; margin-top: 30px;'>This code is valid for 15 minutes. If you did not request this, no action is required.</p>
+                <p style='line-height: 1.6; color: #4a5568; font-size: 15px; margin-top: 30px;'>Best regards,<br><strong>Medscreen Support Team</strong></p>
+            </div>
+        </div>";
 
         try {
             Mail::html($htmlContent, function ($message) use ($email, $subject) {
@@ -122,39 +123,53 @@ class EmailVerificationNotificationController extends Controller
     }
 
     /**
-     * Resend reactivation OTP to unauthenticated soft-deleted user.
+     * Resend reactivation OTP to unauthenticated soft-deleted user (Web & Mobile API).
      */
-    public function sendReactivationOtp(Request $request): RedirectResponse
+    public function sendReactivationOtp(Request $request): RedirectResponse|JsonResponse
     {
-        if (!session()->has('reactivate_user_id')) {
+        // Resolve target user across Session, Mobile IP Cache, or Request Email
+        $userId = session('reactivate_user_id') ?? Cache::get("reactivate_ip_{$request->ip()}");
+
+        if (!$userId && $request->filled('email')) {
+            $userByEmail = User::onlyTrashed()->where('email', $request->input('email'))->first();
+            $userId = $userByEmail?->id;
+        }
+
+        if (!$userId) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No pending reactivation request found. Please attempt to log in first.'
+                ], 422);
+            }
             return redirect()->route('login');
         }
 
-        $user = \App\Models\User::onlyTrashed()->findOrFail(session('reactivate_user_id'));
+        $user = User::onlyTrashed()->findOrFail($userId);
         $otp = (string) rand(100000, 999999);
         session()->put('email_otp_code', $otp);
         Cache::put("email_otp_{$user->id}", $otp, now()->addMinutes(15));
+        Cache::put("reactivate_ip_{$request->ip()}", $user->id, now()->addMinutes(30));
 
         $email = $user->email;
         $firstName = ucwords(strtolower($user->first_name));
         $subject = 'Reactivate Your Medscreen Account';
-
         $htmlContent = "
-            <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
-                <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
-                    <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
+        <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
+            <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
+                <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
+            </div>
+            <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
+                <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$firstName},</h3>
+                <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Welcome back! We received a request to reactivate your deactivated Medscreen account.</p>
+                <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To confirm your identity, please enter this 6-digit verification code:</p>
+                <div style='text-align: center; margin: 30px 0;'>
+                    <span style='background-color: #f8fafc; border: 2px solid #19D38C; color: #1c232d; font-family: monospace; font-size: 32px; font-weight: 800; padding: 15px 30px; border-radius: 8px; letter-spacing: 5px; display: inline-block;'>{$otp}</span>
                 </div>
-                <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
-                    <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$firstName},</h3>
-                    <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Welcome back! We received a request to reactivate your deactivated Medscreen account.</p>
-                    <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To confirm your identity, please enter this 6-digit verification code:</p>
-                    <div style='text-align: center; margin: 30px 0;'>
-                        <span style='background-color: #f8fafc; border: 2px solid #19D38C; color: #1c232d; font-family: monospace; font-size: 32px; font-weight: 800; padding: 15px 30px; border-radius: 8px; letter-spacing: 5px; display: inline-block;'>{$otp}</span>
-                    </div>
-                    <p style='line-height: 1.6; color: #718096; font-size: 12px; margin-top: 30px;'>This code is valid for 15 minutes.</p>
-                    <p style='line-height: 1.6; color: #4a5568; font-size: 15px; margin-top: 30px;'>Best regards,<br><strong>Medscreen Support Team</strong></p>
-                </div>
-            </div>";
+                <p style='line-height: 1.6; color: #718096; font-size: 12px; margin-top: 30px;'>This code is valid for 15 minutes.</p>
+                <p style='line-height: 1.6; color: #4a5568; font-size: 15px; margin-top: 30px;'>Best regards,<br><strong>Medscreen Support Team</strong></p>
+            </div>
+        </div>";
 
         try {
             Mail::html($htmlContent, function ($message) use ($email, $subject) {
@@ -162,9 +177,23 @@ class EmailVerificationNotificationController extends Controller
             });
         } catch (\Exception $e) {
             Log::error("Failed to send reactivation OTP email: " . $e->getMessage());
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to dispatch reactivation email.'
+                ], 500);
+            }
         }
 
         Log::info("Reactivation OTP for User ID {$user->id}: {$otp}");
+
+        if ($request->expectsJson() || $request->is('api/*')) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Reactivation code sent to your email.'
+            ]);
+        }
+
         return back()->with('status', 'verification-code-sent');
     }
 }

@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Cache;
 use App\Models\User;
 use App\Models\Service;
 use App\Models\PaymentProvider;
@@ -26,8 +27,8 @@ use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 // Server Health Check / Connectivity Test
 Route::get('/ping', function () {
     return response()->json([
-        'status'    => 'online',
-        'app'       => 'Medscreen Laboratory API',
+        'status' => 'online',
+        'app' => 'Medscreen Laboratory API',
         'timestamp' => now()->toDateTimeString(),
     ]);
 });
@@ -61,7 +62,7 @@ Route::get('/media/{path}', function ($path) {
 // Mobile Authentication: Login
 Route::post('/login', function (Request $request) {
     $request->validate([
-        'email'    => 'required|email',
+        'email' => 'required|email',
         'password' => 'required',
     ]);
 
@@ -72,10 +73,16 @@ Route::post('/login', function (Request $request) {
     }
 
     if ($user->trashed()) {
-        session()->put('reactivate_user_id', $user->id);
+        // Cache user ID against mobile IP for 30 minutes
+        Cache::put("reactivate_ip_{$request->ip()}", $user->id, now()->addMinutes(30));
+
+        // Immediately dispatch the reactivation OTP to their email
+        app(EmailVerificationNotificationController::class)->sendReactivationOtp($request);
+
         return response()->json([
             'deactivated' => true,
-            'message'     => 'Your account is currently deactivated. You must reactivate it to log in.',
+            'email' => $user->email,
+            'message' => 'Your account is currently deactivated. A verification code has been dispatched to your email.',
         ], 422);
     }
 
@@ -86,8 +93,8 @@ Route::post('/login', function (Request $request) {
     $token = $user->createToken('mobile-patient-token')->plainTextToken;
 
     return response()->json([
-        'token'      => $token,
-        'user'       => $user,
+        'token' => $token,
+        'user' => $user,
         'unverified' => is_null($user->email_verified_at),
     ]);
 });
@@ -123,32 +130,32 @@ Route::post('/register', function (Request $request) {
     }
 
     $user = User::create([
-        'first_name'        => $fName,
-        'middle_name'       => $mName,
-        'last_name'         => $lName,
-        'suffix'            => $suffix ?: null,
-        'name'              => $displayName,
-        'email'             => $request->email,
-        'phone'             => $request->phone,
-        'birthdate'         => $request->birthdate,
-        'sex'               => $request->sex,
-        'street'            => mb_strtoupper(trim($request->street), 'UTF-8'),
-        'barangay'          => mb_strtoupper(trim($request->barangay), 'UTF-8'),
-        'city'              => mb_strtoupper(trim($request->city), 'UTF-8'),
-        'province'          => mb_strtoupper(trim($request->province), 'UTF-8'),
-        'password'          => Hash::make($request->password),
-        'role'              => 'user',
-        'is_active'         => true,
+        'first_name' => $fName,
+        'middle_name' => $mName,
+        'last_name' => $lName,
+        'suffix' => $suffix ?: null,
+        'name' => $displayName,
+        'email' => $request->email,
+        'phone' => $request->phone,
+        'birthdate' => $request->birthdate,
+        'sex' => $request->sex,
+        'street' => mb_strtoupper(trim($request->street), 'UTF-8'),
+        'barangay' => mb_strtoupper(trim($request->barangay), 'UTF-8'),
+        'city' => mb_strtoupper(trim($request->city), 'UTF-8'),
+        'province' => mb_strtoupper(trim($request->province), 'UTF-8'),
+        'password' => Hash::make($request->password),
+        'role' => 'user',
+        'is_active' => true,
         'email_verified_at' => null,
     ]);
 
     $token = $user->createToken('mobile-patient-token')->plainTextToken;
 
     return response()->json([
-        'token'      => $token,
-        'user'       => $user,
+        'token' => $token,
+        'user' => $user,
         'unverified' => true,
-        'message'    => 'Registration completed. Please verify your email.',
+        'message' => 'Registration completed. Please verify your email.',
     ]);
 });
 
@@ -167,7 +174,7 @@ Route::post('/forgot-password', function (Request $request) {
     if ($status == Password::RESET_LINK_SENT) {
         return response()->json([
             'success' => true,
-            'status'  => __($status),
+            'status' => __($status),
             'message' => 'We have emailed your password reset link!',
         ], 200);
     }
@@ -178,7 +185,7 @@ Route::post('/forgot-password', function (Request $request) {
     ], 422);
 });
 
-// Reactivation OTP verification
+// Reactivation OTP verification (Now supports both Web and Mobile API)
 Route::post('/reactivate/resend-otp', [EmailVerificationNotificationController::class, 'sendReactivationOtp']);
 Route::post('/reactivate/verify-otp', [VerifyEmailController::class, 'verifyReactivationOtp']);
 
@@ -248,16 +255,16 @@ Route::middleware('auth:sanctum')->group(function () {
             ->get();
 
         return response()->json([
-            'self'       => $self,
+            'self' => $self,
             'dependents' => $dependents,
         ]);
     });
 
     Route::post('/appointments', [AppointmentController::class, 'store']);
-    
-    // FIXED: Accept both POST and PUT methods to allow method spoofing (_method=PUT) on resubmission
+
+    // Accept both POST and PUT methods to allow method spoofing (_method=PUT) on resubmission
     Route::match(['post', 'put'], '/appointments/{appointment}', [AppointmentController::class, 'update']);
-    
+
     Route::post('/appointments/{appointment}/cancel', [AppointmentController::class, 'cancel']);
     Route::post('/appointments/{appointment}/soft-delete', [AppointmentController::class, 'softDelete']);
     Route::post('/appointments/{appointment}/forward-email', [ResultController::class, 'forwardToEmail']);
@@ -270,7 +277,7 @@ Route::middleware('auth:sanctum')->group(function () {
         $user = $request->user();
         return response()->json([
             'dependents' => $user->dependents()->get(),
-            'archived'   => $user->dependents()->onlyTrashed()->get(),
+            'archived' => $user->dependents()->onlyTrashed()->get(),
         ]);
     });
 
@@ -298,25 +305,25 @@ Route::middleware('auth:sanctum')->group(function () {
 
         $existingRecords = $recordsModels->map(function ($r) {
             return [
-                'id'              => $r->id,
-                'date_of_record'  => $r->date_of_record ? $r->date_of_record->format('Y-m-d') : '',
-                'requested_by'    => $r->requested_by,
-                'patient_name'    => $r->patient_name,
-                'age'             => $r->age,
-                'sex'             => $r->sex,
-                'address'         => $r->patient_address,
+                'id' => $r->id,
+                'date_of_record' => $r->date_of_record ? $r->date_of_record->format('Y-m-d') : '',
+                'requested_by' => $r->requested_by,
+                'patient_name' => $r->patient_name,
+                'age' => $r->age,
+                'sex' => $r->sex,
+                'address' => $r->patient_address,
                 'tests_requested' => $r->procedures->pluck('procedure_name')->toArray(),
-                'scans'           => $r->scans->map(fn($s) => [
-                    'label'          => $s->label,
-                    'file_path'      => $s->file_path,
+                'scans' => $r->scans->map(fn($s) => [
+                    'label' => $s->label,
+                    'file_path' => $s->file_path,
                     'certificate_no' => $s->certificate_no ?? null,
                 ])->toArray(),
             ];
         });
 
         return response()->json([
-            'labHistory'      => $labHistory,
-            'appointments'    => $appointments,
+            'labHistory' => $labHistory,
+            'appointments' => $appointments,
             'existingRecords' => $existingRecords,
         ]);
     });

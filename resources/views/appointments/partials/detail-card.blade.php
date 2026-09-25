@@ -25,6 +25,7 @@ if ($isBulkBatchWorkspace) {
     $batchApps = $batchAppsQuery->get();
     $lowestPriority = 999;
     $lowestStatus = $app->status;
+
     foreach ($batchApps as $subApp) {
         $effStatus = $subApp->isExpired() ? 'expired' : $subApp->status;
         $priority = $statusPriority[$effStatus] ?? 99;
@@ -52,19 +53,22 @@ $statusColor = match($finalStatus) {
     'canceled' => 'danger',
     default => 'secondary'
 };
+
 $statusLabel = strtoupper($finalStatus);
 @endphp
 
 @if($isBulkBatchWorkspace)
 {{-- =========================================================================
-    A. BULK BATCH WORKSPACE (Visible only to Batch Creator & Clinic Staff)
+     A. BULK BATCH WORKSPACE (Visible only to Batch Creator & Clinic Staff)
 ========================================================================= --}}
 @php
 $batchAppointmentsQuery = \App\Models\Appointment::with(['services', 'result', 'user'])
     ->where('batch_id', $app->batch_id);
+
 if (auth()->check() && auth()->user()->isPatient()) {
     $batchAppointmentsQuery->where('deleted_by_patient', false);
 }
+
 $batchAppointments = $batchAppointmentsQuery->get()
     ->sortBy(function($appointment) {
         return match($appointment->status) {
@@ -78,12 +82,15 @@ $batchAppointments = $batchAppointmentsQuery->get()
             default => 8
         };
     });
+
 $batchTotal = $batchAppointments->sum(fn($a) => $a->totalPrice());
 $paymentProviders = $paymentProviders ?? \App\Models\PaymentProvider::where('is_active', true)->get();
+
 $anyApproved = $batchAppointments->contains(fn($appointment) => in_array($appointment->status, ['approved', 'retest', 'tested', 'encoded', 'released']));
-// Cancel entire batch is only permitted if pending/approved/returned AND no patient has progressed to retest/tested/encoded/released
-$canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['pending', 'approved', 'returned'])) 
-    && !$batchAppointments->contains(fn($a) => in_array($a->status, ['retest', 'tested', 'encoded', 'released']));
+
+// Cancel entire batch is only permitted if pending/returned AND no patient has progressed to approved/retest/tested/encoded/released
+$canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['pending', 'returned'])) 
+    && !$batchAppointments->contains(fn($a) => in_array($a->status, ['approved', 'retest', 'tested', 'encoded', 'released']));
 @endphp
 
 <div id="details-{{ $app->id }}" class="appointment-detail-pane card border-secondary bg-card p-4 d-none animate-page">
@@ -106,7 +113,8 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                 </span>
             </div>
         </div>
-        {{-- Patient-Side Batch Cancel Trigger (Only if not in retest/tested/encoded/released) --}}
+
+        {{-- Patient-Side Batch Cancel Trigger (Only if not in approved/retest/tested/encoded/released) --}}
         @if(!$isStaff && $canCancelBatch && Auth::id() == $app->user_id)
             <div class="mt-3 text-end">
                 <button type="button" class="btn btn-outline-danger btn-sm fw-bold uppercase py-2 px-3" data-bs-toggle="modal" data-bs-target="#cancelBatchModal{{ $app->id }}">
@@ -126,6 +134,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
             $isBatchApproveDisabled = ($app->payment_method === 'Cashless' && $app->payment_status !== 'paid');
             $showBatchControls = $showConfirm || $showRevoke || $showReturn || $showApprove;
         @endphp
+
         @if($showBatchControls)
             <div class="batch-controls-panel card p-4 mb-4 text-start animate-page">
                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -133,6 +142,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                         <i class="bi bi-shield-lock-fill me-1.5"></i>Batch Controls (One-Time Payment)
                     </h6>
                 </div>
+
                 {{-- Consolidated Single Cashless Receipt Preview --}}
                 @if($app->payment_method === 'Cashless')
                     <div class="border rounded p-3 mb-3 text-start border-secondary border-opacity-10" style="background-color: rgba(25, 211, 140, 0.03);">
@@ -158,22 +168,26 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                         @endif
                     </div>
                 @endif
+
                 <div class="d-flex gap-2 flex-wrap">
                     @if($showConfirm)
                         <button type="button" class="btn-custom btn-accent py-2 fw-bold uppercase shadow-sm small flex-grow-1" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#confirmBatchPaymentModal{{ $app->id }}">
                             <i class="bi bi-patch-check-fill me-1"></i> Confirm Batch Payment
                         </button>
                     @endif
+
                     @if($showRevoke)
                         <button type="button" class="btn-custom btn-outline-danger py-2 fw-bold uppercase shadow-sm small flex-grow-1" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#revokeBatchPaymentModal{{ $app->id }}">
                             <i class="bi bi-arrow-counterclockwise me-1"></i> Revoke Batch Payment
                         </button>
                     @endif
+
                     @if($showReturn)
                         <button type="button" class="btn-custom btn-danger-custom py-2 px-3 fw-bold uppercase small" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#returnBatchModal{{ $app->id }}">
                             <i class="bi bi-x-circle me-1"></i> Return Entire Batch
                         </button>
                     @endif
+
                     @if($showApprove)
                         <button type="button" class="btn-custom btn-neon py-2 px-3 fw-bold uppercase small {{ $isBatchApproveDisabled ? 'opacity-50 cursor-not-allowed' : '' }}" {{ $isBatchApproveDisabled ? 'disabled title="Batch cashless payment must be confirmed before approval"' : '' }} data-bs-toggle="modal" data-bs-target="#approveBatchModal{{ $app->id }}" style="font-size: 0.75rem;">
                             <i class="bi bi-check-circle me-1"></i> Approve Batch
@@ -267,7 +281,6 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                                         <a href="{{ route('appointments.result.access', [$subApp->id, 'lab', 'preview']) }}" target="_blank" class="btn btn-sm btn-outline-accent py-1 px-2.5 small uppercase hover-dark-text" style="font-size: 0.7rem; border-color: var(--brand-accent) !important;">
                                             <i class="bi bi-file-earmark-pdf"></i> PREVIEW
                                         </a>
-                                        {{-- Scaled-down DOWNLOAD button to match PREVIEW and FORWARD buttons exactly --}}
                                         <a href="{{ route('appointments.result.access', [$subApp->id, 'lab', 'download']) }}" class="btn btn-sm btn-accent py-1 px-2.5 small uppercase fw-bold" style="font-size: 0.7rem; color: #1c232d !important;">
                                             <i class="bi bi-download"></i> DOWNLOAD
                                         </a>
@@ -291,7 +304,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
 @if(!$isStaff && $canCancelBatch && Auth::id() == $app->user_id)
 <div class="modal fade" id="cancelBatchModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered" style="max-width: 480px;">
-        <form action="{{ route('appointments.cancel', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+        <form action="{{ route('appointments.cancel', $app->id) }}" method="POST" class="modal-content shadow-lg border-0 cancel-batch-form" data-app-id="{{ $app->id }}" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
             @csrf
             <input type="hidden" name="batch" value="true">
             <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
@@ -303,9 +316,32 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
             </div>
             <div class="modal-body p-4 text-start">
                 <p class="small text-main mb-3">Are you sure you want to cancel all appointments in <strong>{{ $app->organization_name }} (Batch #{{ $app->batch_id }})</strong>?</p>
-                <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-0 smaller">
+                <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-3 smaller">
                     <i class="bi bi-info-circle-fill me-1"></i> This action will cancel all active patient appointments registered under this corporate batch.
                 </div>
+
+                {{-- Batch Cancellation Reason Dropdown --}}
+                <div class="mb-3">
+                    <label for="cancel_batch_reason_select_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Reason for Batch Cancellation</label>
+                    <select id="cancel_batch_reason_select_{{$app->id}}" name="cancellation_reason" class="form-select shadow-none cancel-batch-reason-select" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" onchange="window.toggleCancelBatchReasonField('{{ $app->id }}', this)" required>
+                        <option value="" disabled selected>-- Select a cancellation reason --</option>
+                        <option value="Corporate schedule postponed / rescheduled">Corporate schedule postponed / rescheduled</option>
+                        <option value="Company management request / internal postponement">Company management request / internal postponement</option>
+                        <option value="Accidental / duplicate bulk booking submission">Accidental / duplicate bulk booking submission</option>
+                        <option value="Budget / procurement review or cancellation">Budget / procurement review or cancellation</option>
+                        <option value="Others">Others (Specify details below)</option>
+                    </select>
+                </div>
+
+                {{-- Dynamic Custom Reason Input for Others --}}
+                <div id="custom_cancel_batch_reason_wrapper_{{$app->id}}" class="mb-3 d-none">
+                    <label for="custom_cancel_batch_reason_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Specify Custom Reason</label>
+                    <textarea id="custom_cancel_batch_reason_{{$app->id}}" class="form-control shadow-none cancel-batch-reason-textarea" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" rows="3" placeholder="Identify the specific cancellation reason..."></textarea>
+                    <div class="mt-1"><small class="text-muted smaller italic">Minimum 5 characters required for validation.</small></div>
+                </div>
+
+                {{-- Hidden Input to Guarantee Controller Field Compatibility ('reason') --}}
+                <input type="hidden" name="reason" id="cancel_batch_reason_hidden_{{$app->id}}" value="">
             </div>
             <div class="modal-footer p-3 border-top border-secondary border-opacity-10 d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card);">
                 <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Go Back</button>
@@ -461,6 +497,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                         <p class="small text-muted mb-3">
                             Send encrypted, password-protected PDF results for <strong>{{ strtoupper($subApp->patient_name) }}</strong> (Ref #{{ $subApp->id }}).
                         </p>
+
                         {{-- Recipient Email Display Box --}}
                         <div class="p-3 rounded border border-secondary border-opacity-15 mb-3" style="background-color: rgba(25, 211, 140, 0.04);">
                             <div class="d-flex justify-content-between align-items-center">
@@ -475,6 +512,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                                 {{ $subTargetEmail ?: 'No email on file' }}
                             </div>
                         </div>
+
                         @if($isStaff)
                             {{-- Hidden Email Editing & Reason Section for Admin/Staff in Master Queue --}}
                             <div id="forward_email_edit_section_{{ $subApp->id }}" class="d-none border-top border-secondary border-opacity-15 pt-3 mb-3">
@@ -498,6 +536,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                                 </div>
                             </div>
                         @endif
+
                         {{-- Security Disclaimer Box --}}
                         <div class="alert alert-clinical border-secondary bg-secondary bg-opacity-10 p-2.5 rounded-3 mb-0 smaller text-muted">
                             <div class="d-flex align-items-center gap-2 mb-1 text-main fw-bold">
@@ -521,7 +560,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
 
 @else
 {{-- =========================================================================
-    B. INDIVIDUAL / FAMILY / ARCHIVE WORKSPACE
+     B. INDIVIDUAL / FAMILY / ARCHIVE WORKSPACE
 ========================================================================= --}}
 <div id="details-{{ $app->id }}" class="appointment-detail-pane card border-secondary bg-card p-4 d-none animate-page">
     {{-- Detailed Header Section --}}
@@ -592,6 +631,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                                 </div>
                             </div>
                         @endforeach
+
                         @foreach($app->result->customWorkstationResults as $custom)
                             @if($custom->status === 'verified')
                                 <div class="d-flex justify-content-between align-items-center p-2.5 border border-secondary border-opacity-10 rounded" style="background-color: rgba(0,0,0,0.015);">
@@ -682,6 +722,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                 <p class="small text-muted mb-3">
                     Send encrypted, password-protected PDF results for <strong>{{ strtoupper($app->patient_name) }}</strong> (Ref #{{ $app->id }}).
                 </p>
+
                 {{-- Recipient Email Display Box --}}
                 <div class="p-3 rounded border border-secondary border-opacity-15 mb-3" style="background-color: rgba(25, 211, 140, 0.04);">
                     <div class="d-flex justify-content-between align-items-center">
@@ -696,6 +737,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                         {{ $singleTargetEmail ?: 'No email on file' }}
                     </div>
                 </div>
+
                 @if($isStaff)
                     {{-- Hidden Email Editing & Reason Section for Admin/Staff in Master Queue --}}
                     <div id="forward_email_edit_section_{{ $app->id }}" class="d-none border-top border-secondary border-opacity-15 pt-3 mb-3">
@@ -719,6 +761,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                         </div>
                     </div>
                 @endif
+
                 {{-- Security Disclaimer Box --}}
                 <div class="alert alert-clinical border-secondary bg-secondary bg-opacity-10 p-2.5 rounded-3 mb-0 smaller text-muted">
                     <div class="d-flex align-items-center gap-2 mb-1 text-main fw-bold">
@@ -776,4 +819,58 @@ window.toggleForwardReason = window.toggleForwardReason || function(id, val) {
         }
     }
 };
+
+window.toggleCancelBatchReasonField = window.toggleCancelBatchReasonField || function(appId, select) {
+    const wrapper = document.getElementById(`custom_cancel_batch_reason_wrapper_${appId}`);
+    const textarea = document.getElementById(`custom_cancel_batch_reason_${appId}`);
+    const hiddenReason = document.getElementById(`cancel_batch_reason_hidden_${appId}`);
+    if (wrapper && textarea) {
+        if (select.value === 'Others') {
+            wrapper.classList.remove('d-none');
+            textarea.setAttribute('required', 'required');
+            textarea.setAttribute('name', 'cancellation_reason');
+            select.removeAttribute('name');
+            textarea.focus();
+        } else {
+            wrapper.classList.add('d-none');
+            textarea.removeAttribute('required');
+            textarea.removeAttribute('name');
+            select.setAttribute('name', 'cancellation_reason');
+            textarea.value = '';
+        }
+        if (hiddenReason) {
+            hiddenReason.value = (select.value === 'Others' ? textarea.value.trim() : select.value) || '';
+        }
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.cancel-batch-form').forEach(form => {
+        const appId = form.dataset.appId;
+        const select = document.getElementById(`cancel_batch_reason_select_${appId}`);
+        const textarea = document.getElementById(`custom_cancel_batch_reason_${appId}`);
+        const hiddenReason = document.getElementById(`cancel_batch_reason_hidden_${appId}`);
+
+        if (textarea) {
+            textarea.addEventListener('input', function() {
+                if (hiddenReason) hiddenReason.value = this.value.trim();
+            });
+        }
+
+        if (select) {
+            form.addEventListener('submit', function(e) {
+                const activeVal = select.value === 'Others' ? textarea : select;
+                if (!activeVal || !activeVal.value || activeVal.value.trim().length < 5) {
+                    e.preventDefault();
+                    alert('Please select or specify a valid batch cancellation reason of at least 5 characters.');
+                    if (activeVal) activeVal.focus();
+                    return false;
+                }
+                if (hiddenReason) {
+                    hiddenReason.value = activeVal.value.trim();
+                }
+            });
+        }
+    });
+});
 </script>

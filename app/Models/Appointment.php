@@ -48,6 +48,7 @@ class Appointment extends Model
         // STATUS LOGIC & SOFT DELETION
         'status',
         'return_reason',
+        'cancellation_reason',
         'deleted_by_patient', // boolean
         'tested_at',
         'result_estimated_at',

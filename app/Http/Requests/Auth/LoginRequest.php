@@ -6,8 +6,12 @@ use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use App\Models\User;
+use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 
 class LoginRequest extends FormRequest
 {
@@ -42,19 +46,26 @@ class LoginRequest extends FormRequest
         $this->ensureIsNotRateLimited();
 
         if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
-            RateLimiter::hit($this->throttleKey());
-
             // Check if there is a soft-deleted (deactivated) user matching the email and correct password [126]
-            $user = \App\Models\User::onlyTrashed()->where('email', $this->email)->first();
-            if ($user && \Illuminate\Support\Facades\Hash::check($this->password, $user->password)) {
-                // Store the deactivated user's ID securely in the session [122]
+            $user = User::onlyTrashed()->where('email', $this->email)->first();
+            if ($user && Hash::check($this->password, $user->password)) {
+                // Clear the rate limiter because the password was valid
+                RateLimiter::clear($this->throttleKey());
+
+                // Store the deactivated user's ID securely in the session and cache by client IP
                 session()->put('reactivate_user_id', $user->id);
-                
-                // Throw a custom validation exception to redirect cleanly
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'deactivated' => 'Your account is currently deactivated. You must reactivate it to log in.',
+                Cache::put("reactivate_ip_{$this->ip()}", $user->id, now()->addMinutes(30));
+
+                // Dispatch the reactivation OTP email immediately
+                app(EmailVerificationNotificationController::class)->sendReactivationOtp($this);
+
+                // Throw a custom validation exception to redirect cleanly to reactivate.notice
+                throw ValidationException::withMessages([
+                    'deactivated' => 'Your account is currently deactivated. A verification code has been dispatched to your email to reactivate it.',
                 ]);
             }
+
+            RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
                 'email' => trans('auth.failed'),

@@ -242,7 +242,7 @@ class AppointmentController extends Controller
             'patient_email'      => 'nullable|email|max:191',
             'patient_street'     => 'required|string|max:150',
             'patient_barangay'   => 'required|string|max:100',
-            'patient_city'       => 'required|string|max:100',
+            'patient_city'        => 'required|string|max:100',
             'patient_province'   => 'required|string|max:100',
             'referral_note'      => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
             'service_ids'        => 'required|array|min:1',
@@ -527,7 +527,8 @@ class AppointmentController extends Controller
             'time_slot'           => $request->time_slot,
             'status'              => 'pending',
             'payment_status'      => $paymentStatus,
-            'return_reason'       => null
+            'return_reason'       => null,
+            'cancellation_reason' => null
         ];
 
         if (!$isBulk) {
@@ -590,8 +591,11 @@ class AppointmentController extends Controller
             'return_reason' => 'required_if:status,returned'
         ]);
 
-        $updatePayload = ['status' => $request->status];
-        $updatePayload['return_reason'] = ($request->status == 'returned') ? $request->return_reason : null;
+        $updatePayload = [
+            'status'              => $request->status,
+            'return_reason'       => ($request->status == 'returned') ? $request->return_reason : null,
+            'cancellation_reason' => null
+        ];
 
         if ($request->has('payment_status')) {
             $updatePayload['payment_status'] = $request->payment_status;
@@ -756,6 +760,7 @@ class AppointmentController extends Controller
                 'payment_status'      => 'paid',
                 'status'              => 'retest',
                 'return_reason'       => $retestReason,
+                'cancellation_reason' => null,
                 'tested_at'           => null,
                 'result_estimated_at' => null
             ];
@@ -843,7 +848,8 @@ class AppointmentController extends Controller
             'status'              => 'tested',
             'tested_at'           => now(),
             'result_estimated_at' => $est,
-            'return_reason'       => null
+            'return_reason'       => null,
+            'cancellation_reason' => null
         ];
 
         if (\Illuminate\Support\Facades\Schema::hasColumn('appointments', 'payment_amount')) {
@@ -880,6 +886,154 @@ class AppointmentController extends Controller
         return redirect()->back()->with('success', 'Sampling logged. Results are being processed.');
     }
 
+    /**
+     * Dedicated Demographic and Diagnostic Examination Editor for Staff.
+     * Allowed during pre-release stages (e.g., approved, pending, retest, tested, encoded) for Staff/Admin.
+     */
+    public function editDetails(Appointment $appointment)
+    {
+        $user = Auth::user();
+        if (!$user->isEmployee()) {
+            abort(403, 'Unauthorized access to edit patient details.');
+        }
+
+        if ($appointment->status === 'released') {
+            return redirect()->back()->with('error', 'Released appointments are locked and cannot be modified.');
+        }
+
+        $services = Service::where('is_available', true)->orderBy('name')->get();
+
+        if (request()->expectsJson()) {
+            return response()->json([
+                'appointment' => $appointment->load(['services', 'user', 'dependent']),
+                'services'    => $services,
+            ]);
+        }
+
+        return view('appointments.edit-details', compact('appointment', 'services'));
+    }
+
+    /**
+     * Save revised patient demographics, services, and billing from the Edit Details screen.
+     */
+    public function updateDetails(Request $request, Appointment $appointment)
+    {
+        $user = Auth::user();
+        if (!$user->isEmployee()) {
+            abort(403, 'Unauthorized access.');
+        }
+
+        if ($appointment->status === 'released') {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Released appointments cannot be updated.'], 403);
+            }
+            return redirect()->back()->with('error', 'Released appointments are locked and cannot be modified.');
+        }
+
+        $nameRule = function ($attribute, $value, $fail) {
+            $val = trim($value);
+            if (empty($val) || $val === 'N/A') return;
+            if (!preg_match('/^[\p{L} \s.\'-]+$/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " may only contain letters, spaces, periods, hyphens, and apostrophes.");
+                return;
+            }
+            if (!preg_match('/^[\p{L} ]/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " must start with a letter.");
+                return;
+            }
+            if (!preg_match('/[\p{L}]/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " must contain at least one letter.");
+                return;
+            }
+            if (preg_match('/[.\'-]{2,}/u', $val)) {
+                $fail("The " . str_replace('patient_', ' ', $attribute) . " cannot contain consecutive punctuation marks.");
+                return;
+            }
+        };
+
+        $request->validate([
+            'patient_first_name'  => ['required', 'string', 'max:60', $nameRule],
+            'patient_middle_name' => ['nullable', 'string', 'max:60', $nameRule],
+            'patient_last_name'   => ['required', 'string', 'max:60', $nameRule],
+            'patient_suffix'      => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
+            'patient_sex'         => 'required|in:Male,Female',
+            'patient_birthdate'   => 'required|date|before_or_equal:today',
+            'patient_phone'       => ['required', 'string', 'regex:/^09\d{9}$/'],
+            'patient_street'      => 'required|string|max:150',
+            'patient_barangay'    => 'required|string|max:100',
+            'patient_city'        => 'required|string|max:100',
+            'patient_province'    => 'required|string|max:100',
+            'service_ids'         => 'required|array|min:1',
+            'payment_amount'      => 'required|numeric|min:0',
+            'reason'              => 'required|string|min:5',
+        ], [
+            'patient_phone.regex'  => 'The phone number must start with 09 and contain exactly 11 digits.',
+            'patient_suffix.regex' => 'The suffix may only contain letters, spaces, and periods.',
+        ]);
+
+        $mName = $request->patient_middle_name;
+        $lName = $request->patient_last_name;
+        $suffix = $request->filled('patient_suffix') ? strtoupper($request->patient_suffix) : '';
+
+        $fullName = $request->patient_first_name . ($mName && strtoupper($mName) !== 'N/A' ? ' ' . $mName : '') . ' ' . $lName;
+        if (!empty($suffix)) $fullName .= ' ' . $suffix;
+
+        $updateData = [
+            'patient_first_name'  => strtoupper($request->patient_first_name),
+            'patient_middle_name' => ($mName && strtoupper($mName) !== 'N/A') ? strtoupper($mName) : 'N/A',
+            'patient_last_name'   => strtoupper($lName),
+            'patient_suffix'      => $suffix ?: null,
+            'patient_name'        => strtoupper($fullName),
+            'patient_sex'         => $request->patient_sex,
+            'patient_birthdate'   => $request->patient_birthdate,
+            'patient_phone'       => $request->patient_phone,
+            'patient_street'      => strtoupper(trim($request->patient_street)),
+            'patient_barangay'    => strtoupper(trim($request->patient_barangay)),
+            'patient_city'        => strtoupper(trim($request->patient_city)),
+            'patient_province'    => strtoupper(trim($request->patient_province)),
+        ];
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('appointments', 'payment_amount')) {
+            $updateData['payment_amount'] = $request->input('payment_amount');
+        }
+
+        $appointment->update($updateData);
+        $appointment->services()->sync($request->service_ids);
+
+        ActivityLog::record('DETAILS REVISED', 'Patient demographics & services updated: ' . $request->input('reason'), $appointment->patient_name, $appointment->id);
+        event(new QueueUpdated());
+
+        $from = $request->input('from');
+        $customId = $request->input('custom_id');
+
+        if ($from === 'radio' || $from === 'radiology') {
+            $redirectUrl = route('workstation.radiology', $appointment->id);
+        } elseif ($from === 'lab') {
+            $redirectUrl = route('workstation.lab', $appointment->id);
+        } elseif ($from === 'med_cert' || $from === 'medical') {
+            $redirectUrl = route('workstation.med_cert', $appointment->id);
+        } elseif ($from === 'drug') {
+            $redirectUrl = route('workstation.drug', $appointment->id);
+        } elseif ($from === 'custom' && $customId) {
+            $redirectUrl = route('workstation.custom', [$appointment->id, $customId]);
+        } elseif ($from === 'hub') {
+            $redirectUrl = route('appointments.encode', $appointment->id);
+        } else {
+            $redirectUrl = route('appointments.index', ['view' => 'queue', 'id' => $appointment->id]);
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success'     => true,
+                'message'     => 'Patient demographics and tests updated successfully.',
+                'appointment' => $appointment->fresh(['services', 'user', 'dependent']),
+                'redirect'    => $redirectUrl,
+            ], 200);
+        }
+
+        return redirect($redirectUrl)->with('success', 'Patient demographics and tests updated successfully.');
+    }
+
     public function cancel(Request $request, Appointment $appointment)
     {
         $user = Auth::user();
@@ -894,31 +1048,60 @@ class AppointmentController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
-        $reason = 'Canceled by patient';
+        // 1. Validation: Extract cancellation reason (from dropdown or custom "Others" input)
+        $request->validate([
+            'cancellation_reason'        => 'nullable|string|min:5|max:1000',
+            'reason'                     => 'nullable|string|min:5|max:1000',
+            'custom_cancellation_reason' => 'nullable|string|min:5|max:1000',
+        ]);
+
+        $reason = $request->input('cancellation_reason')
+            ?: $request->input('reason')
+            ?: $request->input('custom_cancellation_reason')
+            ?: 'Canceled by patient';
+
         $paymentStatus = $appointment->payment_status === 'paid' ? 'paid' : 'unpaid';
 
+        // 2. Batch Cancellation Handling (ONLY permitted up to pending/returned)
         if ($appointment->batch_id && $request->input('batch') === 'true' && $appointment->user_id === $user->id) {
+            // Check if any booking in this batch has already progressed to approved or beyond
+            $hasApprovedOrLater = Appointment::where('batch_id', $appointment->batch_id)
+                ->whereIn('status', ['approved', 'retest', 'tested', 'encoded', 'released'])
+                ->exists();
+
+            if ($hasApprovedOrLater) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Batch cancellation is locked. One or more appointments in this batch have already been approved or processed.'
+                    ], 422);
+                }
+                return back()->with('error', 'Batch cancellation is locked. One or more appointments in this batch have already been approved or processed.');
+            }
+
             $cancelableApps = Appointment::where('batch_id', $appointment->batch_id)
-                ->whereNotIn('status', ['retest', 'tested', 'encoded', 'released', 'canceled'])
+                ->whereIn('status', ['pending', 'returned'])
                 ->get();
 
             if ($cancelableApps->isEmpty()) {
                 if ($request->expectsJson()) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'No active appointments in this batch can be canceled.'
+                        'message' => 'No eligible pending appointments in this batch can be canceled.'
                     ], 422);
                 }
-                return back()->with('error', 'No active appointments in this batch can be canceled.');
+                return back()->with('error', 'No eligible pending appointments in this batch can be canceled.');
             }
 
             foreach ($cancelableApps as $app) {
+                $appPaymentStatus = $app->payment_status === 'paid' ? 'paid' : 'unpaid';
                 $app->update([
-                    'status'         => 'canceled',
-                    'payment_status' => $paymentStatus,
-                    'return_reason'  => $reason
+                    'status'              => 'canceled',
+                    'payment_status'      => $appPaymentStatus,
+                    'cancellation_reason' => $reason,
+                    'return_reason'       => $reason
                 ]);
-                ActivityLog::record('CANCELED', "Appointment canceled. Reason: {$reason}", $app->patient_name, $app->id);
+                ActivityLog::record('CANCELED', "Batch appointment canceled. Reason: {$reason}", $app->patient_name, $app->id);
             }
 
             event(new QueueUpdated());
@@ -926,27 +1109,39 @@ class AppointmentController extends Controller
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'All eligible appointments in this batch have been successfully canceled.'
+                    'message' => 'All eligible pending appointments in this batch have been successfully canceled.'
                 ]);
             }
 
-            return back()->with('success', 'All eligible appointments in this batch have been successfully canceled.');
+            return back()->with('success', 'All eligible pending appointments in this batch have been successfully canceled.');
         }
 
-        if (in_array($appointment->status, ['retest', 'tested', 'encoded', 'released'])) {
+        // 3. Single Appointment Cancellation Handling: UP TO PENDING ONLY (DO NOT COVER APPROVED)
+        if ($appointment->status === 'approved') {
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Appointments that have progressed to sampling or retesting cannot be canceled.'
+                    'message' => 'Approved appointments cannot be canceled. Please contact clinic staff for assistance.'
                 ], 422);
             }
-            return back()->with('error', 'Appointments that have progressed to sampling or retesting cannot be canceled.');
+            return back()->with('error', 'Approved appointments cannot be canceled. Please contact clinic staff for assistance.');
+        }
+
+        if (!in_array($appointment->status, ['pending', 'returned'])) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only pending appointments can be canceled.'
+                ], 422);
+            }
+            return back()->with('error', 'Only pending appointments can be canceled.');
         }
 
         $appointment->update([
-            'status'         => 'canceled',
-            'payment_status' => $paymentStatus,
-            'return_reason'  => $reason
+            'status'              => 'canceled',
+            'payment_status'      => $paymentStatus,
+            'cancellation_reason' => $reason,
+            'return_reason'       => $reason
         ]);
 
         ActivityLog::record('CANCELED', "Appointment canceled. Reason: {$reason}", $appointment->patient_name, $appointment->id);

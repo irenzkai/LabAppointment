@@ -73,6 +73,21 @@
 
     {{-- 3. CANCELED & REFUND HANDSHAKE NOTICES (Visible to Everyone) --}}
     @if($app->status == 'canceled')
+        {{-- Prominent Cancellation Reason Banner --}}
+        @if($app->cancellation_reason || ($app->payment_status !== 'invalid' && $app->return_reason))
+            <div class="alert-clinical p-3 mb-3 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
+                <div class="d-flex align-items-center mb-1">
+                    <i class="bi bi-x-circle-fill text-danger me-2"></i>
+                    <small class="text-danger fw-bold uppercase" style="font-size: 0.65rem; letter-spacing: 1px;">
+                        Reason for Cancellation:
+                    </small>
+                </div>
+                <p class="small mb-0 italic" style="line-height: 1.4; color: var(--text-main);">
+                    "{{ $app->cancellation_reason ?: $app->return_reason }}"
+                </p>
+            </div>
+        @endif
+
         @if($app->payment_method === 'Cashless')
             @if($isStaffView)
                 {{-- Staff View (Master Queue Only) --}}
@@ -262,7 +277,7 @@
                     </button>
                 @endif
 
-                {{-- STEP B: APPROVED / RETEST -> MARK AS TESTED (Lab Tech Only) --}}
+                {{-- STEP B: APPROVED / RETEST -> MARK AS TESTED (Lab Tech Only) & EDIT DEMOGRAPHICS (Staff) --}}
                 @if($app->status == 'approved' || $app->status == 'retest')
                     @can('isLabTech')
                         <button type="button" class="btn-custom btn-accent w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#testModal{{ $app->id }}">
@@ -270,8 +285,14 @@
                         </button>
                         @include('appointments.partials.mark-tested-modal')
                     @else
-                        <div class="alert small py-2.5 mb-0 text-center" style="background-color: rgba(25, 211, 140, 0.05); color: var(--text-main); border: 1.5px solid var(--border-color); border-radius: 8px;">
-                            <i class="bi bi-hourglass-split me-1 text-warning"></i> Awaiting Clinical Sampling (Lab Tech Only)
+                        {{-- Dedicated Demographic Edit for Normal Staff (No Testing Authority) --}}
+                        <div class="d-flex flex-column gap-2 mb-2">
+                            <a href="{{ route('appointments.edit-details', $app->id) }}?from=queue" class="btn-custom btn-outline-accent w-100 py-2 fw-bold text-center text-decoration-none shadow-sm uppercase" style="font-size: 0.75rem;">
+                                <i class="bi bi-pencil-square me-1"></i> Edit Demographics
+                            </a>
+                            <div class="alert small py-2.5 mb-0 text-center" style="background-color: rgba(25, 211, 140, 0.05); color: var(--text-main); border: 1.5px solid var(--border-color); border-radius: 8px;">
+                                <i class="bi bi-hourglass-split me-1 text-warning"></i> Awaiting Clinical Sampling (Lab Tech Only)
+                            </div>
                         </div>
                     @endcan
                 @endif
@@ -327,8 +348,8 @@
             </div>
         @endif
 
-        {{-- Show individual cancel button if pending, approved, or returned (NOT for retest, tested, encoded, released) --}}
-        @if(in_array($app->status, ['pending', 'approved', 'returned']) && !$isExpired)
+        {{-- Show individual cancel button ONLY if pending (NOT for approved, retest, tested, encoded, released) --}}
+        @if($app->status === 'pending' && !$isExpired)
             <button type="button" class="btn-custom btn-outline-danger w-100 py-2 fw-bold text-center mt-2" data-bs-toggle="modal" data-bs-target="#cancelAppointmentModal{{ $app->id }}">
                 <i class="bi bi-x-circle me-1"></i> CANCEL APPOINTMENT
             </button>

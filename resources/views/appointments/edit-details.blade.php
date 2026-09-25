@@ -100,7 +100,7 @@
  {{-- First Name --}}
  <div class="col-md-3">
  <div class="d-flex align-items-center mb-1" style="height: 22px;">
- <label class="smaller fw-bold uppercase mb-0" style="color: var(--text-muted);">First Name</label>
+ <label class="smaller fw-bold uppercase mb-0 text-nowrap" style="color: var(--text-muted);">First Name</label>
  </div>
  <input type="text" name="patient_first_name" id="patient_first_name" class="form-control uppercase fw-bold @error('patient_first_name') is-invalid @enderror" value="{{ old('patient_first_name', $appointment->patient_first_name) }}" required>
  <div class="invalid-feedback d-none" id="err_patient_first_name"></div>
@@ -108,13 +108,14 @@
  <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
  @enderror
  </div>
- {{-- Middle Name --}}
- <div class="col-md-3">
- <div class="d-flex justify-content-between align-items-center mb-1" style="height: 22px;">
- <label class="smaller fw-bold mb-0 uppercase" style="color: var(--text-muted);">Middle Name</label>
- <div class="form-check form-switch mb-0">
- <input class="form-check-input" type="checkbox" id="no_middle_name_toggle" onclick="toggleMiddleName(this)" {{ $appointment->patient_middle_name === 'N/A' ? 'checked' : '' }}>
- <label class="smaller text-muted" style="font-size: 0.65rem; line-height: 1;" for="no_middle_name_toggle">None</label>
+
+ {{-- Middle Name (Expanded width + compact switch alignment) --}}
+ <div class="col-md-4">
+ <div class="d-flex justify-content-between align-items-center mb-1 flex-nowrap" style="height: 22px;">
+ <label class="smaller fw-bold mb-0 uppercase text-nowrap" style="color: var(--text-muted);">Middle Name</label>
+ <div class="form-check form-switch mb-0 d-inline-flex align-items-center gap-1 ps-0" style="min-height: auto;">
+ <input class="form-check-input m-0 cursor-pointer" type="checkbox" id="no_middle_name_toggle" onclick="toggleMiddleName(this)" {{ $appointment->patient_middle_name === 'N/A' ? 'checked' : '' }} style="width: 1.8em; height: 0.95em; cursor: pointer; float: none;">
+ <label class="smaller text-muted user-select-none cursor-pointer mb-0" style="font-size: 0.65rem; line-height: 1;" for="no_middle_name_toggle">None</label>
  </div>
  </div>
  <input type="text" name="patient_middle_name" id="patient_middle_name" class="form-control uppercase fw-bold @error('patient_middle_name') is-invalid @enderror" value="{{ old('patient_middle_name', $appointment->patient_middle_name === 'N/A' ? '' : $appointment->patient_middle_name) }}" {{ $appointment->patient_middle_name === 'N/A' ? 'readonly' : '' }}>
@@ -123,10 +124,11 @@
  <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
  @enderror
  </div>
+
  {{-- Last Name --}}
  <div class="col-md-3">
  <div class="d-flex align-items-center mb-1" style="height: 22px;">
- <label class="smaller fw-bold uppercase mb-0" style="color: var(--text-muted);">Last Name</label>
+ <label class="smaller fw-bold uppercase mb-0 text-nowrap" style="color: var(--text-muted);">Last Name</label>
  </div>
  <input type="text" name="patient_last_name" id="patient_last_name" class="form-control uppercase fw-bold @error('patient_last_name') is-invalid @enderror" value="{{ old('patient_last_name', $appointment->patient_last_name) }}" required>
  <div class="invalid-feedback d-none" id="err_patient_last_name"></div>
@@ -134,10 +136,11 @@
  <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
  @enderror
  </div>
- {{-- Suffix --}}
- <div class="col-md-3">
+
+ {{-- Suffix (Compact width appropriate for short suffixes) --}}
+ <div class="col-md-2">
  <div class="d-flex align-items-center mb-1" style="height: 22px;">
- <label class="smaller fw-bold uppercase mb-0" style="color: var(--text-muted);">Suffix (Opt.)</label>
+ <label class="smaller fw-bold uppercase mb-0 text-nowrap" style="color: var(--text-muted);">Suffix (Opt.)</label>
  </div>
  <input type="text" name="patient_suffix" id="revise_suffix" list="suffix_options" class="form-control uppercase fw-bold @error('patient_suffix') is-invalid @enderror" value="{{ old('patient_suffix', $appointment->patient_suffix) }}" placeholder="e.g. JR">
  <datalist id="suffix_options">
@@ -148,6 +151,7 @@
  <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
  @enderror
  </div>
+
  {{-- Sex --}}
  <div class="col-md-6">
  <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Sex</label>
@@ -160,6 +164,7 @@
  <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
  @enderror
  </div>
+
  {{-- Birthdate --}}
  <div class="col-md-6">
  <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Birthdate</label>
@@ -176,6 +181,7 @@
  {{ $isDependent ? 'Dependents must be minors under 18 years of age.' : 'Patients must be at least 18 years of age for personal bookings.' }}
  </small>
  </div>
+
  {{-- Phone Number --}}
  <div class="col-12">
  <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Contact Phone</label>
@@ -195,6 +201,7 @@
  </div>
  </div>
  </div>
+
  {{-- 2. Residential Address Card --}}
  <div class="card p-4 border-secondary bg-card shadow-sm h-100">
  <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">

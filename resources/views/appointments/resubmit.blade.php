@@ -59,6 +59,12 @@
                     <small class="text-secondary">This appointment was previously canceled.</small>
                 </div>
             </div>
+            @if($appointment->cancellation_reason || $appointment->return_reason)
+                <div class="p-3 bg-card border border-warning border-opacity-25 rounded-3 mt-2 mb-2">
+                    <strong class="d-block text-warning small uppercase mb-1">Reason for Cancellation:</strong>
+                    <p class="mb-0 text-main italic">"{{ $appointment->cancellation_reason ?: $appointment->return_reason }}"</p>
+                </div>
+            @endif
             <p class="mb-0 small text-main mt-1">
                 Submitting this form will update your information and place your record back into the active processing queue.
                 @if(!$isBulk && $appointment->payment_status === 'paid')
@@ -165,10 +171,10 @@
                         <div class="col-md-6">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Birthdate</label>
                             <input type="date" name="patient_birthdate" id="patient_birthdate" class="form-control" 
-                                value="{{ old('patient_birthdate', $appointment->patient_birthdate ? $appointment->patient_birthdate->format('Y-m-d') : '') }}" 
-                                @if($minBday) min="{{ $minBday }}" @endif 
-                                max="{{ $maxBday }}" 
-                                onchange="validateBirthdateInput()" required>
+                                   value="{{ old('patient_birthdate', $appointment->patient_birthdate ? $appointment->patient_birthdate->format('Y-m-d') : '') }}" 
+                                   @if($minBday) min="{{ $minBday }}" @endif 
+                                   max="{{ $maxBday }}" 
+                                   onchange="validateBirthdateInput()" required>
                             <div class="invalid-feedback d-none" id="err_patient_birthdate"></div>
                             @error('patient_birthdate')
                                 <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
@@ -413,7 +419,7 @@
                             </div>
 
                             {{-- Receipt File Upload Input --}}
-                            <div id="receipt_upload_wrapper" class="{{ ($appointment->payment_receipt && $appointment->status !== 'canceled' && empty(old('remove_receipt'))) ? 'd-none' : 'd-none' }}">
+                            <div id="receipt_upload_wrapper" class="{{ ($appointment->payment_receipt && $appointment->status !== 'canceled' && empty(old('remove_receipt'))) ? 'd-none' : '' }}">
                                 <label class="small text-secondary fw-bold mb-1 uppercase">Upload Proof of Payment</label>
                                 <input type="file" name="payment_receipt" id="payment_receipt" class="form-control" accept="image/*, application/pdf" onchange="handleReceiptUpload(this)">
                                 <div class="invalid-feedback d-none" id="err_payment_receipt"></div>
@@ -522,8 +528,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         cityEl: document.getElementById('addr_city'),
         brgyEl: document.getElementById('addr_brgy'),
         streetEl: document.getElementById('patient_street'),
-        savedProv: savedProvince, 
-        savedCity: savedCity, 
+        savedProv: savedProvince,
+        savedCity: savedCity,
         savedBrgy: savedBarangay,
         onCompiled: saveDraftData
     });
@@ -549,12 +555,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* REAL-TIME DRAFT AUTOSAVE & RECOVERY ENGINE                                  */
+/* REAL-TIME DRAFT AUTOSAVE & RECOVERY ENGINE                                 */
 /* -------------------------------------------------------------------------- */
 function saveDraftData() {
     const form = document.getElementById('resubmitForm');
     if (!form) return;
-
     const draft = {};
     const inputs = form.querySelectorAll('input:not([type="password"]):not([type="file"]), select, textarea');
     inputs.forEach(input => {
@@ -573,7 +578,6 @@ function saveDraftData() {
             }
         }
     });
-
     localStorage.setItem(`resubmit_draft_${appId}`, JSON.stringify(draft));
 }
 
@@ -624,7 +628,7 @@ function loadDraftData() {
                 } catch(e) {}
             }
         }
-    } catch(e) {
+    } catch (e) {
         console.warn("Draft restore failed:", e);
     }
 }
@@ -812,7 +816,7 @@ function removeExistingReceipt() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* GENERAL FORM HELPERS & VALIDATION ENGINE                                    */
+/* GENERAL FORM HELPERS & VALIDATION ENGINE                                   */
 /* -------------------------------------------------------------------------- */
 function toggleMiddleName(chk) {
     const input = document.getElementById('patient_middle_name');
@@ -848,7 +852,6 @@ function updateTotal() {
     document.querySelectorAll('.service-checkbox:not(:checked)').forEach(cb => {
         cb.closest('.service-item')?.classList.remove('selected-test');
     });
-
     const totalDisplay = document.getElementById('total_bill_display');
     if (totalDisplay) {
         totalDisplay.innerText = '₱' + total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -858,7 +861,6 @@ function updateTotal() {
 function resortServices() {
     const container = document.getElementById('services_container');
     if (!container) return;
-
     const items = Array.from(container.querySelectorAll('.service-item'));
     items.sort((a, b) => {
         const aChecked = a.querySelector('.service-checkbox')?.checked ? 1 : 0;
@@ -888,7 +890,6 @@ function hasActiveReceipt() {
     const hasNewFile = receiptInput && receiptInput.files && receiptInput.files.length > 0;
     const existingBox = document.getElementById('existing_receipt_box');
     const hasExistingOnServer = existingBox && !existingBox.dataset.removed;
-
     if (isRemoved) return hasNewFile;
     return hasExistingOnServer || hasNewFile;
 }
@@ -989,7 +990,7 @@ function updateProviderQr(radio) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* DYNAMIC TIME SLOTS FETCHER WITH INLINE ERRORS                               */
+/* DYNAMIC TIME SLOTS FETCHER WITH INLINE ERRORS                              */
 /* -------------------------------------------------------------------------- */
 async function fetchTimeSlots(dateStr) {
     const tsSel = document.getElementById('time_slot');
@@ -1260,6 +1261,7 @@ function validateResubmitForm(e) {
                 const providerContainer = document.getElementById('provider_selection_container');
                 markInvalid(providerContainer, 'err_payment_receipt', 'Please choose an E-Wallet provider.');
             }
+
             const receiptInput = document.getElementById('payment_receipt');
             const hasExistingReceipt = !isCanceledRecord && document.getElementById('existing_receipt_box') && !document.getElementById('existing_receipt_box').classList.contains('d-none');
             const isRemoved = document.getElementById('remove_receipt').value === '1';

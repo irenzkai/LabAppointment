@@ -156,10 +156,10 @@
                     </div>
 
                     <div class="d-grid gap-2">
-                        <a href="{{ route('admin.reports.export', array_merge(request()->query(), ['report_type' => 'transactions'])) }}" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2">
+                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerExport('tx')">
                             <i class="bi bi-download"></i>
                             <span>Export CSV</span>
-                        </a>
+                        </button>
                         <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerPrint()">
                             <i class="bi bi-printer-fill"></i>
                             <span>Print Preview</span>
@@ -198,7 +198,7 @@
                             @endphp
                             <tr class="report-row tx-row border-secondary border-opacity-10" data-amount="{{ $amt }}" data-paid="{{ $isPaid ? '1' : '0' }}">
                                 <td class="text-center cb-col">
-                                    <input type="checkbox" class="form-check-input row-cb tx-cb" checked onchange="updateReportTotals('tx')">
+                                    <input type="checkbox" class="form-check-input row-cb tx-cb" value="{{ $tx->id }}" checked onchange="updateReportTotals('tx')">
                                 </td>
                                 <td class="fw-semibold">{{ $tx->appointment_date ? $tx->appointment_date->format('M d, Y') : $tx->created_at->format('M d, Y') }}</td>
                                 <td class="font-monospace text-accent small fw-bold">#{{ $tx->id }}</td>
@@ -357,10 +357,10 @@
                     </div>
 
                     <div class="d-grid gap-2">
-                        <a href="{{ route('admin.reports.export', array_merge(request()->query(), ['report_type' => 'appointments'])) }}" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2">
+                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerExport('app')">
                             <i class="bi bi-download"></i>
                             <span>Export CSV</span>
-                        </a>
+                        </button>
                         <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerPrint()">
                             <i class="bi bi-printer-fill"></i>
                             <span>Print Preview</span>
@@ -404,7 +404,7 @@
                             @endphp
                             <tr class="report-row app-row border-secondary border-opacity-10">
                                 <td class="text-center cb-col">
-                                    <input type="checkbox" class="form-check-input row-cb app-cb" checked onchange="updateReportTotals('app')">
+                                    <input type="checkbox" class="form-check-input row-cb app-cb" value="{{ $app->id }}" checked onchange="updateReportTotals('app')">
                                 </td>
                                 <td>
                                     <div class="fw-semibold text-main">{{ $app->appointment_date ? $app->appointment_date->format('M d, Y') : 'N/A' }}</div>
@@ -515,10 +515,10 @@
                     </div>
 
                     <div class="d-grid gap-2">
-                        <a href="{{ route('admin.reports.export', array_merge(request()->query(), ['report_type' => 'services'])) }}" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2">
+                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerExport('svc')">
                             <i class="bi bi-download"></i>
                             <span>Export CSV</span>
-                        </a>
+                        </button>
                         <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerPrint()">
                             <i class="bi bi-printer-fill"></i>
                             <span>Print Preview</span>
@@ -550,7 +550,7 @@
                             @forelse($services as $svc)
                             <tr class="report-row svc-row border-secondary border-opacity-10">
                                 <td class="text-center cb-col">
-                                    <input type="checkbox" class="form-check-input row-cb svc-cb" checked onchange="updateReportTotals('svc')">
+                                    <input type="checkbox" class="form-check-input row-cb svc-cb" value="{{ $svc->id }}" checked onchange="updateReportTotals('svc')">
                                 </td>
                                 <td class="font-monospace text-accent small fw-bold">#{{ $svc->id }}</td>
                                 <td class="fw-bold uppercase tracking-tight text-main">{{ $svc->name }}</td>
@@ -663,10 +663,10 @@
                     </div>
 
                     <div class="d-grid gap-2">
-                        <a href="{{ route('admin.reports.export', array_merge(request()->query(), ['report_type' => 'accounts'])) }}" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2">
+                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerExport('acc')">
                             <i class="bi bi-download"></i>
                             <span>Export CSV</span>
-                        </a>
+                        </button>
                         <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerPrint()">
                             <i class="bi bi-printer-fill"></i>
                             <span>Print Preview</span>
@@ -698,7 +698,7 @@
                             @forelse($accounts as $acc)
                             <tr class="report-row acc-row border-secondary border-opacity-10">
                                 <td class="text-center cb-col">
-                                    <input type="checkbox" class="form-check-input row-cb acc-cb" checked onchange="updateReportTotals('acc')">
+                                    <input type="checkbox" class="form-check-input row-cb acc-cb" value="{{ $acc->id }}" checked onchange="updateReportTotals('acc')">
                                 </td>
                                 <td class="font-monospace text-accent small fw-bold">#{{ $acc->id }}</td>
                                 <td class="fw-bold uppercase tracking-tight text-main">{{ $acc->name }}</td>
@@ -742,6 +742,19 @@
          TAB 5: SYSTEM AUDIT LOGS REPORT
          ========================================================================= --}}
     @if($type === 'logs')
+    @php
+        // Dynamically extract all distinct action events logged in the database list
+        $allActionEvents = \App\Models\ActivityLog::select('action')
+            ->distinct()
+            ->whereNotNull('action')
+            ->where('action', '!=', '')
+            ->orderBy('action')
+            ->pluck('action');
+
+        if (!empty($logCategory) && $logCategory !== 'all' && !$allActionEvents->contains($logCategory)) {
+            $allActionEvents = $allActionEvents->push($logCategory)->sort()->values();
+        }
+    @endphp
     <div class="row g-4 position-relative align-items-stretch">
         <div class="col-xl-3 col-lg-4 col-12 no-print sticky-sidebar-col">
             <div class="sticky-controls-sidebar">
@@ -810,13 +823,10 @@
                     <div class="mb-4">
                         <label class="form-label smaller fw-bold uppercase mb-1 text-secondary" style="font-size: 0.72rem; letter-spacing: 0.5px;">Action Event</label>
                         <select name="log_category" class="form-select form-select-sm" onchange="this.form.submit()">
-                            <option value="all" {{ $logCategory === 'all' ? 'selected' : '' }}>All Action Events</option>
-                            <option value="VERIFIED" {{ $logCategory === 'VERIFIED' ? 'selected' : '' }}>VERIFIED</option>
-                            <option value="ENCODED" {{ $logCategory === 'ENCODED' ? 'selected' : '' }}>ENCODED</option>
-                            <option value="TESTED" {{ $logCategory === 'TESTED' ? 'selected' : '' }}>TESTED</option>
-                            <option value="BOOKED" {{ $logCategory === 'BOOKED' ? 'selected' : '' }}>BOOKED</option>
-                            <option value="ACCESS" {{ $logCategory === 'ACCESS' ? 'selected' : '' }}>SENSITIVE ACCESS</option>
-                            <option value="STATUS" {{ $logCategory === 'STATUS' ? 'selected' : '' }}>STATUS CHANGES</option>
+                            <option value="all" {{ ($logCategory ?? 'all') === 'all' ? 'selected' : '' }}>All Action Events</option>
+                            @foreach($allActionEvents as $event)
+                                <option value="{{ $event }}" {{ ($logCategory ?? '') === $event ? 'selected' : '' }}>{{ strtoupper($event) }}</option>
+                            @endforeach
                         </select>
                     </div>
 
@@ -828,10 +838,10 @@
                     </div>
 
                     <div class="d-grid gap-2">
-                        <a href="{{ route('admin.reports.export', array_merge(request()->query(), ['report_type' => 'logs'])) }}" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2">
+                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerExport('log')">
                             <i class="bi bi-download"></i>
                             <span>Export CSV</span>
-                        </a>
+                        </button>
                         <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerPrint()">
                             <i class="bi bi-printer-fill"></i>
                             <span>Print Preview</span>
@@ -861,7 +871,7 @@
                             @forelse($logs as $log)
                             <tr class="report-row log-row border-secondary border-opacity-10">
                                 <td class="text-center cb-col">
-                                    <input type="checkbox" class="form-check-input row-cb log-cb" checked onchange="updateReportTotals('log')">
+                                    <input type="checkbox" class="form-check-input row-cb log-cb" value="{{ $log->id }}" checked onchange="updateReportTotals('log')">
                                 </td>
                                 <td>
                                     <div class="fw-semibold text-main">{{ $log->created_at ? $log->created_at->format('M d, Y') : 'N/A' }}</div>
@@ -872,7 +882,7 @@
                                     <small class="text-muted fs-x-small fw-semibold">({{ strtoupper($log->user->role ?? 'SYSTEM') }})</small>
                                 </td>
                                 <td>
-                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2.5 py-1.5 small fw-bold uppercase">
+                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2.5 py-1.5 small fw-bold uppercase action-event-badge text-wrap">
                                         {{ $log->action }}
                                     </span>
                                 </td>
@@ -906,6 +916,24 @@
         </div>
     </div>
     @endif
+</div>
+
+{{-- CUSTOM THEME-COMPATIBLE SELECTION REQUIRED ALERT MODAL --}}
+<div class="modal fade" id="reportNoticeModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060;">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 390px;">
+        <div class="modal-content border-secondary bg-card shadow-lg text-center p-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main); border-radius: 12px;">
+            <div class="mb-3">
+                <div class="d-inline-flex align-items-center justify-content-center rounded-circle p-3" style="background-color: rgba(25, 211, 140, 0.1); width: 68px; height: 68px;">
+                    <i class="bi bi-exclamation-octagon-fill text-accent fs-1" id="reportNoticeIcon"></i>
+                </div>
+            </div>
+            <h5 class="modal-title text-main fw-bold mb-2 uppercase tracking-tight" id="reportNoticeTitle">Selection Required</h5>
+            <div id="reportNoticeMessage" class="text-secondary small mb-4">Please select at least one record before proceeding.</div>
+            <button type="button" class="btn btn-accent w-100 py-2.5 uppercase fw-bold" style="border-radius: 8px; letter-spacing: 0.5px;" data-bs-dismiss="modal">
+                UNDERSTOOD
+            </button>
+        </div>
+    </div>
 </div>
 
 <style>
@@ -1029,6 +1057,19 @@ table.report-table tbody td {
     word-wrap: break-word !important;
     white-space: normal !important;
     vertical-align: middle !important;
+}
+
+.action-event-badge,
+table.report-table .action-event-badge,
+table.report-table td .badge.action-event-badge {
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    word-wrap: break-word !important;
+    display: inline-block !important;
+    line-height: 1.35 !important;
+    max-width: 100% !important;
+    text-align: left !important;
 }
 
 .text-nowrap,
@@ -1334,9 +1375,91 @@ function updateReportTotals(type) {
     }
 }
 
-// Opens the designer printable report in a dedicated preview tab
+// Display custom theme-compatible prompt modal rather than top screen browser alerts
+function showReportNotice(message, title = 'Selection Required', iconClass = 'bi-exclamation-octagon-fill text-accent') {
+    const titleElem = document.getElementById('reportNoticeTitle');
+    const msgElem = document.getElementById('reportNoticeMessage');
+    const iconElem = document.getElementById('reportNoticeIcon');
+    const modalElem = document.getElementById('reportNoticeModal');
+
+    if (titleElem) titleElem.innerText = title;
+    if (msgElem) msgElem.innerText = message;
+    if (iconElem) {
+        iconElem.className = 'bi fs-1 ' + iconClass;
+    }
+
+    if (modalElem && typeof bootstrap !== 'undefined') {
+        const modal = bootstrap.Modal.getInstance(modalElem) || new bootstrap.Modal(modalElem);
+        modal.show();
+    } else {
+        alert(message);
+    }
+}
+
+// Triggers CSV export sending strictly the selected row IDs
+function triggerExport(type) {
+    const prefix = getPrefix(type);
+    const checkedRows = Array.from(document.querySelectorAll(`.${prefix}-row`)).filter(tr => {
+        const cb = tr.querySelector('.row-cb');
+        return cb && cb.checked && !tr.classList.contains('search-hidden');
+    });
+
+    if (checkedRows.length === 0) {
+        showReportNotice(
+            'Please select at least one record from the table before exporting the CSV spreadsheet.',
+            'Export Selection Required'
+        );
+        return;
+    }
+
+    const selectedIds = checkedRows.map(tr => {
+        const cb = tr.querySelector('.row-cb');
+        return cb ? cb.value : null;
+    }).filter(Boolean);
+
+    const typeMap = {
+        'tx': 'transactions',
+        'app': 'appointments',
+        'svc': 'services',
+        'acc': 'accounts',
+        'log': 'logs'
+    };
+    const reportType = typeMap[prefix] || prefix;
+
+    const url = new URL('{{ route("admin.reports.export") }}', window.location.origin);
+    const searchParams = new URLSearchParams(window.location.search);
+
+    searchParams.forEach((val, key) => url.searchParams.set(key, val));
+    url.searchParams.set('report_type', reportType);
+    url.searchParams.set('selected_ids', selectedIds.join(','));
+
+    window.location.href = url.toString();
+}
+
+// Opens the designer printable report in a dedicated preview tab respecting selected rows
 function triggerPrint() {
+    const rawType = '{{ $type }}';
+    const prefix = getPrefix(rawType);
+    const checkedRows = Array.from(document.querySelectorAll(`.${prefix}-row`)).filter(tr => {
+        const cb = tr.querySelector('.row-cb');
+        return cb && cb.checked && !tr.classList.contains('search-hidden');
+    });
+
+    if (checkedRows.length === 0) {
+        showReportNotice(
+            'Please select at least one record from the table before generating the official print preview.',
+            'Print Selection Required'
+        );
+        return;
+    }
+
+    const selectedIds = checkedRows.map(tr => {
+        const cb = tr.querySelector('.row-cb');
+        return cb ? cb.value : null;
+    }).filter(Boolean);
+
     const currentParams = new URLSearchParams(window.location.search);
+    currentParams.set('selected_ids', selectedIds.join(','));
     const printUrl = '{{ route("admin.reports.print") }}?' + currentParams.toString();
     window.open(printUrl, '_blank');
 }

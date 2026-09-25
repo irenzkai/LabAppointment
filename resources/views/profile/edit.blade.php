@@ -95,7 +95,7 @@
                     @endif
 
                     <button class="list-group-item d-flex align-items-center gap-2 text-start text-danger" id="btn-danger" data-bs-toggle="pill" data-bs-target="#tab-danger" role="tab" aria-controls="tab-danger" aria-selected="false">
-                        <i class="bi bi-exclamation-triangle fs-5"></i> Delete Account
+                        <i class="bi bi-exclamation-triangle fs-5"></i> Deactivate Account
                     </button>
                 </div>
             </div>

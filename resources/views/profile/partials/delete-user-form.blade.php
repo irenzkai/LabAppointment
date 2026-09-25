@@ -3,7 +3,7 @@
 
     {{-- Card Header --}}
     <h5 class="text-danger fw-bold mb-3 border-bottom border-danger border-opacity-25 pb-2 uppercase" style="letter-spacing: 1px;">
-        Delete Account
+        Deactivate Account
     </h5>
 
     {{-- Warning Description --}}
@@ -13,7 +13,7 @@
 
     {{-- Permanent Deletion Trigger Button --}}
     <button type="button" class="btn-custom btn-danger-custom py-3 px-4 fw-bold uppercase" data-bs-toggle="modal" data-bs-target="#confirmSelfDelete">
-        DELETE ACCOUNT PERMANENTLY
+        DEACTIVATE ACCOUNT
     </button>
 </div>
 
@@ -58,7 +58,7 @@
                             <button type="button" class="btn btn-outline-secondary w-100 py-3" data-bs-dismiss="modal" style="border-radius: 8px !important; font-weight: 700 !important; text-transform: uppercase !important;">CANCEL</button>
                         </div>
                         <div class="col-6 p-1">
-                            <button type="submit" id="modal_del_submit_btn" class="btn-custom btn-danger-custom w-100 py-3" style="border-radius: 8px !important; font-weight: 700 !important; text-transform: uppercase !important;">DELETE NOW</button>
+                            <button type="submit" id="modal_del_submit_btn" class="btn-custom btn-danger-custom w-100 py-3" style="border-radius: 8px !important; font-weight: 700 !important; text-transform: uppercase !important;">DEACTIVATE NOW</button>
                         </div>
                     </div>
                 </div>
@@ -120,7 +120,7 @@
                     errorContainer.classList.remove('d-none');
                 } finally {
                     submitBtn.disabled = false;
-                    submitBtn.innerHTML = 'DELETE NOW';
+                    submitBtn.innerHTML = 'DEACTIVATE NOW';
                 }
             });
         }

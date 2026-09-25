@@ -75,10 +75,16 @@ class ResultController extends Controller
 
     /**
      * EDIT DETAILS PAGE: Dedicated full-page view to revise patient identity, PSGC address, and medical services.
+     * Accessible by Staff, Lab Tech, and Admin at pre-release stages (including approved).
      */
     public function editDemographics(Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
+
+        if ($appointment->status === 'released') {
+            return redirect()->back()->with('error', 'Released appointments are locked and cannot be modified.');
+        }
+
         $services = Service::where('is_available', true)->orderBy('name')->get();
 
         return view('appointments.edit-details', compact('appointment', 'services'));
@@ -293,10 +299,18 @@ class ResultController extends Controller
 
     /**
      * REVISE DEMOGRAPHICS: Edits schedule and demographics details from the hub or dedicated edit page.
+     * Preserves current appointment status (such as approved) while updating identity, address, and tests.
      */
     public function reviseDemographics(Request $request, Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
+
+        if ($appointment->status === 'released') {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Released appointments cannot be updated.'], 403);
+            }
+            return redirect()->back()->with('error', 'Released appointments are locked and cannot be modified.');
+        }
 
         $request->validate([
             'patient_first_name' => 'required|string|max:255',

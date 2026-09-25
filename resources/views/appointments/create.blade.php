@@ -1,6 +1,5 @@
 @extends('layouts.app')
 @section('title', 'Create Appointment')
-
 @section('content')
 <div class="row justify-content-center animate-page">
     <div class="col-lg-11 col-xl-10 text-start">
@@ -101,7 +100,6 @@
 const user = @json(Auth::user());
 user.birthdate = "{{ Auth::user()->birthdate ? Auth::user()->birthdate->format('Y-m-d') : '' }}";
 const apiBase = "https://psgc.gitlab.io/api";
-
 let activeTargetType = 'self';
 let currentStepNumber = 1;
 let isRestoringDraft = false;
@@ -165,7 +163,6 @@ function validateBirthdateInput() {
     const prefix = activeTargetType === 'dependent' ? 'dep' : 'self';
     const bdayInput = document.getElementById(`${prefix}_bday`);
     if (!bdayInput || !bdayInput.value) return true;
-
     const dob = new Date(bdayInput.value);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -208,8 +205,8 @@ function clearInlineError(input) {
 function proceedFromStep1() {
     const typeElement = document.querySelector('input[name="target_type"]:checked');
     if (!typeElement) return;
-
     const type = typeElement.value;
+
     if (type === 'bulk') {
         window.location.href = "{{ route('appointments.bulk') }}";
         return;
@@ -261,8 +258,8 @@ function handleDependentSelectChange() {
 function handleTargetChange(isInitialLoad = false) {
     const typeElement = document.querySelector('input[name="target_type"]:checked');
     if (!typeElement) return;
-
     const type = typeElement.value;
+
     activeTargetType = type;
     localStorage.setItem('appointment_active_target', type);
 
@@ -279,9 +276,15 @@ function handleTargetChange(isInitialLoad = false) {
         if (depContainer) depContainer.classList.add('d-none');
         disableContainerInputs(depContainer, true);
         enableContainerInputs(selfContainer, true);
-
         const typeSpan = document.getElementById('sum_patient_type');
         if (typeSpan) typeSpan.innerText = "Personal Account";
+
+        // Default select Cash on Site if no cashless is selected
+        const selfCashless = document.getElementById('self_pay_cashless');
+        const selfCash = document.getElementById('self_pay_cash');
+        if (selfCash && (!selfCashless || !selfCashless.checked)) {
+            selfCash.checked = true;
+        }
 
         if (!isInitialLoad) {
             const selfDraft = getDraftData('self');
@@ -291,14 +294,21 @@ function handleTargetChange(isInitialLoad = false) {
                 resetSelfDetails();
             }
         }
+        togglePaymentFields('self');
     } else if (type === 'dependent') {
         if (selfContainer) selfContainer.classList.add('d-none');
         if (depContainer) depContainer.classList.remove('d-none');
         disableContainerInputs(selfContainer, true);
         enableContainerInputs(depContainer, true);
-
         const typeSpan = document.getElementById('sum_patient_type');
         if (typeSpan) typeSpan.innerText = "Family Dependent";
+
+        // Default select Cash on Site if no cashless is selected
+        const depCashless = document.getElementById('dep_pay_cashless');
+        const depCash = document.getElementById('dep_pay_cash');
+        if (depCash && (!depCashless || !depCashless.checked)) {
+            depCash.checked = true;
+        }
 
         if (!isInitialLoad) {
             const depDraft = getDraftData('dependent');
@@ -326,6 +336,7 @@ function handleTargetChange(isInitialLoad = false) {
                 clearDetails('dep');
             }
         }
+        togglePaymentFields('dep');
     }
 
     updateSummary();
@@ -367,6 +378,9 @@ function resetSelfDetails() {
         user.city, 
         user.province
     );
+    const cashRadio = document.getElementById('self_pay_cash');
+    if (cashRadio) cashRadio.checked = true;
+    togglePaymentFields('self');
     updateSummary();
     saveAppointmentDraft();
 }
@@ -394,6 +408,9 @@ function resetDependentDetails() {
     } else {
         clearDetails('dep');
     }
+    const cashRadio = document.getElementById('dep_pay_cash');
+    if (cashRadio) cashRadio.checked = true;
+    togglePaymentFields('dep');
     updateSummary();
     saveAppointmentDraft();
 }
@@ -413,7 +430,6 @@ function fillDetails(prefix, f, m, l, suffix, sex, bday, phone, street, barangay
 
     const middleInput = document.getElementById(`${prefix}_middle_name`);
     const noneMnSwitch = document.getElementById(`${prefix}_no_mn`);
-
     if (!m || m === 'N/A' || m.toUpperCase() === 'N/A') {
         if (middleInput) {
             middleInput.value = 'N/A';
@@ -448,7 +464,6 @@ function fillDetails(prefix, f, m, l, suffix, sex, bday, phone, street, barangay
     const hiddenPhoneVal = phone || '';
     const displayPhoneInput = document.getElementById(`${prefix}_phone_display`);
     const hiddenPhoneInput = document.getElementById(`${prefix}_phone_hidden`);
-
     if (displayPhoneInput && hiddenPhoneInput) {
         if (hiddenPhoneVal.startsWith('09')) {
             displayPhoneInput.value = hiddenPhoneVal.substring(2);
@@ -470,28 +485,22 @@ function clearDetails(prefix) {
         const el = document.getElementById(id);
         if (el) el.value = "";
     });
-
     const phoneDisp = document.getElementById(`${prefix}_phone_display`);
     if (phoneDisp) phoneDisp.value = "";
-
     const sexEl = document.getElementById(`${prefix}_sex`);
     if (sexEl) sexEl.value = "";
-
     const provEl = document.getElementById(`${prefix}_province`);
     if (provEl) provEl.value = "";
-
     const cityEl = document.getElementById(`${prefix}_city`);
     if (cityEl) {
         cityEl.innerHTML = '<option value="">Select Province First</option>';
         cityEl.disabled = true;
     }
-
     const brgyEl = document.getElementById(`${prefix}_brgy`);
     if (brgyEl) {
         brgyEl.innerHTML = '<option value="">Select City First</option>';
         brgyEl.disabled = true;
     }
-
     updateCompiledAddress(prefix);
 }
 
@@ -630,7 +639,6 @@ function restoreReceiptPreview(prefix) {
 function updateFieldLockState(prefix) {
     const receiptInput = document.getElementById(`${prefix}_in_receipt`);
     const hasReceipt = (receiptInput && receiptInput.files && receiptInput.files.length > 0) || localStorage.getItem(`receipt_base64_${prefix}`) !== null;
-
     const payCash = document.getElementById(`${prefix}_pay_cash`);
     const payCashless = document.getElementById(`${prefix}_pay_cashless`);
     const providerRadios = document.querySelectorAll(`.${prefix}-prov-radio`);
@@ -675,7 +683,6 @@ function toggleSubmitButton(prefixOverride = null) {
 function toggleTestDetails(drawerId, btn) {
     const drawer = document.getElementById(drawerId);
     if (!drawer) return;
-
     drawer.classList.toggle('d-none');
     const icon = btn.querySelector('i');
     if (icon) {
@@ -694,9 +701,7 @@ function resortTests(prefixOverride = null) {
     items.sort((a, b) => {
         const aChecked = a.querySelector('.test-checkbox')?.checked ? 1 : 0;
         const bChecked = b.querySelector('.test-checkbox')?.checked ? 1 : 0;
-
         if (aChecked !== bChecked) return bChecked - aChecked;
-
         const aName = a.dataset.name || '';
         const bName = b.dataset.name || '';
         return aName.localeCompare(bName);
@@ -725,13 +730,11 @@ function getDraftData(type) {
 
 function saveAppointmentDraft() {
     if (isRestoringDraft) return;
-
     const prefix = activeTargetType === 'dependent' ? 'dep' : 'self';
     const container = document.getElementById(`${activeTargetType}-wizard-container`);
     if (!container) return;
 
     const depSel = document.getElementById('dependent_id');
-
     const draftData = {
         target_type: activeTargetType,
         dependent_id: (activeTargetType === 'dependent' && depSel) ? depSel.value : '',
@@ -779,7 +782,6 @@ function restoreDraftIntoForm(draftData, prefix) {
 
     const testIds = draftData['service_ids[]'] || [];
     const container = document.getElementById(`${prefix === 'dep' ? 'dependent' : 'self'}-wizard-container`);
-
     if (container) {
         container.querySelectorAll('.test-checkbox').forEach(cb => {
             cb.checked = testIds.includes(cb.value);
@@ -792,9 +794,14 @@ function restoreDraftIntoForm(draftData, prefix) {
         if (dateEl) dateEl.value = draftData.appointment_date;
     }
 
-    if (draftData.payment_method) {
-        const payRadio = document.getElementById(`${prefix}_pay_${draftData.payment_method.toLowerCase()}`);
-        if (payRadio) payRadio.checked = true;
+    // Default to Cash if draft does not have an explicit method
+    const targetMethod = (draftData.payment_method || 'Cash').toLowerCase();
+    const payRadio = document.getElementById(`${prefix}_pay_${targetMethod}`);
+    if (payRadio) {
+        payRadio.checked = true;
+    } else {
+        const cashRadio = document.getElementById(`${prefix}_pay_cash`);
+        if (cashRadio) cashRadio.checked = true;
     }
 
     if (draftData.payment_provider_id) {
@@ -807,13 +814,13 @@ function restoreDraftIntoForm(draftData, prefix) {
 
     restoreReferralPreview(prefix);
     restoreReceiptPreview(prefix);
+    togglePaymentFields(prefix);
 }
 
 // --- STEP NAVIGATION CONTROLLER ---
 function goToPage(stepNum) {
     currentStepNumber = stepNum;
     localStorage.setItem('appointment_step', stepNum);
-
     document.querySelectorAll('.wiz-section').forEach(s => s.classList.add('d-none'));
 
     if (stepNum === 1) {
@@ -824,8 +831,17 @@ function goToPage(stepNum) {
         if (targetSection) {
             targetSection.classList.remove('d-none');
         }
-    }
 
+        // Guarantee Cash on Site is selected by default in Step 5 unless Cashless is selected
+        if (stepNum === 5) {
+            const cashRadio = document.getElementById(`${prefix}_pay_cash`);
+            const cashlessRadio = document.getElementById(`${prefix}_pay_cashless`);
+            if (cashRadio && (!cashlessRadio || !cashlessRadio.checked)) {
+                cashRadio.checked = true;
+            }
+            togglePaymentFields(prefix);
+        }
+    }
     window.scrollTo(0, 0);
 }
 
@@ -833,12 +849,10 @@ function goToPage(stepNum) {
 function syncSelfPhone() {
     const displayInput = document.getElementById('self_phone_display');
     const hiddenInput = document.getElementById('self_phone_hidden');
-
     if (displayInput && hiddenInput) {
         const val = displayInput.value.trim();
         hiddenInput.value = val ? (val.startsWith('09') ? val : '09' + val) : '';
     }
-
     updateSummary();
     saveAppointmentDraft();
 }
@@ -846,12 +860,10 @@ function syncSelfPhone() {
 function syncDepPhone() {
     const displayInput = document.getElementById('dep_phone_display');
     const hiddenInput = document.getElementById('dep_phone_hidden');
-
     if (displayInput && hiddenInput) {
         const val = displayInput.value.trim();
         hiddenInput.value = val ? (val.startsWith('09') ? val : '09' + val) : '';
     }
-
     updateSummary();
     saveAppointmentDraft();
 }
@@ -882,17 +894,13 @@ function toggleDepMN(chk) {
 function findOptionFlexibly(selectEl, searchVal) {
     if (!selectEl || !searchVal) return null;
     const target = searchVal.toString().trim().toUpperCase();
-
     return Array.from(selectEl.options).find(opt => {
         if (!opt.value && !opt.text) return false;
         const optVal = opt.value.toString().trim().toUpperCase();
         const optText = opt.text.toString().trim().toUpperCase();
-
         if (optVal === target || optText === target) return true;
-
         const normOpt = optText.replace(/\b(CITY|PROVINCE|MUNICIPALITY) OF\b/g, '').replace(/[^A-Z0-9]/g, '');
         const normTarget = target.replace(/\b(CITY|PROVINCE|MUNICIPALITY) OF\b/g, '').replace(/[^A-Z0-9]/g, '');
-
         return normOpt && normOpt === normTarget;
     });
 }
@@ -901,7 +909,6 @@ async function fetchProvinces() {
     try {
         const res = await fetch(`${apiBase}/provinces.json`);
         const data = await res.json();
-
         ['self', 'dep'].forEach(prefix => {
             const sel = document.getElementById(`${prefix}_province`);
             if (sel) {
@@ -920,16 +927,13 @@ async function fetchCities(provCode, prefix = 'self') {
     if (!provCode) return;
     const citySel = document.getElementById(`${prefix}_city`);
     const brgySel = document.getElementById(`${prefix}_brgy`);
-
     if (citySel) citySel.disabled = true;
     if (brgySel) brgySel.disabled = true;
-
     if (citySel) citySel.innerHTML = '<option value="">Loading Cities...</option>';
 
     try {
         const res = await fetch(`${apiBase}/provinces/${provCode}/cities-municipalities.json`);
         const data = await res.json();
-
         if (citySel) {
             citySel.innerHTML = '<option value="">Select City</option>';
             data.sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
@@ -940,7 +944,6 @@ async function fetchCities(provCode, prefix = 'self') {
     } catch (e) {
         console.error("City API Error", e);
     }
-
     updateCompiledAddress(prefix);
     saveAppointmentDraft();
 }
@@ -948,7 +951,6 @@ async function fetchCities(provCode, prefix = 'self') {
 async function fetchBarangays(cityCode, prefix = 'self') {
     if (!cityCode) return;
     const brgySel = document.getElementById(`${prefix}_brgy`);
-
     if (brgySel) {
         brgySel.disabled = true;
         brgySel.innerHTML = '<option value="">Loading Barangays...</option>';
@@ -957,7 +959,6 @@ async function fetchBarangays(cityCode, prefix = 'self') {
     try {
         const res = await fetch(`${apiBase}/cities-municipalities/${cityCode}/barangays.json`);
         const data = await res.json();
-
         if (brgySel) {
             brgySel.innerHTML = '<option value="">Select Barangay</option>';
             data.sort((a, b) => a.name.localeCompare(b.name)).forEach(b => {
@@ -968,7 +969,6 @@ async function fetchBarangays(cityCode, prefix = 'self') {
     } catch (e) {
         console.error("Barangay API Error", e);
     }
-
     updateCompiledAddress(prefix);
     saveAppointmentDraft();
 }
@@ -980,7 +980,6 @@ async function setAddressDropdowns(prefix, provinceName, cityName, barangayName)
     const brgySel = document.getElementById(`${prefix}_brgy`);
 
     if (!provSel) return;
-
     if (provSel.options.length <= 1) {
         await fetchProvinces();
     }
@@ -989,13 +988,11 @@ async function setAddressDropdowns(prefix, provinceName, cityName, barangayName)
     if (provOpt) {
         provSel.value = provOpt.value;
         await fetchCities(provSel.value, prefix);
-
         if (citySel && cityName) {
             let cityOpt = findOptionFlexibly(citySel, cityName);
             if (cityOpt) {
                 citySel.value = cityOpt.value;
                 await fetchBarangays(citySel.value, prefix);
-
                 if (brgySel && barangayName) {
                     let brgyOpt = findOptionFlexibly(brgySel, barangayName);
                     if (brgyOpt) {
@@ -1005,7 +1002,6 @@ async function setAddressDropdowns(prefix, provinceName, cityName, barangayName)
             }
         }
     }
-
     updateCompiledAddress(prefix);
 }
 
@@ -1063,20 +1059,18 @@ function updateSummary() {
     const fn = document.getElementById(`${prefix}_first_name`)?.value || '';
     const mn = document.getElementById(`${prefix}_middle_name`)?.value || '';
     const ln = document.getElementById(`${prefix}_last_name`)?.value || '';
-
     const fullName = fn + (mn && mn !== 'N/A' ? ' ' + mn : '') + ' ' + ln;
+
     const nameEl = document.getElementById('sum_name');
     if (nameEl) nameEl.innerText = fullName.trim() || 'Not specified';
 
     const container = document.getElementById(`${activeTargetType}-wizard-container`);
     const selected = container ? container.querySelectorAll('.test-checkbox:checked') : [];
-
     const sidebarBadge = document.getElementById('test_count_badge');
     if (sidebarBadge) sidebarBadge.innerText = selected.length;
 
     let total = 0;
     let sidebarHtml = '';
-
     if (container) {
         container.querySelectorAll('.test-item').forEach(item => {
             const cb = item.querySelector('.test-checkbox');
@@ -1114,7 +1108,6 @@ async function fetchTimeSlots(prefix = null) {
     const currentPrefix = prefix || (activeTargetType === 'dependent' ? 'dep' : 'self');
     const dateEl = document.getElementById(`${currentPrefix}_wiz_date`);
     if (!dateEl) return;
-
     const date = dateEl.value;
     const container = document.getElementById(`${currentPrefix}_slots_container`);
     if (!date || !container) return;
@@ -1137,7 +1130,6 @@ async function fetchTimeSlots(prefix = null) {
 
         const now = new Date();
         const todayLocal = now.toLocaleDateString('en-CA');
-
         const draft = getDraftData(activeTargetType);
         const savedSlot = draft['time_slot'] || '';
 
@@ -1146,8 +1138,8 @@ async function fetchTimeSlots(prefix = null) {
             let disp = start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
             let isFull = (data.full_slots || []).includes(tStr);
             let isLunch = (data.config.has_lunch_break && tStr >= data.config.lunch_start && tStr < data.config.lunch_end);
-
             let isPast = false;
+
             if (date === todayLocal) {
                 const leadTimeMs = (parseInt(data.config.lead_time_hours) || 0) * 3600 * 1000;
                 const cutoffTime = now.getTime() + leadTimeMs;
@@ -1190,7 +1182,6 @@ function handleSlotSelection(prefix = null) {
         const dateEl = document.getElementById(`${currentPrefix}_wiz_date`);
         const date = dateEl ? dateEl.value : '';
         const timeLabel = selectedRadio.nextElementSibling.innerText;
-
         setSchedule(date, timeLabel);
         saveAppointmentDraft();
     }
@@ -1199,10 +1190,8 @@ function handleSlotSelection(prefix = null) {
 function setSchedule(date, time) {
     const sumSched = document.getElementById('sum_schedule');
     if (sumSched) sumSched.classList.remove('d-none');
-
     const sumDate = document.getElementById('sum_date');
     if (sumDate) sumDate.innerText = date;
-
     const sumTime = document.getElementById('sum_time');
     if (sumTime) sumTime.innerText = time;
 }
@@ -1229,7 +1218,6 @@ async function determineHighestStep(draftData) {
     const street = document.getElementById(`${prefix}_street`)?.value?.trim();
 
     const phoneRegex = /^09\d{9}$/;
-
     if (!fn || !ln || validateSuffixString(sfx) || !sex || !bday || !phone || !phoneRegex.test(phone) || !prov || !city || !brgy || !street) {
         return 2;
     }
@@ -1249,13 +1237,11 @@ async function determineHighestStep(draftData) {
 
     const container = document.getElementById(`${targetType}-wizard-container`);
     const selectedTests = container ? container.querySelectorAll('.test-checkbox:checked') : [];
-
     if (selectedTests.length === 0) return 3;
 
     const date = document.getElementById(`${prefix}_wiz_date`)?.value;
     const slotRadio = container ? container.querySelector('input[name="time_slot"]:checked') : null;
     const slot = slotRadio ? slotRadio.value : '';
-
     const todayStr = today.toISOString().split('T')[0];
 
     if (!date || !slot || date < todayStr) return 4;
@@ -1263,26 +1249,21 @@ async function determineHighestStep(draftData) {
     try {
         const res = await fetch(`/api/check-slots?date=${date}`);
         const data = await res.json();
-
         if (data.is_closed) {
             clearSavedSlotInDraft();
             return 4;
         }
-
         const isFull = (data.full_slots || []).includes(slot);
         let isPast = false;
         const now = new Date();
         const todayLocal = now.toLocaleDateString('en-CA');
-
         if (date === todayLocal && data.config) {
             const leadTimeMs = (parseInt(data.config.lead_time_hours) || 0) * 3600 * 1000;
             const cutoffTime = now.getTime() + leadTimeMs;
             const slotDate = new Date(`${date}T${slot}`);
             isPast = slotDate.getTime() < cutoffTime;
         }
-
         const isLunch = data.config && data.config.has_lunch_break && slot >= data.config.lunch_start && slot < data.config.lunch_end;
-
         if (isFull || isPast || isLunch) {
             clearSavedSlotInDraft();
             return 4;
@@ -1307,7 +1288,6 @@ function clearSavedSlotInDraft() {
     const container = document.getElementById(`${activeTargetType}-wizard-container`);
     const radio = container ? container.querySelector('input[name="time_slot"]:checked') : null;
     if (radio) radio.checked = false;
-
     const sumSched = document.getElementById('sum_schedule');
     if (sumSched) sumSched.classList.add('d-none');
 }
@@ -1430,12 +1410,10 @@ function validateGenericStep2(prefix) {
 function validateStep3() {
     const container = document.getElementById(`${activeTargetType}-wizard-container`);
     const selected = container ? container.querySelectorAll('.test-checkbox:checked') : [];
-
     if (selected.length === 0) {
         showWizardAlert("Please select at least one laboratory test before proceeding.");
         return;
     }
-
     goToPage(4);
 }
 
@@ -1449,12 +1427,10 @@ function validateStep4() {
         showWizardAlert("Please select a preferred date for your laboratory visit.");
         return;
     }
-
     if (!selectedSlot) {
         showWizardAlert("Please select an available preferred time slot before proceeding.");
         return;
     }
-
     goToPage(5);
 }
 
@@ -1470,22 +1446,25 @@ function filterTestList(prefix) {
 }
 
 function togglePaymentFields(prefix) {
+    const payCash = document.getElementById(`${prefix}_pay_cash`);
     const payCashless = document.getElementById(`${prefix}_pay_cashless`);
     const providerContainer = document.getElementById(`${prefix}_provider_container`);
     const qrSection = document.getElementById(`${prefix}_qr_section`);
     const receiptContainer = document.getElementById(`${prefix}_receipt_container`);
-
     const activeRadio = document.querySelector(`#${prefix}_provider_container .provider-radio:checked`) || document.querySelector(`.${prefix}-prov-radio:checked`);
+
+    // Ensure default selection if neither is checked
+    if (payCash && payCashless && !payCash.checked && !payCashless.checked) {
+        payCash.checked = true;
+    }
 
     if (payCashless && payCashless.checked) {
         if (providerContainer) providerContainer.classList.remove('d-none');
         if (activeRadio) {
             if (qrSection) qrSection.classList.remove('d-none');
             if (receiptContainer) receiptContainer.classList.remove('d-none');
-
             const qrImg = document.getElementById(`${prefix}_selected_provider_qr`);
             const qrName = document.getElementById(`${prefix}_selected_provider_name`);
-
             if (qrImg && activeRadio.dataset.qr) {
                 qrImg.src = activeRadio.dataset.qr;
             }
@@ -1510,7 +1489,6 @@ function togglePaymentFields(prefix) {
 function handleProviderChange(prefix, radio) {
     const qrImg = document.getElementById(`${prefix}_selected_provider_qr`);
     const qrName = document.getElementById(`${prefix}_selected_provider_name`);
-
     if (radio && radio.checked) {
         if (qrImg) qrImg.src = radio.dataset.qr;
         if (qrName) qrName.innerText = radio.dataset.name;
@@ -1528,21 +1506,18 @@ window.zoomQR = function(qrSrc) {
 // --- DOM DOCUMENT INITIALIZER & REFRESH RECOVERY ENGINE ---
 document.addEventListener('DOMContentLoaded', async () => {
     isRestoringDraft = true;
-
     try {
         await fetchProvinces();
     } catch (e) {}
 
     const savedTarget = localStorage.getItem('appointment_active_target') || 'self';
     const targetRadio = document.querySelector(`input[name="target_type"][value="${savedTarget}"]`);
-
     if (targetRadio) {
         targetRadio.checked = true;
         activeTargetType = savedTarget;
     }
 
     const draftData = getDraftData(activeTargetType);
-
     if (draftData.dependent_id) {
         const depSelect = document.getElementById('dependent_id');
         if (depSelect) depSelect.value = draftData.dependent_id;
@@ -1551,7 +1526,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     handleTargetChange(true);
 
     const prefix = activeTargetType === 'dependent' ? 'dep' : 'self';
-
     if (draftData && Object.keys(draftData).length > 0) {
         restoreDraftIntoForm(draftData, prefix);
     } else {
@@ -1562,7 +1536,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const provToLoad = draftData['patient_province'] || document.getElementById(`${prefix}_province`)?.value;
         const cityToLoad = draftData['patient_city'] || '';
         const brgyToLoad = draftData['patient_barangay'] || '';
-
         if (provToLoad) {
             await setAddressDropdowns(prefix, provToLoad, cityToLoad, brgyToLoad);
         }
@@ -1578,8 +1551,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const highestStep = await determineHighestStep(draftData);
     const savedStep = parseInt(localStorage.getItem('appointment_step') || '1');
     const targetStep = Math.min(savedStep, highestStep);
-
     goToPage(targetStep > 0 ? targetStep : 1);
+
+    // Initial check: Guarantee Cash on Site is selected by default if nothing is selected
+    const initialCash = document.getElementById(`${prefix}_pay_cash`);
+    const initialCashless = document.getElementById(`${prefix}_pay_cashless`);
+    if (initialCash && (!initialCashless || !initialCashless.checked)) {
+        initialCash.checked = true;
+    }
+    togglePaymentFields(prefix);
 
     isRestoringDraft = false;
 
@@ -1620,7 +1600,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         form.addEventListener('submit', function(e) {
             const prefix = activeTargetType === 'dependent' ? 'dep' : 'self';
             const submitBtn = document.getElementById(`${prefix}_submit_btn`);
-
             if (submitBtn) {
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = 'SUBMITTING... <span class="spinner-border spinner-border-sm ms-2"></span>';

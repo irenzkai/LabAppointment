@@ -98,8 +98,8 @@
             text-align: center;
         }
         .qr-wrapper img {
-            width: 38px;
-            height: 38px;
+            width: 42px;
+            height: 42px;
             display: block;
             margin: 0 auto;
         }
@@ -109,6 +109,7 @@
             color: #475569;
             margin-top: 2px;
             font-weight: bold;
+            text-align: center;
         }
 
         /* ----------------------------------------------------
@@ -333,7 +334,6 @@
 </head>
 <body>
 @php
-    // 1. Gather all recorded laboratory results from both relational tables and raw JSON fallbacks
     $rawResults = [];
     if ($res && $res->labResults && $res->labResults->isNotEmpty()) {
         foreach ($res->labResults as $r) {
@@ -353,12 +353,10 @@
         }
     }
 
-    // 2. Normalization helper to map user input safely regardless of case or spacing
     $normalize = function($str) {
         return strtolower(preg_replace('/[^a-z0-9]/', '', $str ?? ''));
     };
 
-    // 3. Dynamic matcher that marks matched items so unmapped parameters go to "Others" and avoids cross-contamination
     $matchedIndices = [];
     $getVal = function($aliases) use (&$rawResults, &$matchedIndices, $normalize) {
         if (!is_array($aliases)) {
@@ -379,80 +377,78 @@
     };
 
     // 4. Extract parameters for Hematology
-    $wbc          = $getVal(['WBC Count', 'White Blood Cells', 'WBC']);
-    $hgb          = $getVal(['Hemoglobin', 'Hb', 'Hgb']);
-    $mch          = $getVal(['MCH']);
-    $mchc         = $getVal(['MCHC']);
-    $mcv          = $getVal(['MCV']);
-    $rbc          = $getVal(['RBC Count', 'Red Blood Cells', 'RBC']);
-    $hct          = $getVal(['Hematocrit', 'Hct']);
-    $plt          = $getVal(['Platelet Count', 'Platelets', 'Platelet', 'Plt']);
+    $wbc = $getVal(['WBC Count', 'White Blood Cells', 'WBC']);
+    $hgb = $getVal(['Hemoglobin', 'Hb', 'Hgb']);
+    $mch = $getVal(['MCH']);
+    $mchc = $getVal(['MCHC']);
+    $mcv = $getVal(['MCV']);
+    $rbc = $getVal(['RBC Count', 'Red Blood Cells', 'RBC']);
+    $hct = $getVal(['Hematocrit', 'Hct']);
+    $plt = $getVal(['Platelet Count', 'Platelets', 'Platelet', 'Plt']);
     $bleedingTime = $getVal(['Bleeding Time', 'BT']);
     $clottingTime = $getVal(['Clotting Time', 'CT']);
-    $esr          = $getVal(['ESR', 'Erythrocyte Sedimentation Rate']);
-    $rdw          = $getVal(['RDW']);
-    $retic        = $getVal(['Reticulocyte CT', 'Reticulocyte Count', 'Reticulocytes']);
-    $neutrophils  = $getVal(['Neutrophils', 'Neutrophil', 'Segments']);
-    $lymphocytes  = $getVal(['Lymphocytes', 'Lymphocyte']);
-    $monocytes    = $getVal(['Monocytes', 'Monocyte']);
-    $eosinophils  = $getVal(['Eosinophils', 'Eosinophil']);
-    $basophils    = $getVal(['Basophils', 'Basophil']);
-    $stabs        = $getVal(['Stabs', 'Bands']);
-    $bloodType    = $getVal(['Blood Type', 'ABO Typing', 'ABO']);
-    $rhTyping     = $getVal(['Rh Typing', 'Rh Factor', 'Rh']);
+    $esr = $getVal(['ESR', 'Erythrocyte Sedimentation Rate']);
+    $rdw = $getVal(['RDW']);
+    $retic = $getVal(['Reticulocyte CT', 'Reticulocyte Count', 'Reticulocytes']);
+    $neutrophils = $getVal(['Neutrophils', 'Neutrophil', 'Segments']);
+    $lymphocytes = $getVal(['Lymphocytes', 'Lymphocyte']);
+    $monocytes = $getVal(['Monocytes', 'Monocyte']);
+    $eosinophils = $getVal(['Eosinophils', 'Eosinophil']);
+    $basophils = $getVal(['Basophils', 'Basophil']);
+    $stabs = $getVal(['Stabs', 'Bands']);
+    $bloodType = $getVal(['Blood Type', 'ABO Typing', 'ABO']);
+    $rhTyping = $getVal(['Rh Typing', 'Rh Factor', 'Rh']);
 
     // 5. Extract parameters for Urinalysis
-    $uriColor     = $getVal(['Urine Color', 'Color (Urine)', 'Color']);
-    $uriTrans     = $getVal(['Transparency', 'Clarity', 'Urine Transparency']);
-    $uriPus       = $getVal(['Urine Pus Cells', 'Pus Cells (Urine)', 'Pus Cells']);
-    $uriRbc       = $getVal(['Urine RBC', 'RBC (Urine)']);
-    $uriEpi       = $getVal(['Epithelial Cells', 'Urine Epithelial Cells']);
-    $uriMucus     = $getVal(['Mucus Threads', 'Urine Mucus Threads']);
-    $uriBacteria  = $getVal(['Bacteria', 'Urine Bacteria']);
-    $uriPh        = $getVal(['Urine pH', 'pH']);
-    $uriSg        = $getVal(['Specific Gravity', 'Sp. Gravity', 'SG']);
-    $uriSugar     = $getVal(['Urine Sugar', 'Sugar (Urine)', 'Sugar', 'Glucose (Urine)']);
-    $uriProtein   = $getVal(['Urine Protein', 'Protein (Urine)', 'Protein', 'Albumin (Urine)']);
-    $uriKetone    = $getVal(['Ketone', 'Ketones', 'Urine Ketone']);
-    $uriBlood     = $getVal(['Urine Blood', 'Blood (Urine)', 'Occult Blood (Urine)']);
-    $uriNitrite   = $getVal(['Nitrite', 'Nitrites', 'Urine Nitrite']);
-    $uriLeuk      = $getVal(['Leukocytes', 'Urine Leukocytes']);
-    $uriUro       = $getVal(['Urobilinogen', 'Urine Urobilinogen']);
-    $castFine     = $getVal(['Fine Granular Cast', 'Fine Granular']);
-    $castCoarse   = $getVal(['Coarse Granular Cast', 'Coarse Granular']);
-    $castHyaline  = $getVal(['Hyaline Cast', 'Hyaline']);
-    $castPus      = $getVal(['Pus Cell Casts', 'Pus Cell Cast']);
-    $castWaxy     = $getVal(['Waxy Cast', 'Waxy Casts']);
+    $uriColor = $getVal(['Urine Color', 'Color (Urine)', 'Color']);
+    $uriTrans = $getVal(['Transparency', 'Clarity', 'Urine Transparency']);
+    $uriPus = $getVal(['Urine Pus Cells', 'Pus Cells (Urine)', 'Pus Cells']);
+    $uriRbc = $getVal(['Urine RBC', 'RBC (Urine)']);
+    $uriEpi = $getVal(['Epithelial Cells', 'Urine Epithelial Cells']);
+    $uriMucus = $getVal(['Mucus Threads', 'Urine Mucus Threads']);
+    $uriBacteria = $getVal(['Bacteria', 'Urine Bacteria']);
+    $uriPh = $getVal(['Urine pH', 'pH']);
+    $uriSg = $getVal(['Specific Gravity', 'Sp. Gravity', 'SG']);
+    $uriSugar = $getVal(['Urine Sugar', 'Sugar (Urine)', 'Sugar', 'Glucose (Urine)']);
+    $uriProtein = $getVal(['Urine Protein', 'Protein (Urine)', 'Protein', 'Albumin (Urine)']);
+    $uriKetone = $getVal(['Ketone', 'Ketones', 'Urine Ketone']);
+    $uriBlood = $getVal(['Urine Blood', 'Blood (Urine)', 'Occult Blood (Urine)']);
+    $uriNitrite = $getVal(['Nitrite', 'Nitrites', 'Urine Nitrite']);
+    $uriLeuk = $getVal(['Leukocytes', 'Urine Leukocytes']);
+    $uriUro = $getVal(['Urobilinogen', 'Urine Urobilinogen']);
+    $castFine = $getVal(['Fine Granular Cast', 'Fine Granular']);
+    $castCoarse = $getVal(['Coarse Granular Cast', 'Coarse Granular']);
+    $castHyaline = $getVal(['Hyaline Cast', 'Hyaline']);
+    $castPus = $getVal(['Pus Cell Casts', 'Pus Cell Cast']);
+    $castWaxy = $getVal(['Waxy Cast', 'Waxy Casts']);
     $crystOxalate = $getVal(['Crystals: Calcium Oxalate', 'Calcium Oxalate']);
-    $crystUrates  = $getVal(['Crystals: Amorphous Urates', 'Amorphous Urates', 'Amorphous Urate']);
-    $crystPhos    = $getVal(['Amorphous Phosphate', 'Amorphous Phosphates', 'Crystals: Amorphous Phosphate']);
-    $crystOthers  = $getVal(['Crystals Others', 'Crystals: Others', 'Crystal Others']);
-    $uriPregTest  = $getVal(['Pregnancy Test (HCG)', 'Urine Pregnancy Test', 'Pregnancy Test (Urine)']);
+    $crystUrates = $getVal(['Crystals: Amorphous Urates', 'Amorphous Urates', 'Amorphous Urate']);
+    $crystPhos = $getVal(['Amorphous Phosphate', 'Amorphous Phosphates', 'Crystals: Amorphous Phosphate']);
+    $crystOthers = $getVal(['Crystals Others', 'Crystals: Others', 'Crystal Others']);
+    $uriPregTest = $getVal(['Pregnancy Test (HCG)', 'Urine Pregnancy Test', 'Pregnancy Test (Urine)']);
 
     // 6. Extract parameters for Fecalysis
-    $fecColor    = $getVal(['Fecal Color', 'Stool Color']);
-    $fecCons     = $getVal(['Consistency', 'Fecal Consistency', 'Stool Consistency']);
-    $fecWbc      = $getVal(['Fecal WBC', 'Stool WBC', 'WBC (Stool)']);
-    $fecRbc      = $getVal(['Fecal RBC', 'Stool RBC', 'RBC (Stool)']);
-    $fecFat      = $getVal(['Fat Globule', 'Fat Globules']);
-    $fecOva      = $getVal(['Ova / Parasites', 'Ova and Parasites', 'Ova', 'Parasites']);
+    $fecColor = $getVal(['Fecal Color', 'Stool Color']);
+    $fecCons = $getVal(['Consistency', 'Fecal Consistency', 'Stool Consistency']);
+    $fecWbc = $getVal(['Fecal WBC', 'Stool WBC', 'WBC (Stool)']);
+    $fecRbc = $getVal(['Fecal RBC', 'Stool RBC', 'RBC (Stool)']);
+    $fecFat = $getVal(['Fat Globule', 'Fat Globules']);
+    $fecOva = $getVal(['Ova / Parasites', 'Ova and Parasites', 'Ova', 'Parasites']);
     $fecOccBlood = $getVal(['Occult Blood', 'Fecal Occult Blood', 'Occult Blood (Stool)', 'FOBT']);
 
     // 7. Extract parameters for Serology
     $serHbsag = $getVal(['HBsAg', 'HBsAg (Hepatitis B)', 'HBsAg (Qualitative)', 'HBsAg Screening', 'Hepatitis B Screening', 'HBsAg (Hepatitis B Screening)']);
-    $serHav   = $getVal(['HAV', 'HAV (Hepatitis A)', 'Anti-HAV', 'Anti-HAV IGM/IGG', 'Hepatitis A Screening', 'HAV (Hepatitis A Screening)']);
-    $serVdrl  = $getVal(['VDRL / RPR', 'VDRL / RPR (Syphilis)', 'VDRL', 'RPR', 'Syphilis']);
-    $serPreg  = $getVal(['Pregnancy Test (Serum)', 'Serum Pregnancy Test']);
-    $serTsh   = $getVal(['TSH', 'Thyroid Stimulating Hormone']);
+    $serHav = $getVal(['HAV', 'HAV (Hepatitis A)', 'Anti-HAV', 'Anti-HAV IGM/IGG', 'Hepatitis A Screening', 'HAV (Hepatitis A Screening)']);
+    $serVdrl = $getVal(['VDRL / RPR', 'VDRL / RPR (Syphilis)', 'VDRL', 'RPR', 'Syphilis']);
+    $serPreg = $getVal(['Pregnancy Test (Serum)', 'Serum Pregnancy Test']);
+    $serTsh = $getVal(['TSH', 'Thyroid Stimulating Hormone']);
 
-    // Generic Pregnancy Test fallback if not specified as Urine or Serum
     $genericPreg = $getVal(['Pregnancy Test']);
     if ($genericPreg !== '') {
         if ($uriPregTest === '') $uriPregTest = $genericPreg;
         elseif ($serPreg === '') $serPreg = $genericPreg;
     }
 
-    // 8. Collect any test results that were NOT consumed by the template above into $otherResults
     $otherResults = [];
     foreach ($rawResults as $idx => $item) {
         if (!isset($matchedIndices[$idx]) && !empty($item['name']) && $item['value'] !== '') {
@@ -460,20 +456,20 @@
         }
     }
 
-    // 9. Resolve Signatories from relational table or legacy fallback
     $details = $res?->labDetails;
-    $relName  = $details->released_by_name ?? ($res->lab_data['sig']['rel_name'] ?? 'JOHN MAIAH G. MAO, RMT');
-    $relLic   = $details->released_by_license ?? ($res->lab_data['sig']['rel_lic'] ?? 'MEDICAL TECHNOLOGIST / License No. : 0108745');
+    $relName = $details->released_by_name ?? ($res->lab_data['sig']['rel_name'] ?? 'JOHN MAIAH G. MAO, RMT');
+    $relLic = $details->released_by_license ?? ($res->lab_data['sig']['rel_lic'] ?? 'MEDICAL TECHNOLOGIST / License No. : 0108745');
     $val1Name = $details->validated_by_name ?? ($res->lab_data['sig']['val1_name'] ?? 'JOHN ANDREW C. AGUILAR, RMT');
-    $val1Lic  = $details->validated_by_license ?? ($res->lab_data['sig']['val1_lic'] ?? 'MEDICAL TECHNOLOGIST / License No. : 0108313');
+    $val1Lic = $details->validated_by_license ?? ($res->lab_data['sig']['val1_lic'] ?? 'MEDICAL TECHNOLOGIST / License No. : 0108313');
     $val2Name = $details->validated_by_name_2 ?? ($res->lab_data['sig']['val2_name'] ?? 'INGAYON, NENA SALCEDO, MD, FPSP, MHC');
-    $val2Lic  = $details->validated_by_license_2 ?? ($res->lab_data['sig']['val2_lic'] ?? 'PATHOLOGIST / License No. : 0092052');
-    $caseNo   = $details->case_no ?? ($res->lab_data['metadata']['case_no'] ?? 'N/A');
+    $val2Lic = $details->validated_by_license_2 ?? ($res->lab_data['sig']['val2_lic'] ?? 'PATHOLOGIST / License No. : 0092052');
+    $caseNo = $details->case_no ?? ($res->lab_data['metadata']['case_no'] ?? 'N/A');
+    
+    // Cryptographically signed URL prevents 403 Invalid Signature errors
+    $signedVerificationUrl = \Illuminate\Support\Facades\URL::signedRoute('result.verify-public', ['appointment' => $app->id]);
 @endphp
 
-{{-- =========================================================================
-     1. CLINIC BRANDING HEADER
-========================================================================= --}}
+{{-- 1. CLINIC BRANDING HEADER --}}
 <table class="clinic-header-table">
     <tr>
         <td class="clinic-logo-left">
@@ -485,20 +481,18 @@
         <td class="clinic-info-center">
             <div class="clinic-name"><span>MED</span>SCREEN DIAGNOSTIC LABORATORY</div>
             <div class="clinic-details">Banisil Street (Formerly Atis Street), Brgy. Dadiangas West, General Santos City</div>
-            <div class="clinic-details">Tel. No. : (083) 823 8754 ; Email: medscreen.lab@gmail.com</div>
+            <div class="clinic-details">Tel. No.: (083) 823 8754 ; Email: medscreen.lab@gmail.com</div>
         </td>
         <td class="clinic-header-right">
             <div class="qr-wrapper">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={{ urlencode(route('result.verify-public', $app->id)) }}" alt="QR">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={{ urlencode($signedVerificationUrl) }}" alt="QR">
                 <div class="qr-sub">Scan to Verify</div>
             </div>
         </td>
     </tr>
 </table>
 
-{{-- =========================================================================
-     2. PATIENT DEMOGRAPHIC METADATA BOX
-========================================================================= --}}
+{{-- 2. PATIENT DEMOGRAPHIC METADATA BOX --}}
 <table class="patient-meta-table">
     <tr>
         <td class="meta-lbl">Name:</td>
@@ -520,18 +514,13 @@
     </tr>
 </table>
 
-{{-- =========================================================================
-     3. REPORT TITLE BANNER
-========================================================================= --}}
+{{-- 3. REPORT TITLE BANNER --}}
 <div class="main-title-bar">LABORATORY RESULT(S)</div>
 
-{{-- =========================================================================
-     4. HEMATOLOGY SECTION (3 Columns)
-========================================================================= --}}
+{{-- 4. HEMATOLOGY SECTION --}}
 <div class="sub-section-title">HEMATOLOGY</div>
 <table class="form-grid-table">
     <tr>
-        {{-- Column 1: Core Parameters --}}
         <td style="width: 36%;">
             <table class="test-row-table">
                 <tr>
@@ -571,8 +560,6 @@
                 </tr>
             </table>
         </td>
-
-        {{-- Column 2: Clotting, Platelets & Indices --}}
         <td style="width: 32%;">
             <table class="test-row-table">
                 <tr>
@@ -607,8 +594,6 @@
                 </tr>
             </table>
         </td>
-
-        {{-- Column 3: Differential Count & Blood Grouping --}}
         <td style="width: 32%;">
             <div class="sub-header-lbl">Differential Count:</div>
             <table class="test-row-table">
@@ -655,13 +640,10 @@
     </tr>
 </table>
 
-{{-- =========================================================================
-     5. URINALYSIS SECTION (4 Sub-Columns)
-========================================================================= --}}
+{{-- 5. URINALYSIS SECTION --}}
 <div class="sub-section-title">URINALYSIS</div>
 <table class="form-grid-table">
     <tr>
-        {{-- Microscopic Examination --}}
         <td style="width: 27%;">
             <div class="sub-header-lbl">Microscopic Examination:</div>
             <table class="test-row-table">
@@ -701,8 +683,6 @@
                 </tr>
             </table>
         </td>
-
-        {{-- Chemical Examination --}}
         <td style="width: 25%;">
             <div class="sub-header-lbl">Chemical Examination:</div>
             <table class="test-row-table">
@@ -744,8 +724,6 @@
                 </tr>
             </table>
         </td>
-
-        {{-- Casts --}}
         <td style="width: 24%;">
             <div class="sub-header-lbl">Casts:</div>
             <table class="test-row-table">
@@ -771,8 +749,6 @@
                 </tr>
             </table>
         </td>
-
-        {{-- Crystals & Urinalysis Addenda --}}
         <td style="width: 24%;">
             <div class="sub-header-lbl">Crystals:</div>
             <table class="test-row-table">
@@ -810,9 +786,7 @@
     </tr>
 </table>
 
-{{-- =========================================================================
-     6. FECALYSIS (Microscopic Examination & Occult Blood)
-========================================================================= --}}
+{{-- 6. FECALYSIS --}}
 <table style="width: 100%; border-top: 1px solid #cbd5e1; padding-top: 2px; margin-bottom: 3px;">
     <tr>
         <td style="width: 75%; vertical-align: top;">
@@ -848,9 +822,7 @@
     </tr>
 </table>
 
-{{-- =========================================================================
-     7. SEROLOGY SECTION
-========================================================================= --}}
+{{-- 7. SEROLOGY SECTION --}}
 <div class="sub-section-title" style="color: #1e3a8a;">SEROLOGY</div>
 <table class="serology-table">
     <thead>
@@ -894,9 +866,7 @@
     </tbody>
 </table>
 
-{{-- =========================================================================
-     8. DYNAMIC OTHERS SECTION (Rendered only if additional inputs exist)
-========================================================================= --}}
+{{-- 8. DYNAMIC OTHERS SECTION --}}
 @if(count($otherResults) > 0)
 <div class="sub-section-title" style="color: #0d9488;">OTHER CLINICAL EXAMINATIONS / CHEMISTRY</div>
 <table class="others-table">
@@ -919,35 +889,28 @@
 </table>
 @endif
 
-{{-- =========================================================================
-     9. CLINICAL REMARKS, REMINDERS & NOTICES
-========================================================================= --}}
+{{-- 9. CLINICAL REMARKS & NOTICES --}}
 <div class="notes-container">
     <div><strong>NOTE: FOR SCREENING PURPOSES ONLY.</strong></div>
     <div><strong>Reminder:</strong> Tests left <span style="text-decoration: underline;">blank</span> or without recorded result(s) are considered <span style="text-decoration: underline;">not performed or not requested by the patient</span>.</div>
     <div><strong>Important Notice:</strong> This laboratory report is designed for interpretation by a qualified medical doctor in conjunction with clinical assessment and other diagnostic procedures.</div>
 </div>
 
-{{-- =========================================================================
-     10. CLINICAL SIGN-OFF BLOCKS (3 Signatories)
-========================================================================= --}}
+{{-- 10. CLINICAL SIGN-OFF BLOCKS --}}
 <table class="signatory-table">
     <tr>
-        {{-- Released By --}}
         <td class="sig-col">
             <div style="font-size: 6pt; color: #475569; text-align: left; margin-bottom: 2px;">Released by:</div>
             <div class="sig-handwritten">{{ $relName }}</div>
             <div class="sig-line">{{ strtoupper($relName) }}</div>
             <div class="sig-sub">{{ strtoupper($relLic) }}</div>
         </td>
-        {{-- Validated By --}}
         <td class="sig-col">
             <div style="font-size: 6pt; color: #475569; text-align: left; margin-bottom: 2px;">Validated by:</div>
             <div class="sig-handwritten">{{ $val1Name }}</div>
             <div class="sig-line">{{ strtoupper($val1Name) }}</div>
             <div class="sig-sub">{{ strtoupper($val1Lic) }}</div>
         </td>
-        {{-- Pathologist --}}
         <td class="sig-col">
             <div style="font-size: 6pt; color: #475569; text-align: left; margin-bottom: 2px;">&nbsp;</div>
             <div class="sig-handwritten">{{ $val2Name }}</div>
@@ -957,9 +920,7 @@
     </tr>
 </table>
 
-{{-- =========================================================================
-     11. DIGITAL FOOTER
-========================================================================= --}}
+{{-- 11. DIGITAL FOOTER --}}
 <div class="digital-footer">
     This is a digital copy. Physical copies can be acquired at the official location of Medscreen Diagnostic Laboratory.
 </div>
