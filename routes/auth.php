@@ -67,11 +67,15 @@ Route::middleware('auth')->group(function () {
     Route::post('email/verification-otp', [EmailVerificationNotificationController::class, 'sendOtp'])
         ->name('verification.send-otp');
 
-    // 5. Email change adjustment for unverified users
+    // 5. SMS OTP Resend / Dispatch endpoint
+    Route::post('sms/verification-otp', [VerifyEmailController::class, 'sendSmsOtp'])
+        ->name('verification.send-sms-otp');
+
+    // 6. Email change adjustment for unverified users
     Route::post('email/change', [ProfileController::class, 'changeUnverifiedEmail'])
         ->name('verification.change-email');
 
-    // 6. Session Polling Status Endpoint for browser redirect sync
+    // 7. Session Polling Status Endpoint for browser redirect sync
     Route::get('/api/verification-status', function () {
         return response()->json([
             'verified' => auth()->user() ? auth()->user()->hasVerifiedEmail() : false

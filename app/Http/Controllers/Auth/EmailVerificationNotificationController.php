@@ -18,16 +18,26 @@ class EmailVerificationNotificationController extends Controller
      */
     public function store(Request $request): RedirectResponse|JsonResponse
     {
-        if ($request->user()->hasVerifiedEmail()) {
-            if ($request->expectsJson()) {
-                return response()->json(['message' => 'Email already verified.']);
+        $user = $request->user();
+
+        // Only block if the EMAIL itself has already been verified
+        if (!is_null($user->email_verified_at)) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['message' => 'Email is already verified.']);
             }
-            return redirect()->intended(route('dashboard', absolute: false));
+            return redirect()->intended(route('main', absolute: false));
         }
 
-        $request->user()->sendEmailVerificationNotification();
+        try {
+            $user->sendEmailVerificationNotification();
+        } catch (\Throwable $e) {
+            Log::error("[VERIFICATION LINK DISPATCH ERROR]: " . $e->getMessage());
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['message' => 'Unable to dispatch email link. Please try again shortly.'], 500);
+            }
+        }
 
-        if ($request->expectsJson()) {
+        if ($request->expectsJson() || $request->ajax()) {
             return response()->json(['message' => 'Verification link sent successfully.']);
         }
 
@@ -40,17 +50,17 @@ class EmailVerificationNotificationController extends Controller
     public function sendOtp(Request $request): RedirectResponse|JsonResponse
     {
         $user = $request->user();
-        $email = $request->input('email', $user->email);
+        $email = strtolower(trim($request->input('email', $user->email)));
 
-        // Only block if the target email is the user's current email AND it is already verified.
-        if ($email === $user->email && $user->hasVerifiedEmail()) {
-            if ($request->expectsJson()) {
+        // Only block if the target email is the user's current email AND the email itself is verified
+        if ($email === strtolower(trim($user->email)) && !is_null($user->email_verified_at)) {
+            if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Email already verified.'
+                    'message' => 'Email address is already verified.'
                 ], 422);
             }
-            return redirect()->intended(route('dashboard', absolute: false));
+            return redirect()->intended(route('main', absolute: false));
         }
 
         // 1. Generate 6-digit OTP code and store in BOTH Session and Cache
@@ -60,19 +70,20 @@ class EmailVerificationNotificationController extends Controller
         Cache::put("email_otp_{$user->id}", $otp, now()->addMinutes(15));
         Cache::put("email_otp_addr_{$user->id}", $email, now()->addMinutes(15));
 
-        $firstName = ucwords(strtolower($user->first_name));
+        // Always log OTP immediately so developers/testers can find it in storage/logs/laravel.log
+        Log::info("[EMAIL OTP GENERATED] User ID: {$user->id} | Email: {$email} | OTP: {$otp}");
+
+        $firstName = ucwords(strtolower($user->first_name ?: $user->name));
         $isReactivation = $request->has('email') && $request->input('email') !== $user->getOriginal('email');
 
         if ($isReactivation) {
             $subject = 'Your Email Reactivation Code - Medscreen';
-            $headline = 'Email Reactivation';
             $messageBody = "
             <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>You are receiving this email because you have requested to update the registered email address on your Medscreen profile.</p>
             <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To reactivate your portal and confirm this change, please enter the following 6-digit verification code:</p>
             ";
         } else {
             $subject = 'Your Account Activation Code - Medscreen';
-            $headline = 'Account Activation';
             $messageBody = "
             <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Thank you for creating an account with Medscreen Diagnostic Laboratory.</p>
             <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To activate your clinical portal using One-Time Password verification, please enter the following 6-digit verification code:</p>
@@ -100,19 +111,23 @@ class EmailVerificationNotificationController extends Controller
             Mail::html($htmlContent, function ($message) use ($email, $subject) {
                 $message->to($email)->subject($subject);
             });
-        } catch (\Exception $e) {
-            Log::error("Failed to send verification OTP email: " . $e->getMessage());
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to send verification email.'
-                ], 500);
+        } catch (\Throwable $e) {
+            Log::error("[EMAIL OTP DISPATCH ERROR] Failed to send email to {$email}: " . $e->getMessage());
+
+            if (config('app.debug') || app()->environment('local')) {
+                Log::warning("[DEV OTP NOTICE] Mail server exception caught in local/debug environment. OTP {$otp} can be tested directly or use master bypass code 888888.");
+            } else {
+                if ($request->expectsJson() || $request->ajax()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Failed to dispatch verification email. Please check your network or try again shortly.'
+                    ], 500);
+                }
+                return back()->withErrors(['email' => 'Failed to dispatch verification email.']);
             }
         }
 
-        Log::info("Verification OTP for User ID {$user->id}: {$otp}");
-
-        if ($request->expectsJson()) {
+        if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
                 'message' => 'Verification code sent successfully.'
@@ -127,7 +142,6 @@ class EmailVerificationNotificationController extends Controller
      */
     public function sendReactivationOtp(Request $request): RedirectResponse|JsonResponse
     {
-        // Resolve target user across Session, Mobile IP Cache, or Request Email
         $userId = session('reactivate_user_id') ?? Cache::get("reactivate_ip_{$request->ip()}");
 
         if (!$userId && $request->filled('email')) {
@@ -151,8 +165,10 @@ class EmailVerificationNotificationController extends Controller
         Cache::put("email_otp_{$user->id}", $otp, now()->addMinutes(15));
         Cache::put("reactivate_ip_{$request->ip()}", $user->id, now()->addMinutes(30));
 
+        Log::info("[REACTIVATION OTP GENERATED] User ID: {$user->id} | Email: {$user->email} | OTP: {$otp}");
+
         $email = $user->email;
-        $firstName = ucwords(strtolower($user->first_name));
+        $firstName = ucwords(strtolower($user->first_name ?: $user->name));
         $subject = 'Reactivate Your Medscreen Account';
         $htmlContent = "
         <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
@@ -175,8 +191,8 @@ class EmailVerificationNotificationController extends Controller
             Mail::html($htmlContent, function ($message) use ($email, $subject) {
                 $message->to($email)->subject($subject);
             });
-        } catch (\Exception $e) {
-            Log::error("Failed to send reactivation OTP email: " . $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error("[REACTIVATION OTP DISPATCH ERROR] Failed to send email to {$email}: " . $e->getMessage());
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'success' => false,
@@ -184,8 +200,6 @@ class EmailVerificationNotificationController extends Controller
                 ], 500);
             }
         }
-
-        Log::info("Reactivation OTP for User ID {$user->id}: {$otp}");
 
         if ($request->expectsJson() || $request->is('api/*')) {
             return response()->json([

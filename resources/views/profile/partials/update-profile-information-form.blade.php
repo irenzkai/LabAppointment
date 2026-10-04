@@ -62,7 +62,7 @@
                 <div class="d-flex justify-content-between align-items-center mb-1">
                     <label class="smaller text-secondary fw-bold mb-0 uppercase">Email Address</label>
                     <div id="email_badge_container">
-                        @if($user->hasVerifiedEmail())
+                        @if($user->email_verified_at)
                             <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>
                         @else
                             <div class="d-flex align-items-center">
@@ -72,7 +72,7 @@
                         @endif
                     </div>
                 </div>
-                <input type="email" name="email" id="prof_email" class="form-control" value="{{ old('email', $user->email) }}" required>
+                <input type="email" name="email" id="prof_email" class="form-control" value="{{ old('email', $user->email) }}" oninput="handleProfileEmailInput()" required>
             </div>
 
             <div class="col-md-6">
@@ -156,30 +156,27 @@
         <div class="modal-content border-secondary bg-card text-start" style="background-color: var(--bg-card); color: var(--text-main);">
             <div class="modal-header border-secondary bg-secondary bg-opacity-10 py-3">
                 <h5 class="modal-title text-accent fw-bold uppercase small m-0">
-                    <i class="bi bi-shield-check-fill me-2 fs-5"></i>Email Verification
+                    <i class="bi bi-shield-check-fill me-2 fs-5"></i>Email Verification Code
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
                 <form onsubmit="submitProfileOtpCode(event)">
                     <div class="mb-3 text-center">
-                        <label class="small text-muted fw-bold mb-1 uppercase d-block text-start">Enter 6-Digit Verification Code</label>
+                        <label class="small text-muted fw-bold mb-1 uppercase d-block text-start">Enter 6-Digit Email Code</label>
                         <div class="d-flex justify-content-between gap-2 my-3 mx-auto" style="max-width: 350px;">
-                            <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="0" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
-                            <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="1" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
-                            <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="2" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
-                            <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="3" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
-                            <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="4" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
-                            <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="5" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
+                            @for($i = 0; $i < 6; $i++)
+                                <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="{{ $i }}" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
+                            @endfor
                         </div>
                         <input type="hidden" name="otp" id="otp_hidden">
                         <div id="otp_error_msg" class="text-danger small mt-2 d-none fw-bold text-center"></div>
                     </div>
-                    <button type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm">SUBMIT CODE</button>
+                    <button type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm uppercase">SUBMIT CODE</button>
                 </form>
                 <div class="col-12 mt-3 text-center">
                     <form onsubmit="sendProfileOtpCode(event)">
-                        <span class="small text-muted">Didn't receive the code?</span>
+                        <span class="small text-muted">Didn't receive the email code?</span>
                         <button id="otp-resend-btn" type="submit" class="btn btn-link text-accent fw-bold text-decoration-none p-0 small ms-1 align-baseline" style="font-size:0.85rem;">SEND CODE</button>
                     </form>
                 </div>
@@ -188,16 +185,37 @@
     </div>
 </div>
 
-<!-- PHONE PLACEHOLDER MODAL -->
+<!-- PHONE SMS OTP MODAL -->
 <div class="modal fade" id="profilePhoneVerifyModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="false" style="z-index: 1050;">
-    <div class="modal-dialog modal-sm modal-dialog-centered">
-        <div class="modal-content border-warning bg-card text-center p-4" style="background-color: var(--bg-card); border: 1.5px solid #ffc107; color: var(--text-main);">
-            <div class="mb-3">
-                <i class="bi bi-phone text-warning display-4 d-block"></i>
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+        <div class="modal-content border-secondary bg-card text-start" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+            <div class="modal-header border-secondary bg-secondary bg-opacity-10 py-3">
+                <h5 class="modal-title text-accent fw-bold uppercase small m-0">
+                    <i class="bi bi-chat-dots-fill me-2 fs-5"></i>Phone SMS Verification
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <h5 class="text-warning fw-bold mb-2 uppercase tracking-tighter">Mobile Verification</h5>
-            <div class="text-secondary small mb-4">Phone SMS Verification is currently in work in progress. [Coming Soon]</div>
-            <button type="button" class="btn btn-outline-warning w-100 py-2 uppercase fw-bold" onclick="bootstrap.Modal.getInstance(document.getElementById('profilePhoneVerifyModal')).hide()">Close</button>
+            <div class="modal-body p-4">
+                <form onsubmit="submitProfilePhoneOtpCode(event)">
+                    <div class="mb-3 text-center">
+                        <label class="small text-muted fw-bold mb-1 uppercase d-block text-start">Enter 6-Digit SMS Verification Code</label>
+                        <div class="d-flex justify-content-between gap-2 my-3 mx-auto" style="max-width: 350px;">
+                            @for($i = 0; $i < 6; $i++)
+                                <input type="text" class="form-control otp-box phone-otp-box text-center fw-bold fs-3" maxlength="1" data-index="{{ $i }}" oninput="handlePhoneOtpInput(this, event)" onkeydown="handlePhoneOtpKeydown(this, event)">
+                            @endfor
+                        </div>
+                        <input type="hidden" name="phone_otp" id="phone_otp_hidden">
+                        <div id="phone_otp_error_msg" class="text-danger small mt-2 d-none fw-bold text-center"></div>
+                    </div>
+                    <button type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm uppercase">VERIFY PHONE CODE</button>
+                </form>
+                <div class="col-12 mt-3 text-center">
+                    <form onsubmit="sendProfilePhoneOtpCode(event)">
+                        <span class="small text-muted">Didn't receive the SMS code?</span>
+                        <button id="phone-otp-resend-btn" type="submit" class="btn btn-link text-accent fw-bold text-decoration-none p-0 small ms-1 align-baseline" style="font-size:0.85rem;">SEND SMS CODE</button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -218,42 +236,63 @@
 
 @push('scripts')
 <script>
-// --- SHIELDED LOCAL STORAGE WRAPPER ---
+// --- SHIELDED STORAGE WRAPPER ---
 const safeStorage = {
     getItem(key) {
-        try {
-            return localStorage.getItem(key);
-        } catch (e) {
-            return null;
-        }
+        try { return localStorage.getItem(key); } catch (e) { return null; }
     },
     setItem(key, value) {
-        try {
-            localStorage.setItem(key, value);
-        } catch (e) {
-            // No-op
-        }
+        try { localStorage.setItem(key, value); } catch (e) {}
     },
     removeItem(key) {
-        try {
-            localStorage.removeItem(key);
-        } catch (e) {
-            // No-op
-        }
+        try { localStorage.removeItem(key); } catch (e) {}
     }
 };
 
 const originalEmail = "{{ $user->email }}";
 const originalPhone = "{{ $user->phone }}";
 
-// Tracks verification states dynamically without forcing page-reload
-let emailVerifiedLocally = {{ $user->hasVerifiedEmail() ? 'true' : 'false' }};
+// Evaluate email_verified_at directly to prevent phone-only verification from faking email status
+let emailVerifiedLocally = {{ $user->email_verified_at ? 'true' : 'false' }};
 let verifiedEmailValue = originalEmail;
 
-// Track if verification model was triggered specifically during submission flow
+let phoneVerifiedLocally = {{ $user->phone_verified_at ? 'true' : 'false' }};
+let verifiedPhoneValue = originalPhone;
+
 let isSubmittingForm = false;
 
-// --- FIELD ERROR HANDLER ---
+// --- DYNAMIC BADGE SYNCHRONIZERS ON INPUT ---
+function handleProfileEmailInput() {
+    const emailInput = document.getElementById('prof_email');
+    const badgeContainer = document.getElementById('email_badge_container');
+    if (!emailInput || !badgeContainer) return;
+
+    const currentVal = emailInput.value.trim().toLowerCase();
+    const isVerified = emailVerifiedLocally && currentVal === verifiedEmailValue.toLowerCase();
+
+    if (isVerified) {
+        badgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
+    } else {
+        badgeContainer.innerHTML = '<div class="d-flex align-items-center"><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span><button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal(\'email\')" style="font-size:0.7rem;">Verify Now</button></div>';
+    }
+}
+
+function handleProfilePhoneInput() {
+    const phoneInput = document.getElementById('phone_hidden');
+    const phoneBadgeContainer = document.getElementById('phone_badge_container');
+    if (!phoneInput || !phoneBadgeContainer) return;
+
+    const currentVal = phoneInput.value.trim();
+    const isVerified = phoneVerifiedLocally && currentVal === verifiedPhoneValue;
+
+    if (isVerified) {
+        phoneBadgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
+    } else {
+        phoneBadgeContainer.innerHTML = '<div class="d-flex align-items-center"><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span><button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal(\'phone\')" style="font-size:0.7rem;">Verify Now</button></div>';
+    }
+}
+
+// --- INLINE FIELD ERROR HANDLER ---
 function showFieldError(inputElement, errorMessage) {
     if (!inputElement) return;
     inputElement.classList.add('is-invalid');
@@ -284,30 +323,26 @@ function showFieldError(inputElement, errorMessage) {
     inputElement.addEventListener('change', dismissHandler);
 }
 
-// --- DYNAMIC MULTI-POINT NAME VALIDATOR ---
+// --- DYNAMIC NAME VALIDATOR ---
 function validateName(value) {
     const val = value.trim();
     if (!val) return { valid: false, message: "is required." };
 
-    // 1. Allowed characters boundary validation (Letters, Spanish ñ/Ñ, periods, hyphens, spaces, apostrophes)
     const charRegex = /^[a-zA-ZñÑ \s.\'-]+$/;
     if (!charRegex.test(val)) {
         return { valid: false, message: "may only contain letters, spaces, periods, hyphens, and apostrophes." };
     }
 
-    // 2. Strict non-punctuation starting validation
     const startRegex = /^[a-zA-ZñÑ ]/;
     if (!startRegex.test(val)) {
         return { valid: false, message: "must start with a letter." };
     }
 
-    // 3. Must possess at least one character letter to prevent punctuation-only values
     const letterRegex = /[a-zA-ZñÑ ]/;
     if (!letterRegex.test(val)) {
         return { valid: false, message: "must contain at least one letter." };
     }
 
-    // 4. Consecutive punctuation marks validation
     const consecutiveRegex = /[.\'-]{2,}/;
     if (consecutiveRegex.test(val)) {
         return { valid: false, message: "cannot contain consecutive punctuation marks." };
@@ -316,12 +351,11 @@ function validateName(value) {
     return { valid: true };
 }
 
-// --- SETTINGS CLIENT-SIDE VALIDATOR ---
+// --- FORM VALIDATOR & INTERCEPTOR ---
 function validateProfileForm(event) {
     const form = event.target;
     let errorsCount = 0;
 
-    // Flush previous states
     form.querySelectorAll('.invalid-feedback-inline').forEach(el => {
         el.classList.add('d-none');
         el.innerText = '';
@@ -337,6 +371,7 @@ function validateProfileForm(event) {
     const bday = form.querySelector('[name="birthdate"]');
     const email = form.querySelector('[name="email"]');
     const displayPhone = document.getElementById('phone_display');
+    const hiddenPhone = document.getElementById('phone_hidden');
 
     if (fName) {
         const check = validateName(fName.value);
@@ -371,12 +406,11 @@ function validateProfileForm(event) {
         }
     }
 
-    // Dynamic Suffix Validation Block (Symmetric with backend constraints)
     if (suffix && suffix.value.trim() !== '') {
         const sVal = suffix.value.trim();
-        const suffixRegex = /^[a-zA-Z\s.]+$/; // Purely alphabetical and periods, excluding Arabic numbers [0-9]
+        const suffixRegex = /^[a-zA-Z\s.]+$/;
         if (!suffixRegex.test(sVal)) {
-            showFieldError(suffix, "Suffix may only contain letters, spaces, and periods (Arabic numbers like 1, 2, 3 are invalid).");
+            showFieldError(suffix, "Suffix may only contain letters, spaces, and periods.");
             errorsCount++;
         } else if (sVal.length > 10) {
             showFieldError(suffix, "Suffix cannot exceed 10 characters.");
@@ -393,9 +427,7 @@ function validateProfileForm(event) {
             const today = new Date();
             let age = today.getFullYear() - dob.getFullYear();
             const m = today.getMonth() - dob.getMonth();
-            if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
-                age--;
-            }
+            if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
             if (age < 18) {
                 showFieldError(bday, "You must be at least 18 years old.");
                 errorsCount++;
@@ -423,7 +455,7 @@ function validateProfileForm(event) {
         } else {
             const emailRegex = /^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
             if (!emailRegex.test(currentEmail)) {
-                showFieldError(email, "Please enter a valid email address with a domain (e.g. name@domain.com or user@online.htcgsc.edu.ph).");
+                showFieldError(email, "Please enter a valid email address.");
                 errorsCount++;
             }
         }
@@ -435,7 +467,7 @@ function validateProfileForm(event) {
         return false;
     }
 
-    // Handle unverified email changes safely
+    // Intercept unverified email changes
     if (currentEmail && currentEmail !== originalEmail) {
         if (!emailVerifiedLocally || currentEmail !== verifiedEmailValue) {
             event.preventDefault();
@@ -446,11 +478,23 @@ function validateProfileForm(event) {
         }
     }
 
+    // Intercept unverified phone changes
+    const currentPhone = hiddenPhone ? hiddenPhone.value.trim() : '';
+    if (currentPhone && currentPhone !== originalPhone) {
+        if (!phoneVerifiedLocally || currentPhone !== verifiedPhoneValue) {
+            event.preventDefault();
+            event.stopPropagation();
+            isSubmittingForm = true;
+            openProfileVerifyModal('phone');
+            return false;
+        }
+    }
+
     compileProfileAddress();
     return true;
 }
 
-// --- REVERT FORM STATES ON RESET ---
+// --- FORM RESET ---
 function resetProfileForm(event) {
     setTimeout(async () => {
         const initialPhone = "{{ $user->phone }}";
@@ -458,11 +502,9 @@ function resetProfileForm(event) {
         const hiddenInput = document.getElementById('phone_hidden');
         if (displayInput && hiddenInput) {
             let cleanPhone = initialPhone.trim();
-            if (cleanPhone.startsWith('+639')) {
-                cleanPhone = '09' + cleanPhone.substring(4);
-            } else if (cleanPhone.startsWith('639')) {
-                cleanPhone = '09' + cleanPhone.substring(3);
-            }
+            if (cleanPhone.startsWith('+639')) cleanPhone = '09' + cleanPhone.substring(4);
+            else if (cleanPhone.startsWith('639')) cleanPhone = '09' + cleanPhone.substring(3);
+
             if (cleanPhone && (cleanPhone.startsWith('09') || cleanPhone.startsWith('9')) && (cleanPhone.length === 11 || cleanPhone.length === 10)) {
                 let suffixVal = cleanPhone.startsWith('09') ? cleanPhone.substring(2) : cleanPhone.substring(1);
                 displayInput.value = suffixVal;
@@ -476,36 +518,28 @@ function resetProfileForm(event) {
         const mnCheck = document.getElementById('profile_no_mn');
         const input = document.getElementById('profile_middle_name');
         if (mnCheck && input) {
-            if (mnCheck.checked) {
-                input.readOnly = true;
-                input.classList.add('opacity-50');
-            } else {
-                input.readOnly = false;
-                input.classList.remove('opacity-50');
-            }
+            input.readOnly = mnCheck.checked;
+            input.classList.toggle('opacity-50', mnCheck.checked);
         }
 
-        emailVerifiedLocally = {{ $user->hasVerifiedEmail() ? 'true' : 'false' }};
+        emailVerifiedLocally = {{ $user->email_verified_at ? 'true' : 'false' }};
         verifiedEmailValue = originalEmail;
+        phoneVerifiedLocally = {{ $user->phone_verified_at ? 'true' : 'false' }};
+        verifiedPhoneValue = originalPhone;
         isSubmittingForm = false;
 
         const badgeContainer = document.getElementById('email_badge_container');
         if (badgeContainer) {
-            if (emailVerifiedLocally) {
-                badgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
-            } else {
-                badgeContainer.innerHTML = '<div class="d-flex align-items-center"><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span><button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal(\'email\')" style="font-size:0.7rem;">Verify Now</button></div>';
-            }
+            badgeContainer.innerHTML = emailVerifiedLocally
+                ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>'
+                : '<div class="d-flex align-items-center"><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span><button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal(\'email\')" style="font-size:0.7rem;">Verify Now</button></div>';
         }
 
         const phoneBadgeContainer = document.getElementById('phone_badge_container');
         if (phoneBadgeContainer) {
-            const initialPhoneVerified = {{ $user->phone_verified_at ? 'true' : 'false' }};
-            if (initialPhoneVerified) {
-                phoneBadgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
-            } else {
-                phoneBadgeContainer.innerHTML = '<div class="d-flex align-items-center"><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span><button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal(\'phone\')" style="font-size:0.7rem;">Verify Now</button></div>';
-            }
+            phoneBadgeContainer.innerHTML = phoneVerifiedLocally
+                ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>'
+                : '<div class="d-flex align-items-center"><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span><button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal(\'phone\')" style="font-size:0.7rem;">Verify Now</button></div>';
         }
 
         document.querySelectorAll('.invalid-feedback-inline').forEach(el => {
@@ -520,21 +554,95 @@ function resetProfileForm(event) {
     }, 50);
 }
 
-// --- MODAL TRIGGER ROUTER ---
+// --- MODAL TRIGGERS ---
 function openProfileVerifyModal(type) {
     if (type === 'email') {
         const emailModal = new bootstrap.Modal(document.getElementById('profileEmailVerifyModal'));
         emailModal.show();
-        const firstBox = document.querySelector('.otp-box[data-index="0"]');
+        const firstBox = document.querySelector('.otp-box:not(.phone-otp-box)[data-index="0"]');
         if (firstBox) setTimeout(() => firstBox.focus(), 150);
         triggerAutoSendProfileOtp();
     } else {
         const phoneModal = new bootstrap.Modal(document.getElementById('profilePhoneVerifyModal'));
         phoneModal.show();
+        const firstPhoneBox = document.querySelector('.phone-otp-box[data-index="0"]');
+        if (firstPhoneBox) setTimeout(() => firstPhoneBox.focus(), 150);
+        triggerAutoSendProfilePhoneOtp();
     }
 }
 
-// --- AJAX VERIFICATION WORKFLOW DISPATCHERS ---
+// --- DIGIT BOX CONTROLLERS ---
+function handleOtpInput(input, event) {
+    input.value = input.value.replace(/[^0-9]/g, '');
+    if (input.value.length === 1) {
+        const nextIndex = parseInt(input.dataset.index) + 1;
+        const nextInput = document.querySelector(`.otp-box:not(.phone-otp-box)[data-index="${nextIndex}"]`);
+        if (nextInput) nextInput.focus();
+    }
+    compileOtpValue();
+}
+
+function handleOtpKeydown(input, event) {
+    if (event.key === 'Backspace') {
+        if (input.value === '') {
+            const prevIndex = parseInt(input.dataset.index) - 1;
+            const prevInput = document.querySelector(`.otp-box:not(.phone-otp-box)[data-index="${prevIndex}"]`);
+            if (prevInput) {
+                prevInput.focus();
+                prevInput.value = '';
+            }
+        } else {
+            input.value = '';
+        }
+        compileOtpValue();
+    }
+}
+
+function compileOtpValue() {
+    let compiled = '';
+    document.querySelectorAll('.otp-box:not(.phone-otp-box)').forEach(box => {
+        compiled += box.value;
+    });
+    document.getElementById('otp_hidden').value = compiled;
+    return compiled;
+}
+
+function handlePhoneOtpInput(input, event) {
+    input.value = input.value.replace(/[^0-9]/g, '');
+    if (input.value.length === 1) {
+        const nextIndex = parseInt(input.dataset.index) + 1;
+        const nextInput = document.querySelector(`.phone-otp-box[data-index="${nextIndex}"]`);
+        if (nextInput) nextInput.focus();
+    }
+    compilePhoneOtpValue();
+}
+
+function handlePhoneOtpKeydown(input, event) {
+    if (event.key === 'Backspace') {
+        if (input.value === '') {
+            const prevIndex = parseInt(input.dataset.index) - 1;
+            const prevInput = document.querySelector(`.phone-otp-box[data-index="${prevIndex}"]`);
+            if (prevInput) {
+                prevInput.focus();
+                prevInput.value = '';
+            }
+        } else {
+            input.value = '';
+        }
+        compilePhoneOtpValue();
+    }
+}
+
+function compilePhoneOtpValue() {
+    let compiled = '';
+    document.querySelectorAll('.phone-otp-box').forEach(box => {
+        compiled += box.value;
+    });
+    document.getElementById('phone_otp_hidden').value = compiled;
+    return compiled;
+}
+
+// --- EMAIL OTP DISPATCH & VERIFY (DELEGATED TO SERVER) ---
 async function sendProfileOtpCode(event) {
     if (event) event.preventDefault();
     await triggerAutoSendProfileOtp();
@@ -552,11 +660,7 @@ async function triggerAutoSendProfileOtp() {
 
     const now = Date.now();
     const cooldownExpiry = safeStorage.getItem('resend_cooldown_expiry');
-    const lockoutExpiry = safeStorage.getItem('resend_lockout_expiry');
-
-    if ((cooldownExpiry && now < parseInt(cooldownExpiry)) || (lockoutExpiry && now < parseInt(lockoutExpiry))) {
-        return;
-    }
+    if (cooldownExpiry && now < parseInt(cooldownExpiry)) return;
 
     if (btn) {
         btn.disabled = true;
@@ -571,16 +675,12 @@ async function triggerAutoSendProfileOtp() {
                 "X-CSRF-TOKEN": "{{ csrf_token() }}",
                 "Accept": "application/json"
             },
-            body: JSON.stringify({ email: emailInput.value.trim() })
+            body: JSON.stringify({ email: emailInput.value.trim(), channel: 'email' })
         });
-        let attempts = parseInt(safeStorage.getItem('resend_attempts') || '0');
-        attempts++;
-        safeStorage.setItem('resend_attempts', attempts.toString());
         const expiryTime = now + (30 * 1000);
         safeStorage.setItem('resend_cooldown_expiry', expiryTime.toString());
-        updateResendState();
+        updateEmailResendState();
     } catch (e) {
-        console.error(e);
         if (btn) {
             btn.disabled = false;
             btn.innerText = "SEND CODE";
@@ -588,11 +688,29 @@ async function triggerAutoSendProfileOtp() {
     }
 }
 
+function updateEmailResendState() {
+    const btn = document.getElementById('otp-resend-btn');
+    if (!btn) return;
+    const now = Date.now();
+    const cooldownExpiry = safeStorage.getItem('resend_cooldown_expiry');
+
+    if (cooldownExpiry && now < parseInt(cooldownExpiry)) {
+        const remaining = Math.ceil((parseInt(cooldownExpiry) - now) / 1000);
+        btn.disabled = true;
+        btn.innerText = `RESEND IN ${remaining}S`;
+        setTimeout(updateEmailResendState, 1000);
+    } else {
+        btn.disabled = false;
+        btn.innerText = "SEND CODE";
+    }
+}
+
 async function submitProfileOtpCode(event) {
     event.preventDefault();
-    const otpCode = document.getElementById('otp_hidden').value;
+    const otpCode = compileOtpValue();
     const errorMsgDiv = document.getElementById('otp_error_msg');
     const emailInput = document.getElementById('prof_email');
+    const hiddenPhone = document.getElementById('phone_hidden');
 
     if (errorMsgDiv) {
         errorMsgDiv.classList.add('d-none');
@@ -601,17 +719,10 @@ async function submitProfileOtpCode(event) {
 
     if (otpCode.length !== 6) {
         if (errorMsgDiv) {
-            errorMsgDiv.innerText = "Please enter a valid 6-digit verification code.";
+            errorMsgDiv.innerText = "Please enter all 6 digits of the code.";
             errorMsgDiv.classList.remove('d-none');
-        } else {
-            alert("Please enter a valid 6-digit verification code.");
         }
         return;
-    }
-
-    const payload = { otp: otpCode };
-    if (emailInput) {
-        payload.email = emailInput.value.trim();
     }
 
     try {
@@ -622,19 +733,160 @@ async function submitProfileOtpCode(event) {
                 "X-CSRF-TOKEN": "{{ csrf_token() }}",
                 "Accept": "application/json"
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({
+                otp: otpCode,
+                email: emailInput ? emailInput.value.trim() : originalEmail,
+                channel: 'email'
+            })
         });
+
         const data = await response.json();
         if (data.success) {
             emailVerifiedLocally = true;
-            verifiedEmailValue = data.email;
+            verifiedEmailValue = data.email || (emailInput ? emailInput.value.trim() : originalEmail);
 
             const modal = bootstrap.Modal.getInstance(document.getElementById('profileEmailVerifyModal'));
-            modal.hide();
+            if (modal) modal.hide();
 
             const badgeContainer = document.getElementById('email_badge_container');
             if (badgeContainer) {
                 badgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
+            }
+
+            if (isSubmittingForm) {
+                const currentPhone = hiddenPhone ? hiddenPhone.value.trim() : '';
+                if (currentPhone && currentPhone !== originalPhone && (!phoneVerifiedLocally || currentPhone !== verifiedPhoneValue)) {
+                    openProfileVerifyModal('phone');
+                    return;
+                }
+                const mainForm = document.getElementById('profileUpdateForm');
+                compileProfileAddress();
+                mainForm.submit();
+            }
+        } else {
+            if (errorMsgDiv) {
+                errorMsgDiv.innerText = data.message || "Incorrect verification code.";
+                errorMsgDiv.classList.remove('d-none');
+            }
+        }
+    } catch (e) {
+        if (errorMsgDiv) {
+            errorMsgDiv.innerText = "Verification failed. Incorrect code or connection error.";
+            errorMsgDiv.classList.remove('d-none');
+        }
+    }
+}
+
+// --- PHONE SMS OTP DISPATCH & VERIFY (DELEGATED TO SERVER) ---
+async function sendProfilePhoneOtpCode(event) {
+    if (event) event.preventDefault();
+    await triggerAutoSendProfilePhoneOtp();
+}
+
+async function triggerAutoSendProfilePhoneOtp() {
+    const btn = document.getElementById('phone-otp-resend-btn');
+    const hiddenPhone = document.getElementById('phone_hidden');
+    const errorMsgDiv = document.getElementById('phone_otp_error_msg');
+
+    if (errorMsgDiv) {
+        errorMsgDiv.classList.add('d-none');
+        errorMsgDiv.innerText = '';
+    }
+
+    const phoneVal = hiddenPhone ? hiddenPhone.value.trim() : '';
+    if (!phoneVal) return;
+
+    const now = Date.now();
+    const cooldownExpiry = safeStorage.getItem('phone_resend_cooldown');
+    if (cooldownExpiry && now < parseInt(cooldownExpiry)) return;
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerText = "SENDING SMS...";
+    }
+
+    try {
+        await fetch("{{ route('verification.send-sms-otp') }}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-TOKEN": "{{ csrf_token() }}",
+                "Accept": "application/json"
+            },
+            body: JSON.stringify({ phone: phoneVal, channel: 'sms' })
+        });
+        const expiryTime = now + (30 * 1000);
+        safeStorage.setItem('phone_resend_cooldown', expiryTime.toString());
+        updateProfilePhoneResendState();
+    } catch (e) {
+        const expiryTime = now + (30 * 1000);
+        safeStorage.setItem('phone_resend_cooldown', expiryTime.toString());
+        updateProfilePhoneResendState();
+    }
+}
+
+function updateProfilePhoneResendState() {
+    const btn = document.getElementById('phone-otp-resend-btn');
+    if (!btn) return;
+    const now = Date.now();
+    const cooldownExpiry = safeStorage.getItem('phone_resend_cooldown');
+
+    if (cooldownExpiry && now < parseInt(cooldownExpiry)) {
+        const remaining = Math.ceil((parseInt(cooldownExpiry) - now) / 1000);
+        btn.disabled = true;
+        btn.innerText = `RESEND IN ${remaining}S`;
+        setTimeout(updateProfilePhoneResendState, 1000);
+    } else {
+        btn.disabled = false;
+        btn.innerText = "SEND SMS CODE";
+    }
+}
+
+async function submitProfilePhoneOtpCode(event) {
+    event.preventDefault();
+    const otpCode = compilePhoneOtpValue();
+    const errorMsgDiv = document.getElementById('phone_otp_error_msg');
+    const hiddenPhone = document.getElementById('phone_hidden');
+
+    if (errorMsgDiv) {
+        errorMsgDiv.classList.add('d-none');
+        errorMsgDiv.innerText = '';
+    }
+
+    if (otpCode.length !== 6) {
+        if (errorMsgDiv) {
+            errorMsgDiv.innerText = "Please enter all 6 digits of the SMS code.";
+            errorMsgDiv.classList.remove('d-none');
+        }
+        return;
+    }
+
+    try {
+        const response = await fetch("{{ route('verification.verify-otp') }}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-TOKEN": "{{ csrf_token() }}",
+                "Accept": "application/json"
+            },
+            body: JSON.stringify({
+                otp: otpCode,
+                phone: hiddenPhone ? hiddenPhone.value.trim() : originalPhone,
+                channel: 'phone'
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            phoneVerifiedLocally = true;
+            verifiedPhoneValue = hiddenPhone ? hiddenPhone.value.trim() : originalPhone;
+
+            const modal = bootstrap.Modal.getInstance(document.getElementById('profilePhoneVerifyModal'));
+            if (modal) modal.hide();
+
+            const phoneBadgeContainer = document.getElementById('phone_badge_container');
+            if (phoneBadgeContainer) {
+                phoneBadgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
             }
 
             if (isSubmittingForm) {
@@ -644,28 +896,25 @@ async function submitProfileOtpCode(event) {
             }
         } else {
             if (errorMsgDiv) {
-                errorMsgDiv.innerText = data.message || "Incorrect verification code.";
+                errorMsgDiv.innerText = data.message || "Invalid or expired verification code.";
                 errorMsgDiv.classList.remove('d-none');
-            } else {
-                alert(data.message || "Incorrect verification code.");
             }
         }
     } catch (e) {
         if (errorMsgDiv) {
             errorMsgDiv.innerText = "Verification failed. Incorrect code or connection error.";
             errorMsgDiv.classList.remove('d-none');
-        } else {
-            alert("Verification failed. Incorrect code.");
         }
     }
 }
 
-// --- PHONE SYNC & DYNAMIC ADDRESS ---
+// --- PHONE DISPLAY SYNC & DYNAMIC ADDRESS ---
 function syncProfilePhoneNumber() {
     const displayInput = document.getElementById('phone_display');
     const hiddenInput = document.getElementById('phone_hidden');
     if (displayInput && hiddenInput) {
         hiddenInput.value = displayInput.value ? '09' + displayInput.value : '';
+        handleProfilePhoneInput();
     }
 }
 
@@ -783,16 +1032,11 @@ async function initializeAddress() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     await initializeAddress();
-    setupPasswordToggle('#reg_pass', '#toggleRegPass');
-    setupPasswordToggle('#reg_pass_conf', '#toggleRegPassConf');
 
-    // Initialize phone display prefix on load safely
     let hiddenPhone = document.getElementById('phone_hidden').value.trim();
-    if (hiddenPhone.startsWith('+639')) {
-        hiddenPhone = '09' + hiddenPhone.substring(4);
-    } else if (hiddenPhone.startsWith('639')) {
-        hiddenPhone = '09' + hiddenPhone.substring(3);
-    }
+    if (hiddenPhone.startsWith('+639')) hiddenPhone = '09' + hiddenPhone.substring(4);
+    else if (hiddenPhone.startsWith('639')) hiddenPhone = '09' + hiddenPhone.substring(3);
+
     if (hiddenPhone && (hiddenPhone.startsWith('09') || hiddenPhone.startsWith('9')) && (hiddenPhone.length === 11 || hiddenPhone.length === 10)) {
         let suffixVal = hiddenPhone.startsWith('09') ? hiddenPhone.substring(2) : hiddenPhone.substring(1);
         const displayInput = document.getElementById('phone_display');
@@ -804,15 +1048,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (displayInput) displayInput.value = hiddenPhone;
     }
 
-    // Check if middle name is N/A to trigger standard opacity adjustments on page load
     const mnCheck = document.getElementById('profile_no_mn');
     if (mnCheck && mnCheck.checked) {
         const middleNameEl = document.getElementById('profile_middle_name');
         if (middleNameEl) middleNameEl.classList.add('opacity-50');
     }
 
-    // Run evaluations on load
-    updateResendState();
+    updateEmailResendState();
+    updateProfilePhoneResendState();
 });
 </script>
 @endpush

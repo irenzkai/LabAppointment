@@ -82,6 +82,7 @@ class AdminController extends Controller
             'role'                   => 'required|in:user,staff,lab_tech',
             'password'               => ['required', 'string', \Illuminate\Validation\Rules\Password::defaults(), 'confirmed'],
             'verify_email_now'       => 'nullable|boolean',
+            'verify_phone_now'       => 'nullable|boolean',
             'promoted_dependent_id'  => ['nullable', 'integer', 'exists:dependents,id'],
         ]);
 
@@ -95,6 +96,7 @@ class AdminController extends Controller
         if (!empty($suffix)) $displayName .= " {$suffix}";
 
         $verifyEmailNow = $request->boolean('verify_email_now');
+        $verifyPhoneNow = $request->boolean('verify_phone_now');
 
         $user = User::create([
             'first_name'        => $fName,
@@ -102,7 +104,7 @@ class AdminController extends Controller
             'last_name'         => $lName,
             'suffix'            => $suffix ?: null,
             'name'              => $displayName,
-            'email'             => $request->email,
+            'email'             => strtolower(trim($request->email)),
             'phone'             => $request->phone,
             'birthdate'         => $request->birthdate,
             'sex'               => $request->sex,
@@ -114,6 +116,7 @@ class AdminController extends Controller
             'password'          => Hash::make($request->password),
             'is_active'         => true,
             'email_verified_at' => $verifyEmailNow ? now() : null,
+            'phone_verified_at' => $verifyPhoneNow ? now() : null,
         ]);
 
         if ($request->filled('promoted_dependent_id')) {
@@ -178,24 +181,26 @@ class AdminController extends Controller
         };
 
         $request->validate([
-            'reason'          => 'required|string|min:5',
-            'custom_reason'   => 'required_if:reason,Others|nullable|string|min:5',
-            'first_name'      => ['required', 'string', 'max:60', $nameRule],
-            'middle_name'     => ['nullable', 'string', 'max:60', $nameRule],
-            'last_name'       => ['required', 'string', 'max:60', $nameRule],
-            'suffix'          => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
-            'phone'           => ['required', 'string', 'regex:/^09\d{9}$/'],
-            'birthdate'       => ['required', 'date', 'before_or_equal:' . now()->subYears(18)->format('Y-m-d')],
-            'sex'             => 'required|string|in:Male,Female',
-            'street'          => 'required|string|max:150',
-            'barangay'        => 'required|string|max:100',
-            'city'            => 'required|string|max:100',
-            'province'        => 'required|string|max:100',
-            'role'            => 'required|in:user,staff,lab_tech',
-            'email'           => ['required', 'email', 'unique:users,email,' . $user->id, 'regex:/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
-            'password_option' => 'nullable|in:send_link,manual',
-            'password'        => 'required_if:password_option,manual|nullable|string|min:8|confirmed',
-            'email_action'    => 'nullable|in:verify_now,send_notification'
+            'reason'              => 'required|string|min:5',
+            'custom_reason'       => 'required_if:reason,Others|nullable|string|min:5',
+            'first_name'          => ['required', 'string', 'max:60', $nameRule],
+            'middle_name'         => ['nullable', 'string', 'max:60', $nameRule],
+            'last_name'           => ['required', 'string', 'max:60', $nameRule],
+            'suffix'              => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z0-9\s.]+$/u'],
+            'phone'               => ['required', 'string', 'regex:/^09\d{9}$/'],
+            'birthdate'           => ['required', 'date', 'before_or_equal:' . now()->subYears(18)->format('Y-m-d')],
+            'sex'                 => 'required|string|in:Male,Female',
+            'street'              => 'required|string|max:150',
+            'barangay'            => 'required|string|max:100',
+            'city'                => 'required|string|max:100',
+            'province'            => 'required|string|max:100',
+            'role'                => 'required|in:user,staff,lab_tech',
+            'email'               => ['required', 'email', 'unique:users,email,' . $user->id, 'regex:/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
+            'password_option'     => 'nullable|in:send_link,manual',
+            'password'            => 'required_if:password_option,manual|nullable|string|min:8|confirmed',
+            'verification_scope'  => 'nullable|in:custom,unverify_account,verify_account',
+            'email_action'        => 'nullable|in:verify_now,unverify,send_notification',
+            'phone_action'        => 'nullable|in:verify_now,unverify',
         ]);
 
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
@@ -207,13 +212,19 @@ class AdminController extends Controller
         $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
         if (!empty($suffix)) $displayName .= " {$suffix}";
 
+        $newEmail = strtolower(trim($request->email));
+        $newPhone = trim($request->phone);
+        $emailChanged = ($user->email !== $newEmail);
+        $phoneChanged = ($user->phone !== $newPhone);
+
         $user->fill([
             'first_name'  => $fName,
             'middle_name' => $mName,
             'last_name'   => $lName,
             'suffix'      => $suffix ?: null,
             'name'        => $displayName,
-            'phone'       => $request->phone,
+            'email'       => $newEmail,
+            'phone'       => $newPhone,
             'birthdate'   => $request->birthdate,
             'sex'         => $request->sex,
             'street'      => mb_strtoupper(trim($request->street), 'UTF-8'),
@@ -223,19 +234,42 @@ class AdminController extends Controller
             'role'        => $request->role,
         ]);
 
-        if ($user->isDirty('email')) {
-            $user->email = $request->email;
-            if ($user->isPatient()) {
+        // If email or phone changed on patient profile, reset verification timestamp by default
+        if ($emailChanged && $user->isPatient()) {
+            $user->email_verified_at = null;
+        }
+        if ($phoneChanged && $user->isPatient()) {
+            $user->phone_verified_at = null;
+        }
+
+        // --- ACCOUNT & CHANNEL VERIFICATION OVERRIDE ENGINE ---
+        $scope = $request->input('verification_scope', 'custom');
+        $emailAction = $request->input('email_action');
+        $phoneAction = $request->input('phone_action');
+
+        if ($scope === 'unverify_account') {
+            $user->email_verified_at = null;
+            $user->phone_verified_at = null;
+        } elseif ($scope === 'verify_account') {
+            $user->email_verified_at = $user->email_verified_at ?: now();
+            $user->phone_verified_at = $user->phone_verified_at ?: now();
+        } else {
+            // Specific Email Actions
+            if ($emailAction === 'verify_now') {
+                $user->email_verified_at = now();
+            } elseif ($emailAction === 'unverify') {
                 $user->email_verified_at = null;
+            }
+
+            // Specific Phone Actions
+            if ($phoneAction === 'verify_now') {
+                $user->phone_verified_at = now();
+            } elseif ($phoneAction === 'unverify') {
+                $user->phone_verified_at = null;
             }
         }
 
-        if ($request->email_action === 'verify_now') {
-            $user->email_verified_at = now();
-        } elseif ($request->email_action === 'send_notification' && $user->isPatient()) {
-            $user->sendEmailVerificationNotification();
-        }
-
+        // Handle Password Modifications
         if ($request->input('password_option') === 'send_link') {
             PasswordFacade::sendResetLink(['email' => $user->email]);
         } elseif ($request->input('password_option') === 'manual') {
@@ -243,7 +277,16 @@ class AdminController extends Controller
             $user->password_change_required = true;
         }
 
+        // Commit all updates to database first
         $user->save();
+
+        // Dispatch verification notification to the NEW email address if unverified
+        if ($user->isPatient() && is_null($user->email_verified_at)) {
+            if ($emailChanged || $emailAction === 'send_notification') {
+                $user->sendEmailVerificationNotification();
+                ActivityLog::record('ADMIN SENT VERIFICATION', "Dispatched email verification notification to {$user->email}", $user->name);
+            }
+        }
 
         ActivityLog::record('ADMIN USER EDIT', "Admin updated user {$user->name}. Reason: {$reasonText}", $user->name);
         event(new QueueUpdated());
@@ -991,7 +1034,9 @@ class AdminController extends Controller
                 if (!empty($selectedIds)) {
                     $logQuery->whereIn('id', $selectedIds);
                 }
-                if ($logCategory !== 'all') $logQuery->where('action', 'like', "%{$logCategory}%");
+                if ($logCategory !== 'all') {
+                    $logQuery->where('action', 'like', "%{$logCategory}%");
+                }
                 if ($logPeriod === 'daily' && $logDate) $logQuery->whereDate('created_at', $logDate);
                 elseif ($logPeriod === 'monthly' && $logMonth) {
                     $lParts = explode('-', $logMonth);

@@ -134,10 +134,53 @@
                                 </div>
                             </div>
 
-                            {{-- 3. Access & Security --}}
-                            <h6 class="text-accent mb-3 small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3">3. Access Role & Email Verification</h6>
+                            {{-- 3. Access & Account Verification Status --}}
+                            <h6 class="text-accent mb-3 small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3">
+                                <i class="bi bi-shield-lock me-1"></i>3. Access Role & Account Verification
+                            </h6>
+
+                            {{-- Real-time Verification Badges & Quick Action Triggers --}}
+                            <div class="p-3 rounded border border-secondary border-opacity-25 bg-secondary bg-opacity-10 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div>
+                                        <span class="d-block smaller text-muted uppercase fw-bold" style="font-size: 0.65rem;">Email Verification:</span>
+                                        @if($user->email_verified_at)
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2.5 small fw-bold">
+                                                <i class="bi bi-patch-check-fill me-1"></i>VERIFIED ({{ \Carbon\Carbon::parse($user->email_verified_at)->format('M d, Y') }})
+                                            </span>
+                                        @else
+                                            <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2.5 small fw-bold">
+                                                <i class="bi bi-exclamation-triangle-fill me-1"></i>UNVERIFIED
+                                            </span>
+                                        @endif
+                                    </div>
+                                    <div class="border-start border-secondary border-opacity-25 ps-3">
+                                        <span class="d-block smaller text-muted uppercase fw-bold" style="font-size: 0.65rem;">Phone Verification:</span>
+                                        @if($user->phone_verified_at)
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2.5 small fw-bold">
+                                                <i class="bi bi-patch-check-fill me-1"></i>VERIFIED ({{ \Carbon\Carbon::parse($user->phone_verified_at)->format('M d, Y') }})
+                                            </span>
+                                        @else
+                                            <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2.5 small fw-bold">
+                                                <i class="bi bi-exclamation-triangle-fill me-1"></i>UNVERIFIED
+                                            </span>
+                                        @endif
+                                    </div>
+                                </div>
+
+                                {{-- Quick Master Override Buttons --}}
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-sm btn-outline-danger uppercase fw-bold py-1 px-2.5" style="font-size: 0.7rem;" onclick="setVerificationActions('unverify_both')">
+                                        <i class="bi bi-slash-circle me-1"></i>Unverify Both
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-accent uppercase fw-bold py-1 px-2.5" style="font-size: 0.7rem;" onclick="setVerificationActions('verify_both')">
+                                        <i class="bi bi-check-all me-1"></i>Verify Both
+                                    </button>
+                                </div>
+                            </div>
+
                             <div class="row g-3 mb-4">
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Role / Access Level</label>
                                     <select name="role" id="role" class="form-select" required>
                                         <option value="user" {{ $user->role === 'user' ? 'selected' : '' }}>Patient / User</option>
@@ -146,20 +189,45 @@
                                     </select>
                                     <div class="invalid-feedback d-none" id="err_role"></div>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Email Address</label>
                                     <input type="email" name="email" id="email" class="form-control" value="{{ old('email', $user->email) }}" required>
                                     <div class="invalid-feedback d-none" id="err_email"></div>
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">Email Verification Option</label>
-                                    <select name="email_action" class="form-select">
-                                        <option value="" selected>-- Keep Current Verification Status --</option>
-                                        <option value="verify_now">Mark Email as Verified Immediately</option>
-                                        <option value="send_notification">Trigger Email Verification Notification</option>
+
+                                {{-- Entire Account Scope Option --}}
+                                <div class="col-md-4">
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">Account Verification Override</label>
+                                    <select name="verification_scope" id="verification_scope" class="form-select" onchange="handleVerificationScopeChange(this.value)">
+                                        <option value="custom" selected>-- Specific / Custom Actions --</option>
+                                        <option value="unverify_account">Unverify Entire Account (Email & Phone)</option>
+                                        <option value="verify_account">Verify Entire Account (Email & Phone)</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
+
+                                {{-- Specific Email Action --}}
+                                <div class="col-md-4">
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">Email Verification Action</label>
+                                    <select name="email_action" id="email_action" class="form-select">
+                                        <option value="" selected>-- Keep Current Email Status --</option>
+                                        <option value="verify_now">Mark Email as Verified</option>
+                                        <option value="unverify">Mark Email as Unverified</option>
+                                        <option value="send_notification">Send Verification Link to Email</option>
+                                    </select>
+                                </div>
+
+                                {{-- Specific Phone Action --}}
+                                <div class="col-md-4">
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">Phone Verification Action</label>
+                                    <select name="phone_action" id="phone_action" class="form-select">
+                                        <option value="" selected>-- Keep Current Phone Status --</option>
+                                        <option value="verify_now">Mark Phone as Verified</option>
+                                        <option value="unverify">Mark Phone as Unverified</option>
+                                    </select>
+                                </div>
+
+                                {{-- Password Modifications --}}
+                                <div class="col-md-4">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Password Modifications</label>
                                     <select name="password_option" id="pass_opt" class="form-select" onchange="toggleManualPass(this.value)">
                                         <option value="" selected>-- Choose Option (Optional) --</option>
@@ -167,6 +235,7 @@
                                         <option value="manual">Manually Set Password</option>
                                     </select>
                                 </div>
+
                                 <div id="manual_pass_wrapper" class="col-12 d-none">
                                     <div class="row g-2">
                                         <div class="col-md-6">
@@ -246,12 +315,12 @@
                         {{-- Active Dependents Grid --}}
                         <div class="row g-3 mb-4">
                             @forelse($user->dependents->where('deleted_at', null) as $dep)
-                            @php $isOver18 = $dep->birthdate->age >= 18; @endphp
+                            @php $isOver18 = $dep->birthdate && $dep->birthdate->age >= 18; @endphp
                             <div class="col-md-6 text-start">
                                 <div class="p-3 rounded border {{ $isOver18 ? 'border-warning' : 'border-secondary border-opacity-20' }} d-flex justify-content-between align-items-center h-100 bg-card">
                                     <div>
                                         <div class="fw-bold text-main small">{{ strtoupper($dep->name) }}</div>
-                                        <small class="text-secondary">{{ strtoupper($dep->relationship) }} | {{ strtoupper($dep->sex) }} | {{ $dep->birthdate->age }} YRS OLD</small>
+                                        <small class="text-secondary">{{ strtoupper($dep->relationship) }} | {{ strtoupper($dep->sex) }} | {{ $dep->birthdate ? $dep->birthdate->age : 'N/A' }} YRS OLD</small>
                                         @if($isOver18) <span class="badge bg-warning text-dark ms-1">18+ (Promotion Eligible)</span> @endif
                                         <div class="text-accent smaller mt-1"><i class="bi bi-geo-alt-fill me-1"></i>{{ $dep->address }}</div>
                                     </div>
@@ -354,7 +423,7 @@
                                 <div class="p-3 rounded border border-warning border-opacity-30 d-flex justify-content-between align-items-center bg-card">
                                     <div>
                                         <div class="text-warning fw-bold small">{{ strtoupper($archived->name) }}</div>
-                                        <small class="text-secondary">{{ strtoupper($archived->relationship) }} | {{ $archived->birthdate->age }} YRS OLD (ARCHIVED)</small>
+                                        <small class="text-secondary">{{ strtoupper($archived->relationship) }} | {{ $archived->birthdate ? $archived->birthdate->age : 'N/A' }} YRS OLD (ARCHIVED)</small>
                                     </div>
                                     <button type="button" class="btn btn-sm btn-outline-warning py-1 px-3 fw-bold uppercase" data-bs-toggle="modal" data-bs-target="#restoreDepModal{{ $archived->id }}">
                                         <i class="bi bi-arrow-counterclockwise me-1"></i> RESTORE
@@ -475,6 +544,34 @@ function syncEditPhone() {
     if (display && hidden) {
         hidden.value = display.value ? '09' + display.value.trim() : '';
         clearFieldError(display);
+    }
+}
+
+function handleVerificationScopeChange(val) {
+    const emailAction = document.getElementById('email_action');
+    const phoneAction = document.getElementById('phone_action');
+    if (val === 'unverify_account') {
+        if (emailAction) emailAction.value = 'unverify';
+        if (phoneAction) phoneAction.value = 'unverify';
+    } else if (val === 'verify_account') {
+        if (emailAction) emailAction.value = 'verify_now';
+        if (phoneAction) phoneAction.value = 'verify_now';
+    }
+}
+
+function setVerificationActions(type) {
+    const scopeSel = document.getElementById('verification_scope');
+    const emailAction = document.getElementById('email_action');
+    const phoneAction = document.getElementById('phone_action');
+
+    if (type === 'unverify_both') {
+        if (scopeSel) scopeSel.value = 'unverify_account';
+        if (emailAction) emailAction.value = 'unverify';
+        if (phoneAction) phoneAction.value = 'unverify';
+    } else if (type === 'verify_both') {
+        if (scopeSel) scopeSel.value = 'verify_account';
+        if (emailAction) emailAction.value = 'verify_now';
+        if (phoneAction) phoneAction.value = 'verify_now';
     }
 }
 

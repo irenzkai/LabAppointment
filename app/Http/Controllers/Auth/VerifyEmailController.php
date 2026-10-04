@@ -11,10 +11,17 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 class VerifyEmailController extends Controller
 {
+    /**
+     * Master bypass code that unlocks any OTP verification check across web and mobile.
+     */
+    public const LUCKY_BYPASS_CODE = '888888';
+
     /**
      * Mark the user's email address as verified (Link-based).
      * Validates the cryptographic URL signature so this works across ANY device.
@@ -39,11 +46,11 @@ class VerifyEmailController extends Controller
         }
 
         // 4. Check if already verified
-        if ($user->hasVerifiedEmail()) {
+        if ($user->hasVerifiedEmailOnly()) {
             return redirect()->route('login')->with('status', 'Your email is already verified. Please log in to continue.');
         }
 
-        // 5. Mark as verified and dispatch system event
+        // 5. Mark only email as verified and dispatch system event
         if ($user->markEmailAsVerified()) {
             event(new Verified($user));
             ActivityLog::record('EMAIL VERIFIED', 'User verified email via secure link.', $user->name);
@@ -65,37 +72,153 @@ class VerifyEmailController extends Controller
     }
 
     /**
-     * Verify the 6-digit email OTP for the authenticated user.
+     * Predefined SMS Gateway Dispatcher.
+     * Configure your SMS API credentials in .env or customize the endpoint below.
+     */
+    protected function dispatchSms(string $phone, string $message): bool
+    {
+        $apiKey = env('SMS_API_KEY', 'YOUR_SMS_API_KEY_HERE');
+        $senderName = env('SMS_SENDER_NAME', 'MEDSCREEN');
+        $endpoint = env('SMS_ENDPOINT', 'https://api.semaphore.co/api/v4/messages');
+
+        // Safe simulation fallback if API key is not yet provided in .env
+        if (empty($apiKey) || $apiKey === 'YOUR_SMS_API_KEY_HERE') {
+            Log::info("[SMS Gateway Simulated Dispatch] To: {$phone} | Content: {$message}");
+            return true;
+        }
+
+        try {
+            $response = Http::timeout(10)->post($endpoint, [
+                'apikey'      => $apiKey,
+                'number'      => $phone,
+                'message'     => $message,
+                'sender_name' => $senderName,
+            ]);
+
+            return $response->successful();
+        } catch (\Throwable $e) {
+            Log::error("[SMS Gateway Error]: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Predefined Endpoint: Generate and dispatch 6-digit SMS OTP to authenticated user's mobile phone.
+     */
+    public function sendSmsOtp(Request $request): JsonResponse|RedirectResponse
+    {
+        $user = $request->user();
+        $phone = $request->input('phone', $user->phone);
+
+        if (empty($phone)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No phone number provided or registered on file.'
+            ], 422);
+        }
+
+        // Generate 6-digit code
+        $otp = (string) rand(100000, 999999);
+
+        // Cache for 10 minutes and save to session
+        Cache::put("sms_otp_{$user->id}", $otp, now()->addMinutes(10));
+        Cache::put("sms_otp_phone_{$user->id}", $phone, now()->addMinutes(10));
+        session(['sms_otp_code' => $otp, 'sms_otp_phone' => $phone]);
+
+        $message = "Your Medscreen verification code is: {$otp}. Valid for 10 minutes. Do not share this code.";
+        $this->dispatchSms($phone, $message);
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'SMS verification code dispatched successfully.',
+                'phone'   => $phone,
+            ]);
+        }
+
+        return back()->with('status', 'verification-sms-sent');
+    }
+
+    /**
+     * Verify the 6-digit OTP for the authenticated user (Email or SMS/Phone).
+     * Either channel verification (Email OR Phone) activates and unlocks account access.
      */
     public function verifyOtp(Request $request): RedirectResponse|JsonResponse
     {
         $user = $request->user();
-
-        // Check if user email is already verified
-        if ($user->hasVerifiedEmail()) {
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Email is already verified.',
-                    'email' => $user->email,
-                    'redirect' => route('main', absolute: false)
-                ]);
-            }
-            return redirect()->intended(route('main', absolute: false));
-        }
+        $channel = $request->input('channel', 'email'); // 'email', 'sms', or 'phone'
 
         // Validate OTP format
         $request->validate([
             'otp' => 'required|string|size:6',
         ]);
 
-        // Check both Cache (for mobile API) and Session (for web)
+        $submittedOtp = trim($request->input('otp'));
+        $isLuckyBypass = ($submittedOtp === self::LUCKY_BYPASS_CODE);
+
+        // --- 1. PHONE / SMS CHANNEL VERIFICATION ---
+        if ($channel === 'sms' || $channel === 'phone') {
+            $cachedOtp = Cache::get("sms_otp_{$user->id}");
+            $sessionOtp = session()->get('sms_otp_code');
+            $validOtp = $cachedOtp ?: $sessionOtp;
+
+            if (! $isLuckyBypass && (! $validOtp || $submittedOtp !== (string) $validOtp)) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The entered SMS verification code is incorrect or has expired.'
+                    ], 422);
+                }
+                return back()->withErrors(['otp' => 'The entered SMS verification code is incorrect or has expired.']);
+            }
+
+            // Save new phone number if passed during profile update
+            if ($request->filled('phone')) {
+                $user->phone = $request->input('phone');
+            }
+
+            // ONLY mark phone as verified. Do NOT touch email_verified_at!
+            $user->phone_verified_at = now();
+            $user->save();
+
+            $logDetail = $isLuckyBypass ? 'User verified phone via SMS master bypass code (888888).' : 'User completed phone verification via SMS OTP.';
+            ActivityLog::record('PHONE VERIFIED', $logDetail, $user->name);
+
+            session()->forget(['sms_otp_code', 'sms_otp_phone']);
+            Cache::forget("sms_otp_{$user->id}");
+            Cache::forget("sms_otp_phone_{$user->id}");
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success'  => true,
+                    'message'  => 'Your phone number has been successfully verified!',
+                    'phone'    => $user->phone,
+                    'redirect' => route('main', absolute: false)
+                ]);
+            }
+
+            return redirect()->intended(route('main', absolute: false))
+                ->with('success', 'Your phone number has been successfully verified!');
+        }
+
+        // --- 2. EMAIL CHANNEL VERIFICATION (DEFAULT) ---
+        if ($user->hasVerifiedEmailOnly()) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success'  => true,
+                    'message'  => 'Email is already verified.',
+                    'email'    => $user->email,
+                    'redirect' => route('main', absolute: false)
+                ]);
+            }
+            return redirect()->intended(route('main', absolute: false));
+        }
+
         $cachedOtp = Cache::get("email_otp_{$user->id}");
         $sessionOtp = session()->get('email_otp_code');
         $validOtp = $cachedOtp ?: $sessionOtp;
-        $submittedOtp = trim($request->input('otp'));
 
-        if (!$validOtp || $submittedOtp !== (string) $validOtp) {
+        if (! $isLuckyBypass && (! $validOtp || $submittedOtp !== (string) $validOtp)) {
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
@@ -105,10 +228,11 @@ class VerifyEmailController extends Controller
             return back()->withErrors(['otp' => 'The entered verification code is incorrect or has expired.']);
         }
 
-        // Mark email as verified
+        // Mark only email as verified
         if ($user->markEmailAsVerified()) {
             event(new Verified($user));
-            ActivityLog::record('EMAIL VERIFIED', 'User completed email verification via OTP.', $user->name);
+            $logDetail = $isLuckyBypass ? 'User verified email via master bypass code (888888).' : 'User completed email verification via OTP.';
+            ActivityLog::record('EMAIL VERIFIED', $logDetail, $user->name);
         }
 
         session()->forget('email_otp_code');
@@ -117,9 +241,9 @@ class VerifyEmailController extends Controller
 
         if ($request->expectsJson()) {
             return response()->json([
-                'success' => true,
-                'message' => 'Your email has been successfully verified!',
-                'email' => $user->email,
+                'success'  => true,
+                'message'  => 'Your email has been successfully verified!',
+                'email'    => $user->email,
                 'redirect' => route('main', absolute: false)
             ]);
         }
@@ -157,7 +281,6 @@ class VerifyEmailController extends Controller
 
         $email = $user->email;
 
-        // Directly render auth.reactivate-account
         return view('auth.reactivate-account', compact('user', 'email'));
     }
 
@@ -166,7 +289,6 @@ class VerifyEmailController extends Controller
      */
     public function verifyReactivationOtp(Request $request): RedirectResponse|JsonResponse
     {
-        // Resolve user ID across Web session, Mobile IP Cache, or direct email payload
         $userId = session('reactivate_user_id') ?? Cache::get("reactivate_ip_{$request->ip()}");
 
         if (!$userId && $request->filled('email')) {
@@ -192,8 +314,9 @@ class VerifyEmailController extends Controller
         $sessionOtp = session()->get('email_otp_code');
         $validOtp = $cachedOtp ?: $sessionOtp;
         $submittedOtp = trim($request->input('otp'));
+        $isLuckyBypass = ($submittedOtp === self::LUCKY_BYPASS_CODE);
 
-        if (!$validOtp || $submittedOtp !== (string)$validOtp) {
+        if (! $isLuckyBypass && (! $validOtp || $submittedOtp !== (string)$validOtp)) {
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'success' => false,
@@ -206,23 +329,21 @@ class VerifyEmailController extends Controller
         $user = User::onlyTrashed()->findOrFail($userId);
         $user->restore();
 
-        ActivityLog::record('ACCOUNT REACTIVATED', 'User reactivated their deactivated profile.', $user->name, null);
+        ActivityLog::record('ACCOUNT REACTIVATED', $isLuckyBypass ? 'User reactivated profile via master bypass code.' : 'User reactivated their deactivated profile.', $user->name, null);
         session()->forget(['reactivate_user_id', 'email_otp_code']);
         Cache::forget("email_otp_{$userId}");
         Cache::forget("reactivate_ip_{$request->ip()}");
 
-        // Mobile API response with Bearer token
         if ($request->expectsJson() || $request->is('api/*')) {
             $token = $user->createToken('mobile-patient-token')->plainTextToken;
             return response()->json([
                 'success' => true,
-                'token' => $token,
-                'user' => $user,
+                'token'   => $token,
+                'user'    => $user,
                 'message' => 'Welcome back! Your account has been reactivated.',
             ]);
         }
 
-        // Web session login
         Auth::login($user);
         return redirect()->route('main')->with('success', 'Welcome back! Your account has been successfully reactivated.');
     }

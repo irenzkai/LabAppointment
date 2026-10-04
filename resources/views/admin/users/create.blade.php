@@ -178,15 +178,28 @@
                             <div class="invalid-feedback d-none" id="err_password_confirmation"></div>
                         </div>
 
-                        {{-- Email Pre-Verification Option --}}
-                        <div class="col-12 mt-3">
-                            <div class="form-check form-switch p-3 rounded text-start" style="background-color: rgba(25, 211, 140, 0.04); border: 1.5px solid var(--border-color);">
+                        {{-- Email Pre-Verification Switch --}}
+                        <div class="col-md-6 mt-3">
+                            <div class="form-check form-switch p-3 rounded text-start h-100" style="background-color: rgba(25, 211, 140, 0.04); border: 1.5px solid var(--border-color);">
                                 <input class="form-check-input ms-0 me-3" type="checkbox" name="verify_email_now" id="verify_email_now" value="1" {{ old('verify_email_now', '1') == '1' ? 'checked' : '' }}>
                                 <label class="form-check-label text-main fw-bold small uppercase" for="verify_email_now">
-                                    Mark Email as Verified Immediately
+                                    <i class="bi bi-envelope-check me-1 text-accent"></i> Mark Email as Verified Immediately
                                 </label>
                                 <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
-                                    Pre-verifies this account so the user can log in right away. If unchecked, the user will be prompted to verify their email upon login.
+                                    Pre-verifies this account's email so the user can log in right away without mandatory link activation.
+                                </small>
+                            </div>
+                        </div>
+
+                        {{-- Phone Pre-Verification Switch --}}
+                        <div class="col-md-6 mt-3">
+                            <div class="form-check form-switch p-3 rounded text-start h-100" style="background-color: rgba(25, 211, 140, 0.04); border: 1.5px solid var(--border-color);">
+                                <input class="form-check-input ms-0 me-3" type="checkbox" name="verify_phone_now" id="verify_phone_now" value="1" {{ old('verify_phone_now', '1') == '1' ? 'checked' : '' }}>
+                                <label class="form-check-label text-main fw-bold small uppercase" for="verify_phone_now">
+                                    <i class="bi bi-phone me-1 text-accent"></i> Mark Phone as Verified Immediately
+                                </label>
+                                <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                                    Pre-verifies the contact phone number so clinical notifications and SMS OTP checks are immediately unlocked.
                                 </small>
                             </div>
                         </div>

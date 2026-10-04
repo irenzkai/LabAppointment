@@ -34,6 +34,8 @@ class User extends Authenticatable implements MustVerifyEmail
         'role',
         'is_active',
         'password_change_required',
+        'email_verified_at',
+        'phone_verified_at',
     ];
 
     /**
@@ -50,13 +52,62 @@ class User extends Authenticatable implements MustVerifyEmail
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'birthdate' => 'date', 
-            'is_active' => 'boolean',
+            'email_verified_at'        => 'datetime',
+            'phone_verified_at'        => 'datetime',
+            'password'                 => 'hashed',
+            'birthdate'                => 'date', 
+            'is_active'                => 'boolean',
             'password_change_required' => 'boolean',
-            'deleted_at' => 'datetime',
+            'deleted_at'               => 'datetime',
         ];
+    }
+
+    // =========================================================================
+    // VERIFICATION COMPATIBILITY LAYER (EMAIL OR PHONE ACTIVATION)
+    // =========================================================================
+
+    /**
+     * Determine if the user has verified their account (via Email OR Phone).
+     * Satisfies Laravel's native 'verified' route middleware so that completing
+     * either email or SMS verification unlocks the main menu and dashboard.
+     */
+    public function hasVerifiedEmail(): bool
+    {
+        return ! is_null($this->email_verified_at) || ! is_null($this->phone_verified_at);
+    }
+
+    /**
+     * Check specifically if the email address itself has been verified.
+     */
+    public function hasVerifiedEmailOnly(): bool
+    {
+        return ! is_null($this->email_verified_at);
+    }
+
+    /**
+     * Check specifically if the mobile phone number has been verified.
+     */
+    public function hasVerifiedPhone(): bool
+    {
+        return ! is_null($this->phone_verified_at);
+    }
+
+    /**
+     * Determine if the account is verified across any valid channel.
+     */
+    public function isAccountVerified(): bool
+    {
+        return $this->hasVerifiedEmail();
+    }
+
+    /**
+     * Mark the user's mobile phone as verified.
+     */
+    public function markPhoneAsVerified(): bool
+    {
+        return $this->forceFill([
+            'phone_verified_at' => $this->freshTimestamp(),
+        ])->save();
     }
 
     // =========================================================================
