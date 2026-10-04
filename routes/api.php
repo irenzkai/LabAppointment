@@ -7,9 +7,11 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 use App\Models\User;
 use App\Models\Service;
 use App\Models\PaymentProvider;
+use App\Models\ActivityLog;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\DependentController;
 use App\Http\Controllers\HistoryController;
@@ -95,7 +97,7 @@ Route::post('/login', function (Request $request) {
     return response()->json([
         'token' => $token,
         'user' => $user,
-        'unverified' => is_null($user->email_verified_at),
+        'unverified' => ! $user->hasVerifiedEmail(),
     ]);
 });
 
@@ -185,7 +187,7 @@ Route::post('/forgot-password', function (Request $request) {
     ], 422);
 });
 
-// Reactivation OTP verification (Now supports both Web and Mobile API)
+// Reactivation OTP verification (Supports both Web and Mobile API)
 Route::post('/reactivate/resend-otp', [EmailVerificationNotificationController::class, 'sendReactivationOtp']);
 Route::post('/reactivate/verify-otp', [VerifyEmailController::class, 'verifyReactivationOtp']);
 
@@ -210,6 +212,25 @@ Route::middleware('auth:sanctum')->group(function () {
         return response()->json(['success' => true, 'user' => $user]);
     });
 
+    // Update password (resolves mobile 404 error)
+    Route::put('/profile/password', function (Request $request) {
+        $validated = $request->validate([
+            'current_password' => ['required', 'current_password'],
+            'password' => ['required', PasswordRule::defaults(), 'confirmed'],
+        ]);
+
+        $request->user()->update([
+            'password' => Hash::make($validated['password']),
+        ]);
+
+        ActivityLog::record('PASSWORD UPDATED', 'User updated their account password.', $request->user()->name);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password updated successfully.',
+        ]);
+    });
+
     Route::delete('/profile', function (Request $request) {
         $request->validate(['password' => 'required']);
         $user = $request->user();
@@ -227,7 +248,41 @@ Route::middleware('auth:sanctum')->group(function () {
     // Verification OTP endpoints
     Route::post('/email/verification-otp', [EmailVerificationNotificationController::class, 'sendOtp']);
     Route::post('/email/verification-notification', [EmailVerificationNotificationController::class, 'store']);
+    Route::post('/sms/verification-otp', [VerifyEmailController::class, 'sendSmsOtp']);
     Route::post('/verify-otp', [VerifyEmailController::class, 'verifyOtp']);
+
+    // Change unverified email address
+    Route::post('/email/change', function (Request $request) {
+        $user = $request->user();
+        $request->validate([
+            'email' => [
+                'required',
+                'string',
+                'lowercase',
+                'email',
+                'max:255',
+                'unique:users,email,' . $user->id,
+                'regex:/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'
+            ],
+        ], [
+            'email.regex' => 'Please enter a valid email address with a domain.',
+            'email.unique' => 'This email address is already registered.'
+        ]);
+
+        $user->email = strtolower(trim($request->email));
+        $user->email_verified_at = null;
+        $user->save();
+
+        ActivityLog::record('EMAIL CORRECTED', "User changed their unverified email address to {$user->email}.", $user->name);
+
+        app(EmailVerificationNotificationController::class)->sendOtp($request);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Email updated. A new verification code has been dispatched.',
+            'user' => $user,
+        ]);
+    });
 
     // Logout
     Route::post('/logout', function (Request $request) {
@@ -238,7 +293,6 @@ Route::middleware('auth:sanctum')->group(function () {
     // Appointments Endpoints
     Route::get('/appointments', function (Request $request) {
         $user = $request->user();
-
         $self = \App\Models\Appointment::with(['services', 'dependent', 'result', 'user'])
             ->where('user_id', $user->id)
             ->whereNull('dependent_id')
@@ -264,7 +318,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Accept both POST and PUT methods to allow method spoofing (_method=PUT) on resubmission
     Route::match(['post', 'put'], '/appointments/{appointment}', [AppointmentController::class, 'update']);
-
     Route::post('/appointments/{appointment}/cancel', [AppointmentController::class, 'cancel']);
     Route::post('/appointments/{appointment}/soft-delete', [AppointmentController::class, 'softDelete']);
     Route::post('/appointments/{appointment}/forward-email', [ResultController::class, 'forwardToEmail']);
