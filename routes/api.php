@@ -12,6 +12,9 @@ use App\Models\User;
 use App\Models\Service;
 use App\Models\PaymentProvider;
 use App\Models\ActivityLog;
+use App\Models\LaboratoryHistory;
+use App\Notifications\AppointmentNotification;
+use App\Events\NotificationSent;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\DependentController;
 use App\Http\Controllers\HistoryController;
@@ -342,7 +345,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // History Endpoints
     Route::get('/patient-history', function (Request $request) {
         $user = $request->user();
-        $labHistory = \App\Models\LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
+        $labHistory = LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
         $appointments = \App\Models\Appointment::with(['services', 'result', 'dependent', 'user'])
             ->where('user_id', $user->id)
             ->where('deleted_by_patient', false)
@@ -381,8 +384,43 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
     });
 
-    Route::post('/patient-history/request', [HistoryController::class, 'requestPermission']);
-    Route::post('/patient-history/accept', [HistoryController::class, 'acceptRequest']);
+    // Dedicated JSON endpoints for mobile digitization request & accept
+    Route::post('/patient-history/request', function (Request $request) {
+        $user = $request->user();
+        $history = LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
+        $history->update(['permission_status' => 'pending_staff']);
+
+        ActivityLog::record('HISTORY REQUEST', 'Patient requested data import', $user->name);
+
+        $internalStaff = User::whereIn('role', ['staff', 'lab_tech', 'admin'])->get();
+        foreach ($internalStaff as $staff) {
+            $staff->notify(new AppointmentNotification([
+                'title' => 'Lab History Request',
+                'message' => "Patient {$user->name} is requesting a historical data import.",
+                'url' => route('admin.users.history', $user->id),
+                'type' => 'info'
+            ]));
+            event(new NotificationSent($staff->id, 'Lab History Request', "Patient {$user->name} is requesting a historical data import."));
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Your request has been dispatched to laboratory staff for verification.',
+        ]);
+    });
+
+    Route::post('/patient-history/accept', function (Request $request) {
+        $user = $request->user();
+        $history = LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
+        $history->update(['permission_status' => 'granted']);
+
+        ActivityLog::record('HISTORY GRANTED', "Handshake accepted by {$user->role}", $user->name);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Permission granted. Access is now open.',
+        ]);
+    });
 
     // Notifications
     Route::get('/notifications', function (Request $request) {
