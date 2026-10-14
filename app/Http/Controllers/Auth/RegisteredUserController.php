@@ -137,13 +137,25 @@ class RegisteredUserController extends Controller
             'phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'promoted_dependent_id' => ['nullable', 'integer', 'exists:dependents,id'],
-            'shadow_appointment_id' => ['nullable', 'integer', 'exists:appointments,id']
+            'shadow_appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
         ], [
             'birthdate.before_or_equal' => 'Administrative Policy: You must be at least 18 years old to create an account.',
             'email.regex' => 'The email address must contain exactly one @ symbol.',
             'phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
             'suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
         ]);
+
+        // Credential Conflict Prevention: Check if phone number is already verified on another active account
+        $cleanPhone = preg_replace('/[^0-9]/', '', (string)$request->phone);
+        $phoneVerifiedElsewhere = User::where('phone', $cleanPhone)
+            ->whereNotNull('phone_verified_at')
+            ->exists();
+
+        if ($phoneVerifiedElsewhere) {
+            return back()->withInput()->withErrors([
+                'phone' => 'This mobile phone number is already verified on another active account.'
+            ]);
+        }
 
         // DATA CLEANING & FORMATTING (Multibyte UTF-8 Ñ/ñ Safe)
         $fName = mb_strtoupper(trim($request->first_name), 'UTF-8');
@@ -164,8 +176,8 @@ class RegisteredUserController extends Controller
             'last_name' => $lName,
             'suffix' => $suffix ?: null,
             'name' => $displayName,
-            'email' => $request->email,
-            'phone' => $request->phone,
+            'email' => strtolower(trim($request->email)),
+            'phone' => $cleanPhone,
             'birthdate' => $request->birthdate,
             'sex' => $request->sex,
             'street' => mb_strtoupper(trim($request->street), 'UTF-8'),
@@ -176,6 +188,7 @@ class RegisteredUserController extends Controller
             'role' => 'user',
             'is_active' => true,
             'email_verified_at' => null,
+            'phone_verified_at' => null,
         ]);
 
         // HISTORICAL RECORD TRANSITION
@@ -212,6 +225,6 @@ class RegisteredUserController extends Controller
 
         ActivityLog::record('USER REGISTERED', 'Registration completed and unverified profile activated', $user->name);
 
-        return redirect()->route('verification.notice')->with('success', 'Profile successfully registered! Please verify your email.');
+        return redirect()->route('verification.notice')->with('success', 'Profile successfully registered! Please verify your email or phone.');
     }
 }

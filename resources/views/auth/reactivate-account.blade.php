@@ -8,7 +8,7 @@
         <div class="card p-0 border-secondary overflow-hidden shadow-lg" style="border-radius: 20px;">
             <div class="row g-0 align-items-stretch">
                 
-                {{-- LEFT PANEL: SECURED CHANNEL (Always Dark for consistent brand presence) --}}
+                {{-- LEFT PANEL: SECURED CHANNEL --}}
                 <div class="col-lg-5 d-none d-lg-flex flex-column justify-content-between p-5 bg-brand-dark position-relative" style="min-height: 550px;">
                     <div class="position-absolute top-0 start-0 w-100 h-100" style="background: url('{{ asset('images/fb_cover.jpg') }}') center/cover no-repeat; opacity: 0.12; z-index: 1;"></div>
                     <div class="position-absolute top-0 start-0 w-100 h-100" style="background: linear-gradient(135deg, var(--brand-dark) 0%, rgba(28, 35, 45, 0.95) 100%); z-index: 2;"></div>
@@ -63,12 +63,19 @@
 
                         {{-- Error Notification --}}
                         @if($errors->any())
-                            <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 d-flex align-items-center mb-4 shadow-sm" role="alert">
-                                <i class="bi bi-exclamation-triangle-fill me-3 fs-4 text-danger"></i>
-                                <div>
-                                    <div class="fw-800 uppercase fs-x-small text-danger">Reactivation Failed</div>
-                                    <div class="small text-main">{{ $errors->first() }}</div>
+                            <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 mb-4 shadow-sm p-3 rounded-3" role="alert">
+                                <div class="d-flex align-items-center mb-1">
+                                    <i class="bi bi-exclamation-triangle-fill me-2 fs-5 text-danger"></i>
+                                    <div class="fw-800 uppercase fs-x-small text-danger">Reactivation Notice</div>
                                 </div>
+                                <div class="small text-main">{{ $errors->first() }}</div>
+                                @if(str_contains(strtolower($errors->first()), 'verified on another') || str_contains(strtolower($errors->first()), 'retired'))
+                                    <div class="mt-3 pt-2 border-top border-danger border-opacity-25">
+                                        <a href="{{ route('register') }}" class="btn btn-sm btn-accent fw-bold uppercase w-100">
+                                            Register a New Account
+                                        </a>
+                                    </div>
+                                @endif
                             </div>
                         @endif
 
@@ -111,7 +118,6 @@
                         <hr class="border-secondary border-opacity-25 my-4">
 
                         <div class="d-flex justify-content-between align-items-center mt-3">
-                            {{-- Safe Unauthenticated Exit directly back to Login --}}
                             <a href="{{ route('login') }}" class="btn btn-link text-secondary text-decoration-none small p-0">
                                 <i class="bi bi-box-arrow-left me-1"></i>Cancel & Back to Login
                             </a>
@@ -129,15 +135,11 @@
 @push('scripts')
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // Auto-focus first OTP block on load
         const firstBox = document.querySelector('.otp-box[data-index="0"]');
         if (firstBox) setTimeout(() => firstBox.focus(), 150);
-
-        // Setup resend cooldown timer
         setupResendCooldown();
     });
 
-    // --- 6-DIGIT OTP FIELDS CONTROLLERS ---
     function handleOtpInput(input, event) {
         input.value = input.value.replace(/[^0-9]/g, '');
 
@@ -220,7 +222,6 @@
 
 @push('styles')
 <style>
-    /* 6-Digit tall input box parameters */
     .otp-box {
         width: 50px;
         height: 60px;

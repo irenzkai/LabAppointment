@@ -24,38 +24,38 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request): RedirectResponse
     {
-        // 1. Validate and Authenticate credentials
+        // 1. Validate and Authenticate credentials (Email or Mobile Number)
         try {
             $request->authenticate();
         } catch (\Illuminate\Validation\ValidationException $e) {
             if ($e->errors() && isset($e->errors()['deactivated'])) {
-                // Redirect them to the reactivation route with a notice!
+                // Redirect deactivated users to the reactivation route with a notice
                 return redirect()->route('reactivate.notice');
             }
             throw $e;
         }
 
-        // 2. Security Check: Ensure the account hasn't been disabled by an Admin
-        if (!Auth::user()->is_active) {
+        // 2. Security Check: Ensure the account hasn't been suspended by an Administrator
+        if (! Auth::user()->is_active) {
             Auth::logout();
             return back()->withErrors([
                 'email' => 'This account has been disabled by the administrator.',
             ]);
         }
 
-        // 3. Success: Regenerate session to prevent fixation
+        // 3. Success: Regenerate session to prevent session fixation attacks
         $request->session()->regenerate();
 
         /**
          * 4. Redirect based on verification status
-         * If the user is unverified, bypass the intended main menu and redirect
-         * them straight to the email verification notice screen.
+         * If the user has neither email nor phone verified, redirect them straight 
+         * to the verification notice screen to complete account activation.
          */
         if (Auth::user() instanceof \Illuminate\Contracts\Auth\MustVerifyEmail && ! Auth::user()->hasVerifiedEmail()) {
             return redirect()->route('verification.notice');
         }
 
-        // Clear stale intended URLs to ensure newly verified accounts land cleanly on the main menu
+        // Clear stale intended URLs to ensure verified accounts land cleanly on the main portal
         $request->session()->forget('url.intended');
 
         return redirect()->route('main');
@@ -66,10 +66,19 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        $userId = Auth::id();
+
         Auth::guard('web')->logout();
 
-        $request->session()->invalidate();
+        // Clear verification and reactivation session states
+        $request->session()->forget([
+            'reactivate_user_id',
+            'email_otp_code',
+            'sms_otp_code',
+            'sms_otp_phone'
+        ]);
 
+        $request->session()->invalidate();
         $request->session()->regenerateToken();
 
         // Allow custom redirect targets on logout to support smooth account transitions

@@ -2,6 +2,19 @@
 
 @section('title', 'Verify Account')
 
+@php
+$user = Auth::user();
+$emailConflict = \App\Models\User::where('id', '!=', $user->id)
+    ->where('email', strtolower(trim($user->email)))
+    ->whereNotNull('email_verified_at')
+    ->exists();
+
+$phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $user->id)
+    ->where('phone', trim($user->phone))
+    ->whereNotNull('phone_verified_at')
+    ->exists();
+@endphp
+
 @section('content')
 <div class="row justify-content-center align-items-center min-vh-80 animate-page">
     <div class="col-12 col-lg-11 col-xl-10">
@@ -43,6 +56,38 @@
                             <h2 class="text-main fw-800 mb-1 uppercase tracking-tighter" style="font-size: 1.85rem;" id="header-title">Account Activation</h2>
                             <p class="text-muted small mb-0" id="header-subtitle">Choose how you would like to securely verify and unlock your clinical profile.</p>
                         </div>
+
+                        {{-- Account Conflict Notice: Email verified on another account --}}
+                        @if($emailConflict)
+                            <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 p-3 mb-4 rounded-3 shadow-sm text-start">
+                                <div class="d-flex align-items-center mb-1 text-danger fw-bold uppercase small">
+                                    <i class="bi bi-exclamation-octagon-fill me-2 fs-5"></i> Email Address Conflict
+                                </div>
+                                <div class="small text-main mb-2">
+                                    The email address <strong>{{ $user->email }}</strong> has already been claimed and verified by another active account. Because credentials are used for authentication, this email cannot be verified here.
+                                </div>
+                                <div class="d-flex flex-wrap gap-2 mt-2">
+                                    <button type="button" class="btn btn-sm btn-outline-danger uppercase fw-bold py-1 px-3" onclick="toggleChangeEmailForm(true)">
+                                        <i class="bi bi-pencil-square me-1"></i> Change Email
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary uppercase fw-bold py-1 px-3" data-bs-toggle="modal" data-bs-target="#deactivateAccountModal">
+                                        <i class="bi bi-trash me-1"></i> Deactivate This Profile
+                                    </button>
+                                </div>
+                            </div>
+                        @endif
+
+                        {{-- Account Conflict Notice: Phone verified on another account --}}
+                        @if($phoneConflict)
+                            <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 p-3 mb-4 rounded-3 shadow-sm text-start">
+                                <div class="d-flex align-items-center mb-1 text-danger fw-bold uppercase small">
+                                    <i class="bi bi-telephone-x-fill me-2 fs-5"></i> Phone Number Conflict
+                                </div>
+                                <div class="small text-main mb-1">
+                                    The mobile number <strong>{{ $user->phone }}</strong> is already verified on another active account. SMS verification is disabled for this number.
+                                </div>
+                            </div>
+                        @endif
 
                         {{-- Dynamic In-Page Status Notification Banner --}}
                         <div id="dynamic-status-alert" class="alert alert-clinical d-flex align-items-center mb-4 shadow-sm {{ session('status') ? '' : 'd-none' }}" style="background-color: rgba(25, 211, 140, 0.05); border-left: 4px solid #19D38C !important; border-radius: 8px;">
@@ -98,8 +143,8 @@
 
                             <form id="resend-link-form" onsubmit="handleLinkDispatch(event)">
                                 @csrf
-                                <button id="resend-link-btn" type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm uppercase">
-                                    SEND ACTIVATION EMAIL LINK
+                                <button id="resend-link-btn" type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm uppercase" {{ $emailConflict ? 'disabled' : '' }}>
+                                    {{ $emailConflict ? 'EMAIL BLOCKED (CONFLICT)' : 'SEND ACTIVATION EMAIL LINK' }}
                                 </button>
                             </form>
 
@@ -112,15 +157,20 @@
                         </div>
 
                         {{-- =========================================================================
-                             VIEW 2: METHOD SELECTOR (GOOGLE-STYLE ALTERNATIVE LIST)
+                             VIEW 2: METHOD SELECTOR (ALTERNATIVE LIST)
                              ========================================================================= --}}
                         <div id="view_selector" class="verification-view d-none">
                             <div class="d-flex flex-column gap-2.5 mb-4">
                                 {{-- Pathway 1: Link --}}
-                                <button type="button" class="btn verify-card p-3 text-start w-100" onclick="switchVerificationView('link')">
+                                <button type="button" class="btn verify-card p-3 text-start w-100 {{ $emailConflict ? 'opacity-75' : '' }}" onclick="switchVerificationView('link')">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <div>
-                                            <div class="fw-bold fs-6 uppercase text-main">1. Email Verification Link</div>
+                                            <div class="fw-bold fs-6 uppercase text-main">
+                                                1. Email Verification Link
+                                                @if($emailConflict)
+                                                    <span class="badge bg-danger ms-1" style="font-size: 0.6rem;">Conflict</span>
+                                                @endif
+                                            </div>
                                             <div class="x-small text-muted">Receive a cryptographic, one-click sign-off URL.</div>
                                         </div>
                                         <i class="bi bi-link-45deg fs-3 text-accent"></i>
@@ -128,10 +178,15 @@
                                 </button>
 
                                 {{-- Pathway 2: Email OTP --}}
-                                <button type="button" class="btn verify-card p-3 text-start w-100" onclick="switchVerificationView('email_otp')">
+                                <button type="button" class="btn verify-card p-3 text-start w-100 {{ $emailConflict ? 'opacity-75' : '' }}" onclick="switchVerificationView('email_otp')">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <div>
-                                            <div class="fw-bold fs-6 uppercase text-main">2. Email Verification Code</div>
+                                            <div class="fw-bold fs-6 uppercase text-main">
+                                                2. Email Verification Code
+                                                @if($emailConflict)
+                                                    <span class="badge bg-danger ms-1" style="font-size: 0.6rem;">Conflict</span>
+                                                @endif
+                                            </div>
                                             <div class="x-small text-muted">Submit a 6-digit One-Time Password sent to your inbox.</div>
                                         </div>
                                         <i class="bi bi-envelope-check fs-3 text-accent"></i>
@@ -139,15 +194,22 @@
                                 </button>
 
                                 {{-- Pathway 3: Mobile SMS OTP --}}
-                                <button type="button" class="btn verify-card p-3 text-start w-100" onclick="switchVerificationView('sms_otp')">
+                                @if(!empty($user->phone))
+                                <button type="button" class="btn verify-card p-3 text-start w-100 {{ $phoneConflict ? 'opacity-75' : '' }}" onclick="switchVerificationView('sms_otp')">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <div>
-                                            <div class="fw-bold fs-6 uppercase text-main">3. Mobile Phone SMS OTP</div>
-                                            <div class="x-small text-muted">Receive a 6-digit text message code on your mobile phone.</div>
+                                            <div class="fw-bold fs-6 uppercase text-main">
+                                                3. Mobile Phone SMS OTP
+                                                @if($phoneConflict)
+                                                    <span class="badge bg-danger ms-1" style="font-size: 0.6rem;">Conflict</span>
+                                                @endif
+                                            </div>
+                                            <div class="x-small text-muted">Receive a 6-digit text message code on your mobile phone ({{ $user->phone }}).</div>
                                         </div>
                                         <i class="bi bi-chat-dots-fill fs-3 text-accent"></i>
                                     </div>
                                 </button>
+                                @endif
                             </div>
 
                             <button type="button" class="btn btn-link text-secondary text-decoration-none small w-100 text-center" onclick="switchVerificationView('link')">
@@ -169,14 +231,14 @@
 
                                     <div class="d-flex justify-content-between gap-2 my-3 mx-auto" style="max-width: 330px;">
                                         @for($i = 0; $i < 6; $i++)
-                                            <input type="text" class="form-control otp-box email-otp-box text-center fw-bold fs-3" maxlength="1" data-index="{{ $i }}" oninput="handleOtpBoxInput(this, event, 'email')" onkeydown="handleOtpBoxKeydown(this, event, 'email')">
+                                            <input type="text" inputmode="numeric" pattern="[0-9]*" class="form-control otp-box email-otp-box text-center fw-bold fs-3" maxlength="1" data-index="{{ $i }}" oninput="handleOtpBoxInput(this, event, 'email')" onkeydown="handleOtpBoxKeydown(this, event, 'email')" onpaste="handleOtpBoxPaste(event, 'email')" {{ $emailConflict ? 'disabled' : '' }}>
                                         @endfor
                                     </div>
                                     <input type="hidden" name="otp" id="email_otp_hidden">
                                     <div id="email_otp_error" class="text-danger small mt-1 d-none fw-bold"></div>
                                 </div>
 
-                                <button id="submit-email-otp-btn" type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm uppercase">
+                                <button id="submit-email-otp-btn" type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm uppercase" {{ $emailConflict ? 'disabled' : '' }}>
                                     SUBMIT VERIFICATION CODE
                                 </button>
                             </form>
@@ -185,7 +247,7 @@
                                 <form id="resend-email-otp-form" onsubmit="handleEmailOtpDispatch(event)">
                                     @csrf
                                     <span class="small text-muted">Didn't receive the email code?</span>
-                                    <button id="resend-email-otp-btn" type="submit" class="btn btn-link text-accent fw-bold text-decoration-none p-0 small ms-1 align-baseline" style="font-size: 0.85rem;">
+                                    <button id="resend-email-otp-btn" type="submit" class="btn btn-link text-accent fw-bold text-decoration-none p-0 small ms-1 align-baseline" style="font-size: 0.85rem;" {{ $emailConflict ? 'disabled' : '' }}>
                                         RESEND EMAIL CODE
                                     </button>
                                 </form>
@@ -212,14 +274,14 @@
 
                                     <div class="d-flex justify-content-between gap-2 my-3 mx-auto" style="max-width: 330px;">
                                         @for($i = 0; $i < 6; $i++)
-                                            <input type="text" class="form-control otp-box sms-otp-box text-center fw-bold fs-3" maxlength="1" data-index="{{ $i }}" oninput="handleOtpBoxInput(this, event, 'sms')" onkeydown="handleOtpBoxKeydown(this, event, 'sms')">
+                                            <input type="text" inputmode="numeric" pattern="[0-9]*" class="form-control otp-box sms-otp-box text-center fw-bold fs-3" maxlength="1" data-index="{{ $i }}" oninput="handleOtpBoxInput(this, event, 'sms')" onkeydown="handleOtpBoxKeydown(this, event, 'sms')" onpaste="handleOtpBoxPaste(event, 'sms')" {{ $phoneConflict ? 'disabled' : '' }}>
                                         @endfor
                                     </div>
                                     <input type="hidden" name="otp" id="sms_otp_hidden">
                                     <div id="sms_otp_error" class="text-danger small mt-1 d-none fw-bold"></div>
                                 </div>
 
-                                <button id="submit-sms-otp-btn" type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm uppercase">
+                                <button id="submit-sms-otp-btn" type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm uppercase" {{ $phoneConflict ? 'disabled' : '' }}>
                                     VERIFY SMS CODE
                                 </button>
                             </form>
@@ -228,7 +290,7 @@
                                 <form id="resend-sms-otp-form" onsubmit="handleSmsOtpDispatch(event)">
                                     @csrf
                                     <span class="small text-muted">Didn't receive the SMS code?</span>
-                                    <button id="resend-sms-otp-btn" type="submit" class="btn btn-link text-accent fw-bold text-decoration-none p-0 small ms-1 align-baseline" style="font-size: 0.85rem;">
+                                    <button id="resend-sms-otp-btn" type="submit" class="btn btn-link text-accent fw-bold text-decoration-none p-0 small ms-1 align-baseline" style="font-size: 0.85rem;" {{ $phoneConflict ? 'disabled' : '' }}>
                                         RESEND SMS CODE
                                     </button>
                                 </form>
@@ -250,7 +312,7 @@
                                 <div class="mb-3">
                                     <label class="small text-muted fw-bold mb-1 uppercase">Enter Correct Email Address</label>
                                     <input type="email" name="email" id="new_email_input" class="form-control py-2" placeholder="correct-email@example.com" value="{{ old('email', Auth::user()->email) }}" required>
-                                    <small class="text-muted mt-1 d-block" style="font-size:0.65rem;">Correcting your email updates your clinical profile and resets resend countdowns.</small>
+                                    <small class="text-muted mt-1 d-block" style="font-size:0.65rem;">Correcting your email updates your clinical profile, resolves account conflicts, and resets resend countdowns.</small>
                                 </div>
                                 <div class="d-flex gap-2">
                                     <button type="button" class="btn-custom btn-outline-secondary w-50 py-2.5 small" onclick="toggleChangeEmailForm(false)">CANCEL</button>
@@ -281,6 +343,30 @@
 
             </div>
         </div>
+    </div>
+</div>
+
+{{-- MODAL: DEACTIVATE DUPLICATE ACCOUNT --}}
+<div class="modal fade" id="deactivateAccountModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+        <form method="POST" action="{{ route('profile.destroy') }}" class="modal-content border-danger bg-card text-start p-4">
+            @csrf
+            @method('DELETE')
+            <h5 class="text-danger fw-bold uppercase mb-2">
+                <i class="bi bi-trash-fill me-2"></i>Deactivate Profile?
+            </h5>
+            <p class="small text-muted mb-3">
+                If you already have an existing verified account with this email address, you can safely deactivate this unverified profile to release records and log in to your primary account.
+            </p>
+            <div class="mb-3">
+                <label class="small text-secondary fw-bold mb-1 uppercase">Enter Password to Confirm</label>
+                <input type="password" name="password" class="form-control" placeholder="Account password" required>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-secondary w-50 py-2 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-danger w-50 py-2 fw-bold uppercase">Deactivate Profile</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -378,7 +464,7 @@
         }
     }
 
-    // 4. 6-DIGIT OTP FIELDS HANDLERS
+    // 4. 6-DIGIT OTP FIELDS HANDLERS WITH PASTE SUPPORT
     function handleOtpBoxInput(input, event, channel) {
         input.value = input.value.replace(/[^0-9]/g, '');
         if (input.value.length === 1) {
@@ -405,12 +491,28 @@
         }
     }
 
+    function handleOtpBoxPaste(event, channel) {
+        event.preventDefault();
+        const clipboardData = (event.clipboardData || window.clipboardData).getData('text');
+        const digits = clipboardData.replace(/[^0-9]/g, '').slice(0, 6);
+        if (digits.length > 0) {
+            const boxes = document.querySelectorAll(`.${channel}-otp-box`);
+            digits.split('').forEach((char, index) => {
+                if (boxes[index]) boxes[index].value = char;
+            });
+            compileOtpValue(channel);
+            const nextFocusIndex = Math.min(digits.length, 5);
+            boxes[nextFocusIndex]?.focus();
+        }
+    }
+
     function compileOtpValue(channel) {
         let compiled = '';
         document.querySelectorAll(`.${channel}-otp-box`).forEach(box => {
             compiled += box.value;
         });
-        document.getElementById(`${channel}_otp_hidden`).value = compiled;
+        const hiddenEl = document.getElementById(`${channel}_otp_hidden`);
+        if (hiddenEl) hiddenEl.value = compiled;
         return compiled;
     }
 
@@ -511,7 +613,7 @@
         }
 
         try {
-            await fetch("{{ route('verification.send') }}", {
+            const resp = await fetch("{{ route('verification.send') }}", {
                 method: "POST",
                 headers: {
                     "X-CSRF-TOKEN": "{{ csrf_token() }}",
@@ -519,8 +621,13 @@
                     "X-Requested-With": "XMLHttpRequest"
                 }
             });
-            registerAttempt('link');
-            showDynamicStatus("A fresh verification link has been successfully dispatched to your email address.");
+            const data = await resp.json().catch(() => null);
+            if (resp.status === 422 && data && data.message) {
+                showDynamicStatus(data.message, 'Action Blocked');
+            } else {
+                registerAttempt('link');
+                showDynamicStatus("A fresh verification link has been successfully dispatched to your email address.");
+            }
         } catch (err) {
             registerAttempt('link');
             showDynamicStatus("A fresh verification link has been successfully dispatched to your email address.");
@@ -553,7 +660,7 @@
         }
 
         try {
-            await fetch("{{ route('verification.send-otp') }}", {
+            const resp = await fetch("{{ route('verification.send-otp') }}", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -563,8 +670,13 @@
                 },
                 body: JSON.stringify({ email: "{{ Auth::user()->email }}", channel: 'email' })
             });
-            registerAttempt('email_otp');
-            showDynamicStatus("A secure 6-digit One-Time Password has been dispatched to your email address.");
+            const data = await resp.json().catch(() => null);
+            if (resp.status === 422 && data && data.message) {
+                showDynamicStatus(data.message, 'Action Blocked');
+            } else {
+                registerAttempt('email_otp');
+                showDynamicStatus("A secure 6-digit One-Time Password has been dispatched to your email address.");
+            }
         } catch (err) {
             registerAttempt('email_otp');
             showDynamicStatus("A secure 6-digit One-Time Password has been dispatched to your email address.");
@@ -597,7 +709,7 @@
         }
 
         try {
-            await fetch("{{ route('verification.send-sms-otp') }}", {
+            const resp = await fetch("{{ route('verification.send-sms-otp') }}", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -607,8 +719,13 @@
                 },
                 body: JSON.stringify({ phone: "{{ Auth::user()->phone }}", channel: 'sms' })
             });
-            registerAttempt('sms_otp');
-            showDynamicStatus("A secure 6-digit SMS verification code has been dispatched to your mobile phone.");
+            const data = await resp.json().catch(() => null);
+            if (resp.status === 422 && data && data.message) {
+                showDynamicStatus(data.message, 'Action Blocked');
+            } else {
+                registerAttempt('sms_otp');
+                showDynamicStatus("A secure 6-digit SMS verification code has been dispatched to your mobile phone.");
+            }
         } catch (e) {
             registerAttempt('sms_otp');
             showDynamicStatus("A secure 6-digit SMS verification code has been dispatched to your mobile phone.");
@@ -652,7 +769,6 @@
     }
 
     function evaluateThrottler(channel, btnId, btnDefaultText) {
-        // Prevent overwriting the button while in an active "SENDING..." in-flight state
         if (channel === 'link' && isDispatchingLink) return;
         if (channel === 'email_otp' && isDispatchingEmailOtp) return;
         if (channel === 'sms_otp' && isDispatchingSmsOtp) return;
@@ -730,10 +846,24 @@
         const savedView = localStorage.getItem('active_verify_view') || 'link';
         switchVerificationView(savedView);
         updateAllThrottlerStates();
+
+        // 8. REAL-TIME MULTI-TAB POLLING
+        // If the user clicks a verification link in an external tab or device, automatically route them to main
+        setInterval(async () => {
+            try {
+                const res = await fetch("{{ route('verification.status') }}");
+                const data = await res.json();
+                if (data.verified) {
+                    localStorage.removeItem('active_verify_view');
+                    window.location.href = "{{ route('main') }}";
+                }
+            } catch (e) {}
+        }, 4000);
     });
 </script>
 @endpush
 
+@push('styles')
 <style>
     /* High-contrast Google-style verification selector cards */
     .verify-card {
@@ -771,3 +901,4 @@
         backdrop-filter: blur(2px);
     }
 </style>
+@endpush

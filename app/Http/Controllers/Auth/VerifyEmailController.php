@@ -23,6 +23,26 @@ class VerifyEmailController extends Controller
     public const LUCKY_BYPASS_CODE = '888888';
 
     /**
+     * Normalize the input into a standard 11-digit Philippine mobile format (09XXXXXXXXX).
+     */
+    protected function normalizePhoneNumber(string $phone): string
+    {
+        $digits = preg_replace('/[^0-9]/', '', $phone);
+
+        if (str_starts_with($digits, '639') && strlen($digits) === 12) {
+            return '09' . substr($digits, 3);
+        }
+        if (str_starts_with($digits, '9') && strlen($digits) === 10) {
+            return '09' . $digits;
+        }
+        if (str_starts_with($digits, '09') && strlen($digits) === 11) {
+            return $digits;
+        }
+
+        return $digits;
+    }
+
+    /**
      * Mark the user's email address as verified (Link-based).
      * Validates the cryptographic URL signature so this works across ANY device.
      */
@@ -45,23 +65,35 @@ class VerifyEmailController extends Controller
             ]);
         }
 
-        // 4. Check if already verified
+        // 4. Guard against account conflict: ensure this email is not already verified on another account
+        $emailConflict = User::where('id', '!=', $user->id)
+            ->where('email', strtolower($user->email))
+            ->whereNotNull('email_verified_at')
+            ->exists();
+
+        if ($emailConflict) {
+            return redirect()->route('login')->withErrors([
+                'email' => 'This email address has already been claimed and verified on another active account. Please log in using your other account or update your email address.'
+            ]);
+        }
+
+        // 5. Check if already verified
         if ($user->hasVerifiedEmailOnly()) {
             return redirect()->route('login')->with('status', 'Your email is already verified. Please log in to continue.');
         }
 
-        // 5. Mark only email as verified and dispatch system event
+        // 6. Mark only email as verified and dispatch system event
         if ($user->markEmailAsVerified()) {
             event(new Verified($user));
             ActivityLog::record('EMAIL VERIFIED', 'User verified email via secure link.', $user->name);
         }
 
-        // 6. Clear cached OTP states
+        // 7. Clear cached OTP states
         session()->forget('email_otp_code');
         Cache::forget("email_otp_{$user->id}");
         Cache::forget("email_otp_addr_{$user->id}");
 
-        // 7. If the user happens to be logged in on this same device, log them out cleanly so they re-authenticate with full privileges
+        // 8. If the user happens to be logged in on this same device, log them out cleanly so they re-authenticate with full privileges
         if (Auth::check() && Auth::id() === $user->id) {
             Auth::logout();
             $request->session()->invalidate();
@@ -89,9 +121,9 @@ class VerifyEmailController extends Controller
 
         try {
             $response = Http::timeout(10)->post($endpoint, [
-                'apikey'      => $apiKey,
-                'number'      => $phone,
-                'message'     => $message,
+                'apikey' => $apiKey,
+                'number' => $phone,
+                'message' => $message,
                 'sender_name' => $senderName,
             ]);
 
@@ -108,12 +140,27 @@ class VerifyEmailController extends Controller
     public function sendSmsOtp(Request $request): JsonResponse|RedirectResponse
     {
         $user = $request->user();
-        $phone = $request->input('phone', $user->phone);
+        $rawPhone = $request->input('phone', $user->phone);
 
-        if (empty($phone)) {
+        if (empty($rawPhone)) {
             return response()->json([
                 'success' => false,
                 'message' => 'No phone number provided or registered on file.'
+            ], 422);
+        }
+
+        $phone = $this->normalizePhoneNumber($rawPhone);
+
+        // Check if phone number is already verified on another active account
+        $phoneConflict = User::where('id', '!=', $user->id)
+            ->where('phone', $phone)
+            ->whereNotNull('phone_verified_at')
+            ->exists();
+
+        if ($phoneConflict) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This mobile phone number is already verified on another active account.'
             ], 422);
         }
 
@@ -132,7 +179,7 @@ class VerifyEmailController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'SMS verification code dispatched successfully.',
-                'phone'   => $phone,
+                'phone' => $phone,
             ]);
         }
 
@@ -172,9 +219,29 @@ class VerifyEmailController extends Controller
                 return back()->withErrors(['otp' => 'The entered SMS verification code is incorrect or has expired.']);
             }
 
+            $phoneToVerify = $request->filled('phone') 
+                ? $this->normalizePhoneNumber($request->input('phone')) 
+                : $user->phone;
+
+            // Conflict Guard: Ensure this phone is not already verified on another account
+            $phoneConflict = User::where('id', '!=', $user->id)
+                ->where('phone', $phoneToVerify)
+                ->whereNotNull('phone_verified_at')
+                ->exists();
+
+            if ($phoneConflict) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This mobile phone number has already been verified on another account.'
+                    ], 422);
+                }
+                return back()->withErrors(['phone' => 'This mobile phone number has already been verified on another account.']);
+            }
+
             // Save new phone number if passed during profile update
             if ($request->filled('phone')) {
-                $user->phone = $request->input('phone');
+                $user->phone = $phoneToVerify;
             }
 
             // ONLY mark phone as verified. Do NOT touch email_verified_at!
@@ -190,9 +257,9 @@ class VerifyEmailController extends Controller
 
             if ($request->expectsJson()) {
                 return response()->json([
-                    'success'  => true,
-                    'message'  => 'Your phone number has been successfully verified!',
-                    'phone'    => $user->phone,
+                    'success' => true,
+                    'message' => 'Your phone number has been successfully verified!',
+                    'phone' => $user->phone,
                     'redirect' => route('main', absolute: false)
                 ]);
             }
@@ -202,12 +269,30 @@ class VerifyEmailController extends Controller
         }
 
         // --- 2. EMAIL CHANNEL VERIFICATION (DEFAULT) ---
+        $emailToVerify = strtolower(trim($user->email));
+
+        // Conflict Guard: Ensure this email is not already verified on another account
+        $emailConflict = User::where('id', '!=', $user->id)
+            ->where('email', $emailToVerify)
+            ->whereNotNull('email_verified_at')
+            ->exists();
+
+        if ($emailConflict) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This email address has already been verified on another account. Please change your email address to continue.'
+                ], 422);
+            }
+            return back()->withErrors(['email' => 'This email address has already been verified on another account. Please change your email address to continue.']);
+        }
+
         if ($user->hasVerifiedEmailOnly()) {
             if ($request->expectsJson()) {
                 return response()->json([
-                    'success'  => true,
-                    'message'  => 'Email is already verified.',
-                    'email'    => $user->email,
+                    'success' => true,
+                    'message' => 'Email is already verified.',
+                    'email' => $user->email,
                     'redirect' => route('main', absolute: false)
                 ]);
             }
@@ -241,9 +326,9 @@ class VerifyEmailController extends Controller
 
         if ($request->expectsJson()) {
             return response()->json([
-                'success'  => true,
-                'message'  => 'Your email has been successfully verified!',
-                'email'    => $user->email,
+                'success' => true,
+                'message' => 'Your email has been successfully verified!',
+                'email' => $user->email,
                 'redirect' => route('main', absolute: false)
             ]);
         }
@@ -260,7 +345,7 @@ class VerifyEmailController extends Controller
         $userId = session('reactivate_user_id') ?? Cache::get("reactivate_ip_{$request->ip()}");
 
         if (!$userId && $request->filled('email')) {
-            $userByEmail = User::onlyTrashed()->where('email', $request->input('email'))->first();
+            $userByEmail = User::onlyTrashed()->where('email', strtolower(trim($request->input('email'))))->first();
             $userId = $userByEmail?->id;
         }
 
@@ -271,6 +356,33 @@ class VerifyEmailController extends Controller
         $user = User::onlyTrashed()->find($userId);
         if (!$user) {
             return redirect()->route('login');
+        }
+
+        // Conflict check: if the deactivated account's credentials are verified on another active account
+        $emailConflict = User::where('id', '!=', $user->id)
+            ->where('email', $user->email)
+            ->whereNotNull('email_verified_at')
+            ->exists();
+
+        $phoneConflict = !empty($user->phone) && User::where('id', '!=', $user->id)
+            ->where('phone', $user->phone)
+            ->whereNotNull('phone_verified_at')
+            ->exists();
+
+        if ($emailConflict && $phoneConflict) {
+            session()->forget(['reactivate_user_id', 'email_otp_code']);
+            Cache::forget("reactivate_ip_{$request->ip()}");
+            return redirect()->route('login')->withErrors([
+                'email' => 'This account has been permanently retired because its email address and phone number are already verified on another active account.'
+            ]);
+        }
+
+        if ($emailConflict) {
+            session()->forget(['reactivate_user_id', 'email_otp_code']);
+            Cache::forget("reactivate_ip_{$request->ip()}");
+            return redirect()->route('login')->withErrors([
+                'email' => 'This account cannot be reactivated because its email address has already been claimed and verified by another active account.'
+            ]);
         }
 
         // Automatically dispatch reactivation OTP if one hasn't been generated in this session yet
@@ -292,7 +404,7 @@ class VerifyEmailController extends Controller
         $userId = session('reactivate_user_id') ?? Cache::get("reactivate_ip_{$request->ip()}");
 
         if (!$userId && $request->filled('email')) {
-            $userByEmail = User::onlyTrashed()->where('email', $request->input('email'))->first();
+            $userByEmail = User::onlyTrashed()->where('email', strtolower(trim($request->input('email'))))->first();
             $userId = $userByEmail?->id;
         }
 
@@ -327,9 +439,57 @@ class VerifyEmailController extends Controller
         }
 
         $user = User::onlyTrashed()->findOrFail($userId);
+
+        // Conflict check right before restore
+        $emailConflict = User::where('id', '!=', $user->id)
+            ->where('email', $user->email)
+            ->whereNotNull('email_verified_at')
+            ->exists();
+
+        $phoneConflict = !empty($user->phone) && User::where('id', '!=', $user->id)
+            ->where('phone', $user->phone)
+            ->whereNotNull('phone_verified_at')
+            ->exists();
+
+        if ($emailConflict && $phoneConflict) {
+            session()->forget(['reactivate_user_id', 'email_otp_code']);
+            Cache::forget("email_otp_{$userId}");
+            Cache::forget("reactivate_ip_{$request->ip()}");
+
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This account has been permanently retired because its email address and phone number are already verified on another active account.'
+                ], 422);
+            }
+            return redirect()->route('login')->withErrors([
+                'email' => 'This account has been permanently retired because its email address and phone number are already verified on another active account.'
+            ]);
+        }
+
+        if ($emailConflict) {
+            session()->forget(['reactivate_user_id', 'email_otp_code']);
+            Cache::forget("email_otp_{$userId}");
+            Cache::forget("reactivate_ip_{$request->ip()}");
+
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This account cannot be reactivated because its email address has already been claimed and verified by another active account.'
+                ], 422);
+            }
+            return redirect()->route('login')->withErrors([
+                'email' => 'This account cannot be reactivated because its email address has already been claimed and verified by another active account.'
+            ]);
+        }
+
+        // Successfully reactivating: restore account and mark email as verified (since they completed the OTP)
+        $user->email_verified_at = now();
+        $user->save();
         $user->restore();
 
         ActivityLog::record('ACCOUNT REACTIVATED', $isLuckyBypass ? 'User reactivated profile via master bypass code.' : 'User reactivated their deactivated profile.', $user->name, null);
+
         session()->forget(['reactivate_user_id', 'email_otp_code']);
         Cache::forget("email_otp_{$userId}");
         Cache::forget("reactivate_ip_{$request->ip()}");
@@ -338,8 +498,8 @@ class VerifyEmailController extends Controller
             $token = $user->createToken('mobile-patient-token')->plainTextToken;
             return response()->json([
                 'success' => true,
-                'token'   => $token,
-                'user'    => $user,
+                'token' => $token,
+                'user' => $user,
                 'message' => 'Welcome back! Your account has been reactivated.',
             ]);
         }

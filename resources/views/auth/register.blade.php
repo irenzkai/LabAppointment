@@ -175,7 +175,7 @@
                                     <div class="col-12">
                                         <label class="small text-muted fw-bold mb-1">EMAIL ADDRESS</label>
                                         <input type="email" name="email" class="form-control" placeholder="name@domain.com" value="{{ old('email', $promotedDependent?->email ?? '') }}" required>
-                                        <small class="text-muted mt-1 d-block" style="font-size: 0.65rem;">Email must contain a valid domain (e.g., name@domain.com or user@online.htcgsc.edu.ph).</small>
+                                        <small class="text-muted mt-1 d-block" style="font-size: 0.65rem;">Email must contain a valid domain (e.g., name@domain.com). You will verify this email to unlock your account.</small>
                                     </div>
                                     <div class="col-12">
                                         <label class="small text-muted fw-bold mb-1">PHONE NUMBER</label>
@@ -184,7 +184,7 @@
                                             <input type="text" id="phone_display" class="form-control" placeholder="171234567" maxlength="9" oninput="this.value = this.value.replace(/[^0-9]/g, ''); syncPhoneNumber()" required>
                                         </div>
                                         <input type="hidden" name="phone" id="phone_hidden" value="{{ old('phone', $promotedDependent?->phone ?? '') }}">
-                                        <small class="text-muted mt-1 d-block" style="font-size: 0.65rem;">Enter the remaining 9 digits of your mobile number.</small>
+                                        <small class="text-muted mt-1 d-block" style="font-size: 0.65rem;">Enter the remaining 9 digits of your mobile number (09XXXXXXXXX). Phone number must not be already verified on another account.</small>
                                     </div>
                                 </div>
                                 <div class="d-flex gap-2 mt-4">
@@ -225,7 +225,7 @@
                                 </div>
                                 <div class="d-flex gap-2 mt-4">
                                     <button type="button" class="btn-custom btn-outline-secondary w-50 py-3" onclick="goToStep(3, false)">BACK</button>
-                                    <button type="submit" class="btn-custom btn-accent w-50 py-3">FINALIZE</button>
+                                    <button id="register-submit-btn" type="submit" class="btn-custom btn-accent w-50 py-3 fw-bold shadow-sm">FINALIZE</button>
                                 </div>
                             </div>
                         </form>
@@ -253,6 +253,25 @@ const safeStorage = {
 };
 
 const isPromotedAccount = {{ isset($promotedDependent) ? 'true' : 'false' }};
+let isRegisterSubmitting = false;
+
+// --- PASSWORD VISIBILITY TOGGLE HELPER ---
+function setupPasswordToggle(inputSelector, toggleSelector) {
+    const input = document.querySelector(inputSelector);
+    const icon = document.querySelector(toggleSelector);
+    if (input && icon) {
+        const toggleBtn = icon.closest('.input-group-text') || icon;
+        toggleBtn.addEventListener('click', () => {
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.replace('bi-eye', 'bi-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.replace('bi-eye-slash', 'bi-eye');
+            }
+        });
+    }
+}
 
 // --- DYNAMIC MULTI-POINT NAME VALIDATOR ---
 function validateName(value) {
@@ -450,7 +469,7 @@ function goToStep(step, validate = true) {
 
 // --- REAL-TIME DRAFT STATE SAVE ---
 function saveDraft() {
-    if (isPromotedAccount) return; // Never overwrite shadow/promoted parameters with stale client drafts
+    if (isPromotedAccount) return;
     const form = document.getElementById('multiStepForm');
     if (!form) return;
     const draftData = {};
@@ -661,12 +680,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    const savedStep = isPromotedAccount ? 1 : safeStorage.getItem('register_step');
-    if (savedStep) {
-        goToStep(parseInt(savedStep), false);
-    } else {
+    // Auto-navigate to step with validation errors if present
+    @if ($errors->has('email') || $errors->has('phone'))
+        goToStep(3, false);
+    @elseif ($errors->has('password') || $errors->has('password_confirmation'))
+        goToStep(4, false);
+    @elseif ($errors->has('province') || $errors->has('city') || $errors->has('barangay') || $errors->has('street'))
+        goToStep(2, false);
+    @elseif ($errors->any())
         goToStep(1, false);
-    }
+    @else
+        const savedStep = isPromotedAccount ? 1 : safeStorage.getItem('register_step');
+        if (savedStep) {
+            goToStep(parseInt(savedStep), false);
+        } else {
+            goToStep(1, false);
+        }
+    @endif
 
     if (form) {
         form.addEventListener('keydown', function(e) {
@@ -684,6 +714,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         form.addEventListener('submit', function(e) {
+            if (isRegisterSubmitting) {
+                e.preventDefault();
+                return false;
+            }
+
             const current = document.querySelector(`.reg-section:not(.d-none)`);
             const currentStep = current ? parseInt(current.id.split('-')[1]) : 4;
             if (currentStep === 4) {
@@ -732,9 +767,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return false;
                 }
             }
+
+            // Lock submit button to prevent double-submit and brute force spam
+            isRegisterSubmitting = true;
+            const submitBtn = document.getElementById('register-submit-btn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.style.pointerEvents = 'none';
+                submitBtn.classList.add('disabled', 'opacity-75');
+                submitBtn.innerHTML = 'FINALIZING REGISTRATION... <span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>';
+            }
+
             compileRegisterAddress();
             safeStorage.removeItem('register_draft');
             safeStorage.removeItem('register_step');
+            return true;
         });
     }
 
@@ -745,4 +792,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 });
 </script>
+@endpush
+
+@push('styles')
+<style>
+    #register-submit-btn:disabled {
+        cursor: not-allowed !important;
+    }
+</style>
 @endpush

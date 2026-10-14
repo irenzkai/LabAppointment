@@ -19,6 +19,7 @@ class EmailVerificationNotificationController extends Controller
     public function store(Request $request): RedirectResponse|JsonResponse
     {
         $user = $request->user();
+        $targetEmail = strtolower(trim($user->email));
 
         // Only block if the EMAIL itself has already been verified
         if (!is_null($user->email_verified_at)) {
@@ -26,6 +27,21 @@ class EmailVerificationNotificationController extends Controller
                 return response()->json(['message' => 'Email is already verified.']);
             }
             return redirect()->intended(route('main', absolute: false));
+        }
+
+        // Conflict check: Ensure email is not verified on another active account
+        $emailConflict = User::where('id', '!=', $user->id)
+            ->where('email', $targetEmail)
+            ->whereNotNull('email_verified_at')
+            ->exists();
+
+        if ($emailConflict) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'message' => 'This email address has already been claimed and verified by another active account.'
+                ], 422);
+            }
+            return back()->withErrors(['email' => 'This email address has already been claimed and verified by another active account.']);
         }
 
         try {
@@ -63,6 +79,22 @@ class EmailVerificationNotificationController extends Controller
             return redirect()->intended(route('main', absolute: false));
         }
 
+        // Conflict check: Ensure email is not verified on another active account
+        $emailConflict = User::where('id', '!=', $user->id)
+            ->where('email', $email)
+            ->whereNotNull('email_verified_at')
+            ->exists();
+
+        if ($emailConflict) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This email address has already been claimed and verified by another active account.'
+                ], 422);
+            }
+            return back()->withErrors(['email' => 'This email address has already been claimed and verified by another active account.']);
+        }
+
         // 1. Generate 6-digit OTP code and store in BOTH Session and Cache
         // Storing in Cache by User ID guarantees availability for stateless mobile Bearer tokens
         $otp = (string) rand(100000, 999999);
@@ -79,33 +111,33 @@ class EmailVerificationNotificationController extends Controller
         if ($isReactivation) {
             $subject = 'Your Email Reactivation Code - Medscreen';
             $messageBody = "
-            <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>You are receiving this email because you have requested to update the registered email address on your Medscreen profile.</p>
-            <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To reactivate your portal and confirm this change, please enter the following 6-digit verification code:</p>
-            ";
+<p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>You are receiving this email because you have requested to update the registered email address on your Medscreen profile.</p>
+<p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To reactivate your portal and confirm this change, please enter the following 6-digit verification code:</p>
+";
         } else {
             $subject = 'Your Account Activation Code - Medscreen';
             $messageBody = "
-            <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Thank you for creating an account with Medscreen Diagnostic Laboratory.</p>
-            <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To activate your clinical portal using One-Time Password verification, please enter the following 6-digit verification code:</p>
-            ";
+<p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Thank you for creating an account with Medscreen Diagnostic Laboratory.</p>
+<p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To activate your clinical portal using One-Time Password verification, please enter the following 6-digit verification code:</p>
+";
         }
 
         // 2. Dispatch the clinical OTP email template
         $htmlContent = "
-        <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
-            <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
-                <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
-            </div>
-            <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
-                <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$firstName},</h3>
-                {$messageBody}
-                <div style='text-align: center; margin: 30px 0;'>
-                    <span style='background-color: #f8fafc; border: 2px solid #19D38C; color: #1c232d; font-family: monospace; font-size: 32px; font-weight: 800; padding: 15px 30px; border-radius: 8px; letter-spacing: 5px; display: inline-block;'>{$otp}</span>
-                </div>
-                <p style='line-height: 1.6; color: #718096; font-size: 12px; margin-top: 30px;'>This code is valid for 15 minutes. If you did not request this, no action is required.</p>
-                <p style='line-height: 1.6; color: #4a5568; font-size: 15px; margin-top: 30px;'>Best regards,<br><strong>Medscreen Support Team</strong></p>
-            </div>
-        </div>";
+<div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
+<div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
+<span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
+</div>
+<div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
+<h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$firstName},</h3>
+{$messageBody}
+<div style='text-align: center; margin: 30px 0;'>
+<span style='background-color: #f8fafc; border: 2px solid #19D38C; color: #1c232d; font-family: monospace; font-size: 32px; font-weight: 800; padding: 15px 30px; border-radius: 8px; letter-spacing: 5px; display: inline-block;'>{$otp}</span>
+</div>
+<p style='line-height: 1.6; color: #718096; font-size: 12px; margin-top: 30px;'>This code is valid for 15 minutes. If you did not request this, no action is required.</p>
+<p style='line-height: 1.6; color: #4a5568; font-size: 15px; margin-top: 30px;'>Best regards,<br><strong>Medscreen Support Team</strong></p>
+</div>
+</div>";
 
         try {
             Mail::html($htmlContent, function ($message) use ($email, $subject) {
@@ -145,7 +177,7 @@ class EmailVerificationNotificationController extends Controller
         $userId = session('reactivate_user_id') ?? Cache::get("reactivate_ip_{$request->ip()}");
 
         if (!$userId && $request->filled('email')) {
-            $userByEmail = User::onlyTrashed()->where('email', $request->input('email'))->first();
+            $userByEmail = User::onlyTrashed()->where('email', strtolower(trim($request->input('email'))))->first();
             $userId = $userByEmail?->id;
         }
 
@@ -160,6 +192,50 @@ class EmailVerificationNotificationController extends Controller
         }
 
         $user = User::onlyTrashed()->findOrFail($userId);
+
+        // Conflict check: if the deactivated account's credentials are now verified on another active account
+        $emailConflict = User::where('id', '!=', $user->id)
+            ->where('email', $user->email)
+            ->whereNotNull('email_verified_at')
+            ->exists();
+
+        $phoneConflict = !empty($user->phone) && User::where('id', '!=', $user->id)
+            ->where('phone', $user->phone)
+            ->whereNotNull('phone_verified_at')
+            ->exists();
+
+        if ($emailConflict && $phoneConflict) {
+            session()->forget(['reactivate_user_id', 'email_otp_code']);
+            Cache::forget("reactivate_ip_{$request->ip()}");
+            Cache::forget("email_otp_{$user->id}");
+
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This account has been permanently retired because its email address and phone number are already verified on another active account.'
+                ], 422);
+            }
+            return redirect()->route('login')->withErrors([
+                'email' => 'This account has been permanently retired because its email address and phone number are already verified on another active account.'
+            ]);
+        }
+
+        if ($emailConflict) {
+            session()->forget(['reactivate_user_id', 'email_otp_code']);
+            Cache::forget("reactivate_ip_{$request->ip()}");
+            Cache::forget("email_otp_{$user->id}");
+
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This account cannot be reactivated because its email address has already been claimed and verified by another active account.'
+                ], 422);
+            }
+            return redirect()->route('login')->withErrors([
+                'email' => 'This account cannot be reactivated because its email address has already been claimed and verified by another active account.'
+            ]);
+        }
+
         $otp = (string) rand(100000, 999999);
         session()->put('email_otp_code', $otp);
         Cache::put("email_otp_{$user->id}", $otp, now()->addMinutes(15));
@@ -171,21 +247,21 @@ class EmailVerificationNotificationController extends Controller
         $firstName = ucwords(strtolower($user->first_name ?: $user->name));
         $subject = 'Reactivate Your Medscreen Account';
         $htmlContent = "
-        <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
-            <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
-                <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
-            </div>
-            <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
-                <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$firstName},</h3>
-                <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Welcome back! We received a request to reactivate your deactivated Medscreen account.</p>
-                <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To confirm your identity, please enter this 6-digit verification code:</p>
-                <div style='text-align: center; margin: 30px 0;'>
-                    <span style='background-color: #f8fafc; border: 2px solid #19D38C; color: #1c232d; font-family: monospace; font-size: 32px; font-weight: 800; padding: 15px 30px; border-radius: 8px; letter-spacing: 5px; display: inline-block;'>{$otp}</span>
-                </div>
-                <p style='line-height: 1.6; color: #718096; font-size: 12px; margin-top: 30px;'>This code is valid for 15 minutes.</p>
-                <p style='line-height: 1.6; color: #4a5568; font-size: 15px; margin-top: 30px;'>Best regards,<br><strong>Medscreen Support Team</strong></p>
-            </div>
-        </div>";
+<div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
+<div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
+<span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
+</div>
+<div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
+<h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$firstName},</h3>
+<p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Welcome back! We received a request to reactivate your deactivated Medscreen account.</p>
+<p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>To confirm your identity, please enter this 6-digit verification code:</p>
+<div style='text-align: center; margin: 30px 0;'>
+<span style='background-color: #f8fafc; border: 2px solid #19D38C; color: #1c232d; font-family: monospace; font-size: 32px; font-weight: 800; padding: 15px 30px; border-radius: 8px; letter-spacing: 5px; display: inline-block;'>{$otp}</span>
+</div>
+<p style='line-height: 1.6; color: #718096; font-size: 12px; margin-top: 30px;'>This code is valid for 15 minutes.</p>
+<p style='line-height: 1.6; color: #4a5568; font-size: 15px; margin-top: 30px;'>Best regards,<br><strong>Medscreen Support Team</strong></p>
+</div>
+</div>";
 
         try {
             Mail::html($htmlContent, function ($message) use ($email, $subject) {

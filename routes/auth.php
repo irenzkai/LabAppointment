@@ -13,30 +13,40 @@ use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
+    // Registration
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');
-    Route::post('register', [RegisteredUserController::class, 'store']);
+    Route::post('register', [RegisteredUserController::class, 'store'])
+        ->middleware('throttle:6,1');
 
+    // Authentication (Sign In via Verified Email or Phone)
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
-    Route::post('login', [AuthenticatedSessionController::class, 'store']);
+    Route::post('login', [AuthenticatedSessionController::class, 'store'])
+        ->middleware('throttle:10,1');
 
+    // Password Recovery
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');
     Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])
+        ->middleware('throttle:5,1')
         ->name('password.email');
 
+    // Password Reset Submission
     Route::get('reset-password/{token}', [NewPasswordController::class, 'create'])
         ->name('password.reset');
     Route::post('reset-password', [NewPasswordController::class, 'store'])
+        ->middleware('throttle:6,1')
         ->name('password.store');
 
     // --- CUSTOM UNAUTHENTICATED ACCOUNT REACTIVATION BOUNDARIES ---
     Route::get('reactivate', [VerifyEmailController::class, 'reactivateNotice'])
         ->name('reactivate.notice');
     Route::post('reactivate/verify-otp', [VerifyEmailController::class, 'verifyReactivationOtp'])
+        ->middleware('throttle:6,1')
         ->name('reactivate.verify-otp');
     Route::post('reactivate/resend-otp', [EmailVerificationNotificationController::class, 'sendReactivationOtp'])
+        ->middleware('throttle:3,1')
         ->name('reactivate.send-otp');
 });
 
@@ -51,42 +61,52 @@ Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
     ->name('verification.verify');
 
 Route::middleware('auth')->group(function () {
-    // 1. Core Verification Prompt (Renders your verify-account view)
+    // 1. Core Verification Prompt (Renders the unified verification hub)
     Route::get('verify-email', EmailVerificationPromptController::class)
         ->name('verification.notice');
 
     // 2. Link-based Email Resend
     Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])
+        ->middleware('throttle:5,1')
         ->name('verification.send');
 
-    // 3. OTP-based Email Verification submit endpoint
+    // 3. OTP-based Email/Phone Verification submit endpoint
     Route::post('verify-otp', [VerifyEmailController::class, 'verifyOtp'])
+        ->middleware('throttle:6,1')
         ->name('verification.verify-otp');
 
     // 4. OTP-based Email Resend endpoint
     Route::post('email/verification-otp', [EmailVerificationNotificationController::class, 'sendOtp'])
+        ->middleware('throttle:5,1')
         ->name('verification.send-otp');
 
     // 5. SMS OTP Resend / Dispatch endpoint
     Route::post('sms/verification-otp', [VerifyEmailController::class, 'sendSmsOtp'])
+        ->middleware('throttle:3,1')
         ->name('verification.send-sms-otp');
 
     // 6. Email change adjustment for unverified users
     Route::post('email/change', [ProfileController::class, 'changeUnverifiedEmail'])
+        ->middleware('throttle:6,1')
         ->name('verification.change-email');
 
-    // 7. Session Polling Status Endpoint for browser redirect sync
+    // 7. Session Polling Status Endpoint for real-time external link verification detection
     Route::get('/api/verification-status', function () {
         return response()->json([
             'verified' => auth()->user() ? auth()->user()->hasVerifiedEmail() : false
         ]);
     })->name('verification.status');
 
+    // Password Confirmation
     Route::get('confirm-password', [ConfirmablePasswordController::class, 'show'])
         ->name('password.confirm');
     Route::post('confirm-password', [ConfirmablePasswordController::class, 'store']);
 
-    Route::put('password', [PasswordController::class, 'update'])->name('password.update');
+    // Authenticated Password Update
+    Route::put('password', [PasswordController::class, 'update'])
+        ->name('password.update');
+
+    // Session Termination (Logout)
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
         ->name('logout');
 });

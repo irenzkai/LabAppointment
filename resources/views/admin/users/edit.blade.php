@@ -139,11 +139,11 @@
                                 <i class="bi bi-shield-lock me-1"></i>3. Access Role & Account Verification
                             </h6>
 
-                            {{-- Real-time Verification Badges & Quick Action Triggers --}}
+                            {{-- Real-time Current Verification Status Badges --}}
                             <div class="p-3 rounded border border-secondary border-opacity-25 bg-secondary bg-opacity-10 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
                                 <div class="d-flex align-items-center gap-3">
                                     <div>
-                                        <span class="d-block smaller text-muted uppercase fw-bold" style="font-size: 0.65rem;">Email Verification:</span>
+                                        <span class="d-block smaller text-muted uppercase fw-bold" style="font-size: 0.65rem;">Current Email Status:</span>
                                         @if($user->email_verified_at)
                                             <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2.5 small fw-bold">
                                                 <i class="bi bi-patch-check-fill me-1"></i>VERIFIED ({{ \Carbon\Carbon::parse($user->email_verified_at)->format('M d, Y') }})
@@ -155,7 +155,7 @@
                                         @endif
                                     </div>
                                     <div class="border-start border-secondary border-opacity-25 ps-3">
-                                        <span class="d-block smaller text-muted uppercase fw-bold" style="font-size: 0.65rem;">Phone Verification:</span>
+                                        <span class="d-block smaller text-muted uppercase fw-bold" style="font-size: 0.65rem;">Current Phone Status:</span>
                                         @if($user->phone_verified_at)
                                             <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2.5 small fw-bold">
                                                 <i class="bi bi-patch-check-fill me-1"></i>VERIFIED ({{ \Carbon\Carbon::parse($user->phone_verified_at)->format('M d, Y') }})
@@ -167,19 +167,10 @@
                                         @endif
                                     </div>
                                 </div>
-
-                                {{-- Quick Master Override Buttons --}}
-                                <div class="d-flex gap-2">
-                                    <button type="button" class="btn btn-sm btn-outline-danger uppercase fw-bold py-1 px-2.5" style="font-size: 0.7rem;" onclick="setVerificationActions('unverify_both')">
-                                        <i class="bi bi-slash-circle me-1"></i>Unverify Both
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-outline-accent uppercase fw-bold py-1 px-2.5" style="font-size: 0.7rem;" onclick="setVerificationActions('verify_both')">
-                                        <i class="bi bi-check-all me-1"></i>Verify Both
-                                    </button>
-                                </div>
                             </div>
 
                             <div class="row g-3 mb-4">
+                                {{-- Access Role --}}
                                 <div class="col-md-4">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Role / Access Level</label>
                                     <select name="role" id="role" class="form-select" required>
@@ -189,51 +180,55 @@
                                     </select>
                                     <div class="invalid-feedback d-none" id="err_role"></div>
                                 </div>
-                                <div class="col-md-4">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">Email Address</label>
-                                    <input type="email" name="email" id="email" class="form-control" value="{{ old('email', $user->email) }}" required>
-                                    <div class="invalid-feedback d-none" id="err_email"></div>
-                                </div>
 
-                                {{-- Entire Account Scope Option --}}
+                                {{-- Email Address --}}
                                 <div class="col-md-4">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">Account Verification Override</label>
-                                    <select name="verification_scope" id="verification_scope" class="form-select" onchange="handleVerificationScopeChange(this.value)">
-                                        <option value="custom" selected>-- Specific / Custom Actions --</option>
-                                        <option value="unverify_account">Unverify Entire Account (Email & Phone)</option>
-                                        <option value="verify_account">Verify Entire Account (Email & Phone)</option>
-                                    </select>
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">
+                                        Email Address
+                                        <span id="email_changed_badge" class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-0.5 px-1.5 ms-1 d-none" style="font-size: 0.65rem;">Modified</span>
+                                    </label>
+                                    <input type="email" name="email" id="email" class="form-control" value="{{ old('email', $user->email) }}" oninput="updateEmailState();" required>
+                                    <div class="invalid-feedback d-none" id="err_email"></div>
                                 </div>
 
                                 {{-- Specific Email Action --}}
                                 <div class="col-md-4">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">Email Verification Action</label>
-                                    <select name="email_action" id="email_action" class="form-select">
-                                        <option value="" selected>-- Keep Current Email Status --</option>
-                                        <option value="verify_now">Mark Email as Verified</option>
-                                        <option value="unverify">Mark Email as Unverified</option>
-                                        <option value="send_notification">Send Verification Link to Email</option>
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">Email Action</label>
+                                    <select name="email_action" id="email_action" class="form-select" onchange="handleEmailActionChange(this.value)">
+                                        {{-- Populated dynamically via JS --}}
                                     </select>
+
+                                    {{-- If unverified, option to send verification link --}}
+                                    <div id="email_link_checkbox_wrapper" class="form-check mt-2 d-none">
+                                        <input class="form-check-input" type="checkbox" name="send_verification_link" id="send_verification_link" value="1" {{ old('send_verification_link', '1') === '1' ? 'checked' : '' }}>
+                                        <label class="form-check-label smaller text-secondary fw-bold" for="send_verification_link" style="font-size: 0.75rem;">
+                                            Send verification link to email
+                                        </label>
+                                    </div>
                                 </div>
 
                                 {{-- Specific Phone Action --}}
-                                <div class="col-md-4">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">Phone Verification Action</label>
+                                <div class="col-md-6">
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">
+                                        Phone Action
+                                        <span id="phone_changed_badge" class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-0.5 px-1.5 ms-1 d-none" style="font-size: 0.65rem;">Modified</span>
+                                    </label>
                                     <select name="phone_action" id="phone_action" class="form-select">
-                                        <option value="" selected>-- Keep Current Phone Status --</option>
-                                        <option value="verify_now">Mark Phone as Verified</option>
-                                        <option value="unverify">Mark Phone as Unverified</option>
+                                        {{-- Populated dynamically via JS --}}
                                     </select>
                                 </div>
 
                                 {{-- Password Modifications --}}
-                                <div class="col-md-4">
+                                <div class="col-md-6">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Password Modifications</label>
                                     <select name="password_option" id="pass_opt" class="form-select" onchange="toggleManualPass(this.value)">
                                         <option value="" selected>-- Choose Option (Optional) --</option>
-                                        <option value="send_link">Send Password Reset Link</option>
+                                        <option value="send_link" id="opt_send_link">Send Password Reset Link</option>
                                         <option value="manual">Manually Set Password</option>
                                     </select>
+                                    <small class="text-muted d-none mt-1" id="pass_reset_link_notice" style="font-size:0.75rem;">
+                                        <i class="bi bi-info-circle me-1"></i>Password reset link is disabled because the email address is unverified.
+                                    </small>
                                 </div>
 
                                 <div id="manual_pass_wrapper" class="col-12 d-none">
@@ -538,40 +533,194 @@ const savedProv = "{{ $user->province }}";
 const savedCity = "{{ $user->city }}";
 const savedBrgy = "{{ $user->barangay }}";
 
+const originalEmail = "{{ strtolower(trim($user->email)) }}";
+const originalPhone = "{{ trim($user->phone) }}";
+const isOriginalEmailVerified = {{ $user->email_verified_at ? 'true' : 'false' }};
+const isOriginalPhoneVerified = {{ $user->phone_verified_at ? 'true' : 'false' }};
+
+const oldEmailAction = "{{ old('email_action', '') }}";
+const oldPhoneAction = "{{ old('phone_action', '') }}";
+const oldPassOpt = "{{ old('password_option', '') }}";
+const oldSendLink = "{{ old('send_verification_link', '1') }}";
+
 function syncEditPhone() {
     const display = document.getElementById('phone_display');
     const hidden = document.getElementById('in_phone');
     if (display && hidden) {
         hidden.value = display.value ? '09' + display.value.trim() : '';
         clearFieldError(display);
+        updatePhoneState();
     }
 }
 
-function handleVerificationScopeChange(val) {
+function updateEmailState() {
+    const emailInput = document.getElementById('email');
     const emailAction = document.getElementById('email_action');
+    const changedBadge = document.getElementById('email_changed_badge');
+
+    if (!emailInput || !emailAction) return;
+
+    const currentEmail = emailInput.value.trim().toLowerCase();
+    const isEmailChanged = (currentEmail !== originalEmail && currentEmail !== '');
+
+    if (changedBadge) {
+        if (isEmailChanged) {
+            changedBadge.classList.remove('d-none');
+        } else {
+            changedBadge.classList.add('d-none');
+        }
+    }
+
+    const previousSelected = emailAction.value;
+
+    if (isEmailChanged) {
+        // When email changes: enable choosing between unverified and verified
+        emailAction.innerHTML = `
+            <option value="unverify">Mark Email as Unverified</option>
+            <option value="verify_now">Mark Email as Verified</option>
+        `;
+        if (previousSelected === 'verify_now') {
+            emailAction.value = 'verify_now';
+        } else {
+            emailAction.value = 'unverify';
+        }
+    } else {
+        // When email is unchanged:
+        // verify appears if unverified, and unverify if verified
+        if (isOriginalEmailVerified) {
+            emailAction.innerHTML = `
+                <option value="">-- Keep Current Status (Verified) --</option>
+                <option value="unverify">Mark Email as Unverified</option>
+            `;
+        } else {
+            emailAction.innerHTML = `
+                <option value="">-- Keep Current Status (Unverified) --</option>
+                <option value="verify_now">Mark Email as Verified</option>
+                <option value="send_notification">Send Verification Link to Email</option>
+            `;
+        }
+        if (previousSelected && Array.from(emailAction.options).some(o => o.value === previousSelected)) {
+            emailAction.value = previousSelected;
+        } else {
+            emailAction.value = '';
+        }
+    }
+
+    handleEmailActionChange(emailAction.value);
+}
+
+function handleEmailActionChange(action) {
+    const emailInput = document.getElementById('email');
+    const linkCheckboxWrapper = document.getElementById('email_link_checkbox_wrapper');
+    const currentEmail = emailInput ? emailInput.value.trim().toLowerCase() : '';
+    const isEmailChanged = (currentEmail !== originalEmail && currentEmail !== '');
+
+    if (linkCheckboxWrapper) {
+        // If unverified (either due to email change or keeping unverified), allow choosing whether to send link
+        if (isEmailChanged && action === 'unverify') {
+            linkCheckboxWrapper.classList.remove('d-none');
+        } else if (!isEmailChanged && !isOriginalEmailVerified && action === 'unverify') {
+            linkCheckboxWrapper.classList.remove('d-none');
+        } else {
+            linkCheckboxWrapper.classList.add('d-none');
+        }
+    }
+
+    updatePasswordResetOption();
+}
+
+function updatePhoneState() {
+    const hiddenPhone = document.getElementById('in_phone');
     const phoneAction = document.getElementById('phone_action');
-    if (val === 'unverify_account') {
-        if (emailAction) emailAction.value = 'unverify';
-        if (phoneAction) phoneAction.value = 'unverify';
-    } else if (val === 'verify_account') {
-        if (emailAction) emailAction.value = 'verify_now';
-        if (phoneAction) phoneAction.value = 'verify_now';
+    const changedBadge = document.getElementById('phone_changed_badge');
+
+    if (!hiddenPhone || !phoneAction) return;
+
+    const currentPhone = hiddenPhone.value.trim();
+    const isPhoneChanged = (currentPhone !== originalPhone && currentPhone !== '');
+
+    if (changedBadge) {
+        if (isPhoneChanged) {
+            changedBadge.classList.remove('d-none');
+        } else {
+            changedBadge.classList.add('d-none');
+        }
+    }
+
+    const previousSelected = phoneAction.value;
+
+    if (isPhoneChanged) {
+        // When phone changes: mark as verified or unverified (no link option)
+        phoneAction.innerHTML = `
+            <option value="unverify">Mark Phone as Unverified</option>
+            <option value="verify_now">Mark Phone as Verified</option>
+        `;
+        if (previousSelected === 'verify_now') {
+            phoneAction.value = 'verify_now';
+        } else {
+            phoneAction.value = 'unverify';
+        }
+    } else {
+        // When phone is unchanged:
+        // verify appears if unverified, and unverify if verified
+        if (isOriginalPhoneVerified) {
+            phoneAction.innerHTML = `
+                <option value="">-- Keep Current Status (Verified) --</option>
+                <option value="unverify">Mark Phone as Unverified</option>
+            `;
+        } else {
+            phoneAction.innerHTML = `
+                <option value="">-- Keep Current Status (Unverified) --</option>
+                <option value="verify_now">Mark Phone as Verified</option>
+            `;
+        }
+        if (previousSelected && Array.from(phoneAction.options).some(o => o.value === previousSelected)) {
+            phoneAction.value = previousSelected;
+        } else {
+            phoneAction.value = '';
+        }
     }
 }
 
-function setVerificationActions(type) {
-    const scopeSel = document.getElementById('verification_scope');
+function updatePasswordResetOption() {
+    const emailInput = document.getElementById('email');
     const emailAction = document.getElementById('email_action');
-    const phoneAction = document.getElementById('phone_action');
+    const passOpt = document.getElementById('pass_opt');
+    const optSendLink = document.getElementById('opt_send_link');
+    const notice = document.getElementById('pass_reset_link_notice');
 
-    if (type === 'unverify_both') {
-        if (scopeSel) scopeSel.value = 'unverify_account';
-        if (emailAction) emailAction.value = 'unverify';
-        if (phoneAction) phoneAction.value = 'unverify';
-    } else if (type === 'verify_both') {
-        if (scopeSel) scopeSel.value = 'verify_account';
-        if (emailAction) emailAction.value = 'verify_now';
-        if (phoneAction) phoneAction.value = 'verify_now';
+    if (!emailInput || !emailAction || !passOpt) return;
+
+    const currentEmail = emailInput.value.trim().toLowerCase();
+    const isEmailChanged = (currentEmail !== originalEmail && currentEmail !== '');
+
+    let isEffectivelyVerified = false;
+    if (isEmailChanged) {
+        isEffectivelyVerified = (emailAction.value === 'verify_now');
+    } else {
+        if (emailAction.value === 'verify_now') {
+            isEffectivelyVerified = true;
+        } else if (emailAction.value === 'unverify' || emailAction.value === 'send_notification') {
+            isEffectivelyVerified = false;
+        } else {
+            isEffectivelyVerified = isOriginalEmailVerified;
+        }
+    }
+
+    if (optSendLink) {
+        if (isEffectivelyVerified) {
+            optSendLink.classList.remove('d-none');
+            optSendLink.disabled = false;
+            if (notice) notice.classList.add('d-none');
+        } else {
+            optSendLink.classList.add('d-none');
+            optSendLink.disabled = true;
+            if (passOpt.value === 'send_link') {
+                passOpt.value = '';
+                toggleManualPass('');
+            }
+            if (notice) notice.classList.remove('d-none');
+        }
     }
 }
 
@@ -743,6 +892,18 @@ function validateAdminEditUserForm(e) {
         markInvalid(email, 'err_email', 'Please enter a valid email address with a domain.');
     }
 
+    const passOpt = document.getElementById('pass_opt');
+    const password = document.getElementById('password');
+    const passConfirm = document.getElementById('password_confirmation');
+    if (passOpt && passOpt.value === 'manual') {
+        if (!password || !password.value || password.value.length < 8) {
+            markInvalid(password, 'err_password', 'Password must be at least 8 characters long.');
+        }
+        if (!passConfirm || passConfirm.value !== password.value) {
+            markInvalid(passConfirm, 'err_password_confirmation', 'Password confirmation does not match.');
+        }
+    }
+
     const reasonSel = document.getElementById('reason_select');
     const customReason = document.getElementById('reason_custom');
     const activeReasonVal = reasonSel.value === 'Others' ? customReason.value.trim() : reasonSel.value;
@@ -833,6 +994,28 @@ function compileAdminUserAddress() {
 document.addEventListener('DOMContentLoaded', () => {
     fetchEditProvinces();
     syncEditPhone();
+    updateEmailState();
+    updatePhoneState();
+
+    if (oldEmailAction) {
+        const emailAction = document.getElementById('email_action');
+        if (emailAction) {
+            emailAction.value = oldEmailAction;
+            handleEmailActionChange(oldEmailAction);
+        }
+    }
+    if (oldPhoneAction) {
+        const phoneAction = document.getElementById('phone_action');
+        if (phoneAction) phoneAction.value = oldPhoneAction;
+    }
+    if (oldPassOpt) {
+        const passOpt = document.getElementById('pass_opt');
+        if (passOpt) {
+            passOpt.value = oldPassOpt;
+            toggleManualPass(oldPassOpt);
+        }
+    }
+
     document.querySelectorAll('#editUserForm input, #editUserForm select').forEach(input => {
         input.addEventListener('input', () => clearFieldError(input));
         input.addEventListener('change', () => clearFieldError(input));

@@ -64,35 +64,119 @@ Route::get('/media/{path}', function ($path) {
     return Storage::disk('public')->response($path);
 })->where('path', '.*');
 
-// Mobile Authentication: Login
+// Mobile Authentication: Login (Supports Verified Email or Verified Phone)
 Route::post('/login', function (Request $request) {
     $request->validate([
-        'email' => 'required|email',
-        'password' => 'required',
+        'email' => 'required|string',
+        'password' => 'required|string',
     ]);
 
-    $user = User::withTrashed()->where('email', $request->email)->first();
+    $rawInput = trim((string) $request->input('email', $request->input('phone', '')));
+    $cleanDigits = preg_replace('/[\s\-\(\)]/', '', $rawInput);
 
-    if (!$user || !Hash::check($request->password, $user->password)) {
-        return response()->json(['message' => 'Invalid email or password.'], 401);
+    // Identify if the input is a Philippine mobile number
+    $isPhone = !str_contains($rawInput, '@') && preg_match('/^(\+?639\d{9}|639\d{9}|09\d{9}|9\d{9})$/', $cleanDigits);
+
+    if ($isPhone) {
+        $digits = preg_replace('/[^0-9]/', '', $cleanDigits);
+        if (str_starts_with($digits, '639') && strlen($digits) === 12) {
+            $normalizedPhone = '09' . substr($digits, 3);
+        } elseif (str_starts_with($digits, '9') && strlen($digits) === 10) {
+            $normalizedPhone = '09' . $digits;
+        } else {
+            $normalizedPhone = $digits;
+        }
+
+        $user = User::where('phone', $normalizedPhone)->first();
+        $credentialType = 'phone';
+    } else {
+        $normalizedEmail = strtolower($rawInput);
+        $user = User::where('email', $normalizedEmail)->first();
+        $credentialType = 'email';
     }
 
-    if ($user->trashed()) {
-        // Cache user ID against mobile IP for 30 minutes
-        Cache::put("reactivate_ip_{$request->ip()}", $user->id, now()->addMinutes(30));
+    // Check deactivated (soft-deleted) accounts if no active user is found
+    if (!$user) {
+        if ($isPhone) {
+            $trashedUser = User::onlyTrashed()->where('phone', $normalizedPhone)->first();
+        } else {
+            $trashedUser = User::onlyTrashed()->where('email', $normalizedEmail)->first();
+        }
 
-        // Immediately dispatch the reactivation OTP to their email
-        app(EmailVerificationNotificationController::class)->sendReactivationOtp($request);
+        if ($trashedUser && Hash::check($request->password, $trashedUser->password)) {
+            // Conflict check: if the deactivated account's credentials are verified on another active account
+            $emailConflict = User::where('id', '!=', $trashedUser->id)
+                ->where('email', $trashedUser->email)
+                ->whereNotNull('email_verified_at')
+                ->exists();
 
-        return response()->json([
-            'deactivated' => true,
-            'email' => $user->email,
-            'message' => 'Your account is currently deactivated. A verification code has been dispatched to your email.',
-        ], 422);
+            $phoneConflict = !empty($trashedUser->phone) && User::where('id', '!=', $trashedUser->id)
+                ->where('phone', $trashedUser->phone)
+                ->whereNotNull('phone_verified_at')
+                ->exists();
+
+            if ($emailConflict && $phoneConflict) {
+                return response()->json([
+                    'message' => 'This account has been permanently retired because its email address and phone number are already verified on another active account.'
+                ], 422);
+            }
+
+            if ($isPhone && $phoneConflict) {
+                return response()->json([
+                    'message' => 'This account cannot be reactivated with this phone number because it has already been claimed and verified by another active account.'
+                ], 422);
+            }
+
+            if (!$isPhone && $emailConflict) {
+                return response()->json([
+                    'message' => 'This account cannot be reactivated with this email address because it has already been claimed and verified by another active account.'
+                ], 422);
+            }
+
+            // No conflict: proceed to dispatch reactivation OTP
+            Cache::put("reactivate_ip_{$request->ip()}", $trashedUser->id, now()->addMinutes(30));
+            app(EmailVerificationNotificationController::class)->sendReactivationOtp($request);
+
+            return response()->json([
+                'deactivated' => true,
+                'email' => $trashedUser->email,
+                'message' => 'Your account is currently deactivated. A verification code has been dispatched to your email.',
+            ], 422);
+        }
+
+        return response()->json(['message' => 'Invalid email/phone or password.'], 401);
+    }
+
+    if (!Hash::check($request->password, $user->password)) {
+        return response()->json(['message' => 'Invalid email/phone or password.'], 401);
     }
 
     if (!$user->is_active) {
         return response()->json(['message' => 'This account has been disabled by the administrator.'], 403);
+    }
+
+    // Enforce verified credentials rule:
+    // Only the verified credential allows login
+    if ($credentialType === 'phone') {
+        if (is_null($user->phone_verified_at)) {
+            if (!is_null($user->email_verified_at)) {
+                return response()->json([
+                    'message' => 'This phone number is unverified and cannot be used to log in. Please sign in using your verified email address.'
+                ], 422);
+            } else {
+                return response()->json([
+                    'message' => 'This phone number is unverified and cannot be used to log in. Please sign in using your registered email address.'
+                ], 422);
+            }
+        }
+    } else {
+        if (is_null($user->email_verified_at)) {
+            if (!is_null($user->phone_verified_at)) {
+                return response()->json([
+                    'message' => 'This email address is unverified. Please sign in using your verified mobile phone number.'
+                ], 422);
+            }
+        }
     }
 
     $token = $user->createToken('mobile-patient-token')->plainTextToken;
@@ -140,7 +224,7 @@ Route::post('/register', function (Request $request) {
         'last_name' => $lName,
         'suffix' => $suffix ?: null,
         'name' => $displayName,
-        'email' => $request->email,
+        'email' => strtolower(trim($request->email)),
         'phone' => $request->phone,
         'birthdate' => $request->birthdate,
         'sex' => $request->sex,
@@ -152,6 +236,7 @@ Route::post('/register', function (Request $request) {
         'role' => 'user',
         'is_active' => true,
         'email_verified_at' => null,
+        'phone_verified_at' => null,
     ]);
 
     $token = $user->createToken('mobile-patient-token')->plainTextToken;
@@ -165,12 +250,22 @@ Route::post('/register', function (Request $request) {
 });
 
 /**
- * Mobile Forgot Password Route
+ * Mobile Forgot Password Route (Requires Verified Email)
  */
 Route::post('/forgot-password', function (Request $request) {
     $request->validate([
         'email' => 'required|email',
     ]);
+
+    $targetEmail = strtolower(trim($request->email));
+    $user = User::where('email', $targetEmail)->first();
+
+    if ($user && is_null($user->email_verified_at)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Password reset links can only be sent to verified email addresses.',
+        ], 422);
+    }
 
     $status = Password::sendResetLink(
         $request->only('email')
@@ -207,15 +302,77 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::patch('/profile', function (Request $request) {
         $user = $request->user();
-        $user->update($request->only([
+
+        // Conflict check for email
+        if ($request->filled('email')) {
+            $newEmail = strtolower(trim($request->email));
+            $emailConflict = User::where('id', '!=', $user->id)
+                ->where('email', $newEmail)
+                ->whereNotNull('email_verified_at')
+                ->exists();
+
+            if ($emailConflict) {
+                return response()->json([
+                    'message' => 'This email address has already been claimed and verified by another active account.'
+                ], 422);
+            }
+        }
+
+        // Conflict check for phone
+        if ($request->filled('phone')) {
+            $digits = preg_replace('/[^0-9]/', '', $request->phone);
+            if (str_starts_with($digits, '639') && strlen($digits) === 12) {
+                $digits = '09' . substr($digits, 3);
+            } elseif (str_starts_with($digits, '9') && strlen($digits) === 10) {
+                $digits = '09' . $digits;
+            }
+            $newPhone = $digits;
+
+            $phoneConflict = User::where('id', '!=', $user->id)
+                ->where('phone', $newPhone)
+                ->whereNotNull('phone_verified_at')
+                ->exists();
+
+            if ($phoneConflict) {
+                return response()->json([
+                    'message' => 'This mobile phone number has already been claimed and verified by another active account.'
+                ], 422);
+            }
+        }
+
+        $emailChanged = $request->filled('email') && strtolower(trim($request->email)) !== strtolower($user->email);
+        $phoneChanged = $request->filled('phone') && isset($newPhone) && $newPhone !== $user->phone;
+
+        $updateData = $request->only([
             'first_name', 'middle_name', 'last_name', 'suffix',
             'email', 'phone', 'birthdate', 'sex', 'street',
             'barangay', 'city', 'province'
-        ]));
-        return response()->json(['success' => true, 'user' => $user]);
+        ]);
+
+        if (isset($newPhone)) {
+            $updateData['phone'] = $newPhone;
+        }
+
+        $user->update($updateData);
+
+        if ($emailChanged) {
+            $user->email_verified_at = null;
+            $user->save();
+            Cache::forget("email_otp_{$user->id}");
+            Cache::forget("email_otp_addr_{$user->id}");
+        }
+
+        if ($phoneChanged) {
+            $user->phone_verified_at = null;
+            $user->save();
+            Cache::forget("sms_otp_{$user->id}");
+            Cache::forget("sms_otp_phone_{$user->id}");
+        }
+
+        return response()->json(['success' => true, 'user' => $user->fresh()]);
     });
 
-    // Update password (resolves mobile 404 error)
+    // Update password
     Route::put('/profile/password', function (Request $request) {
         $validated = $request->validate([
             'current_password' => ['required', 'current_password'],
@@ -234,6 +391,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
     });
 
+    // Voluntary Account Deactivation: unsets verification to release credentials
     Route::delete('/profile', function (Request $request) {
         $request->validate(['password' => 'required']);
         $user = $request->user();
@@ -241,6 +399,18 @@ Route::middleware('auth:sanctum')->group(function () {
         if (!Hash::check($request->password, $user->password)) {
             return response()->json(['message' => 'Incorrect password.'], 422);
         }
+
+        // Unverify credentials so they are not locked
+        $user->email_verified_at = null;
+        $user->phone_verified_at = null;
+        $user->save();
+
+        Cache::forget("email_otp_{$user->id}");
+        Cache::forget("email_otp_addr_{$user->id}");
+        Cache::forget("sms_otp_{$user->id}");
+        Cache::forget("sms_otp_phone_{$user->id}");
+
+        ActivityLog::record('ACCOUNT DELETED', 'User voluntarily deactivated their account via Mobile API', $user->name);
 
         $user->tokens()->delete();
         $user->delete();
@@ -272,7 +442,20 @@ Route::middleware('auth:sanctum')->group(function () {
             'email.unique' => 'This email address is already registered.'
         ]);
 
-        $user->email = strtolower(trim($request->email));
+        $newEmail = strtolower(trim($request->email));
+
+        $emailConflict = User::where('id', '!=', $user->id)
+            ->where('email', $newEmail)
+            ->whereNotNull('email_verified_at')
+            ->exists();
+
+        if ($emailConflict) {
+            return response()->json([
+                'message' => 'This email address has already been claimed and verified by another active account.'
+            ], 422);
+        }
+
+        $user->email = $newEmail;
         $user->email_verified_at = null;
         $user->save();
 
@@ -318,8 +501,6 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::post('/appointments', [AppointmentController::class, 'store']);
-
-    // Accept both POST and PUT methods to allow method spoofing (_method=PUT) on resubmission
     Route::match(['post', 'put'], '/appointments/{appointment}', [AppointmentController::class, 'update']);
     Route::post('/appointments/{appointment}/cancel', [AppointmentController::class, 'cancel']);
     Route::post('/appointments/{appointment}/soft-delete', [AppointmentController::class, 'softDelete']);

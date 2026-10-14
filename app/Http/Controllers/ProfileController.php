@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\ActivityLog;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Validation\Rules\Password;
@@ -24,7 +26,27 @@ class ProfileController extends Controller
     }
 
     /**
-     * Update the user's profile information (Handles name and suffix collation).
+     * Normalize the input into a standard 11-digit Philippine mobile format (09XXXXXXXXX).
+     */
+    protected function normalizePhoneNumber(string $phone): string
+    {
+        $digits = preg_replace('/[^0-9]/', '', $phone);
+
+        if (str_starts_with($digits, '639') && strlen($digits) === 12) {
+            return '09' . substr($digits, 3);
+        }
+        if (str_starts_with($digits, '9') && strlen($digits) === 10) {
+            return '09' . $digits;
+        }
+        if (str_starts_with($digits, '09') && strlen($digits) === 11) {
+            return $digits;
+        }
+
+        return $digits;
+    }
+
+    /**
+     * Update the user's profile information (Handles name, suffix collation, and credential conflicts).
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse 
     {
@@ -44,13 +66,41 @@ class ProfileController extends Controller
             $displayName .= " {$suffix}";
         }
 
-        // 3. Fill and save the mass-assignable attributes
+        $newEmail = strtolower(trim($request->email));
+        $newPhone = $this->normalizePhoneNumber((string) $request->phone);
+
+        // 3. Credential Conflict Checks: Ensure email and phone aren't already verified on another account
+        $emailVerifiedElsewhere = User::where('id', '!=', $user->id)
+            ->where('email', $newEmail)
+            ->whereNotNull('email_verified_at')
+            ->exists();
+
+        if ($emailVerifiedElsewhere) {
+            return back()->withInput()->withErrors([
+                'email' => 'This email address has already been claimed and verified by another active account.'
+            ]);
+        }
+
+        $phoneVerifiedElsewhere = User::where('id', '!=', $user->id)
+            ->where('phone', $newPhone)
+            ->whereNotNull('phone_verified_at')
+            ->exists();
+
+        if ($phoneVerifiedElsewhere) {
+            return back()->withInput()->withErrors([
+                'phone' => 'This mobile phone number has already been claimed and verified by another active account.'
+            ]);
+        }
+
+        // 4. Fill and save the mass-assignable attributes
         $user->fill(array_merge($request->validated(), [
             'first_name' => $fName,
             'middle_name' => $mName,
             'last_name' => $lName,
-            'suffix' => $suffix ?: null, // Save suffix snapshot
-            'name' => $displayName, // Computed dynamic display name
+            'suffix' => $suffix ?: null,
+            'name' => $displayName,
+            'email' => $newEmail,
+            'phone' => $newPhone,
             'street' => strtoupper(trim($request->street)),
             'barangay' => strtoupper(trim($request->barangay)),
             'city' => strtoupper(trim($request->city)),
@@ -60,16 +110,25 @@ class ProfileController extends Controller
         $emailChanged = $user->isDirty('email');
         if ($emailChanged) {
             $user->email_verified_at = null;
+            session()->forget('email_otp_code');
+            Cache::forget("email_otp_{$user->id}");
+            Cache::forget("email_otp_addr_{$user->id}");
+        }
+
+        $phoneChanged = $user->isDirty('phone');
+        if ($phoneChanged) {
+            $user->phone_verified_at = null;
+            session()->forget(['sms_otp_code', 'sms_otp_phone']);
+            Cache::forget("sms_otp_{$user->id}");
+            Cache::forget("sms_otp_phone_{$user->id}");
         }
 
         $user->save();
 
-        // 4. Record security audit log per RA 10173 compliance guidelines
+        // 5. Record security audit log per RA 10173 compliance guidelines
         ActivityLog::record('PROFILE UPDATED', "User updated their clinical profile details.", $user->name);
 
         if ($emailChanged) {
-            // Clear current OTP session to trigger a fresh OTP email upon prompt redirection
-            session()->forget('email_otp_code');
             return redirect()->route('verification.notice')->with('status', 'verification-code-sent');
         }
 
@@ -78,6 +137,7 @@ class ProfileController extends Controller
 
     /**
      * Delete the user's account (Supports standard redirect and async AJAX workflows).
+     * Deactivation unsets verified timestamps so credentials can be reclaimed if needed.
      */
     public function destroy(Request $request): RedirectResponse|JsonResponse 
     {
@@ -89,6 +149,17 @@ class ProfileController extends Controller
 
         // Log the account deactivation event before session invalidation
         ActivityLog::record('ACCOUNT DELETED', 'User voluntarily deactivated their account', $user->name);
+
+        // Unverify email and phone so credentials can be used again without deadlock
+        $user->email_verified_at = null;
+        $user->phone_verified_at = null;
+        $user->save();
+
+        // Clear any lingering OTP cache entries
+        Cache::forget("email_otp_{$user->id}");
+        Cache::forget("email_otp_addr_{$user->id}");
+        Cache::forget("sms_otp_{$user->id}");
+        Cache::forget("sms_otp_phone_{$user->id}");
 
         Auth::logout();
 
@@ -145,7 +216,21 @@ class ProfileController extends Controller
             'email.unique' => 'This email address is already registered.'
         ]);
 
-        $user->email = $request->email;
+        $newEmail = strtolower(trim($request->email));
+
+        // Ensure this email is not verified on another active account
+        $emailVerifiedElsewhere = User::where('id', '!=', $user->id)
+            ->where('email', $newEmail)
+            ->whereNotNull('email_verified_at')
+            ->exists();
+
+        if ($emailVerifiedElsewhere) {
+            return back()->withInput()->withErrors([
+                'email' => 'This email address has already been claimed and verified by another active account.'
+            ]);
+        }
+
+        $user->email = $newEmail;
         $user->email_verified_at = null;
         $user->save();
 
@@ -153,6 +238,8 @@ class ProfileController extends Controller
 
         // Clear current OTP session to trigger a fresh OTP email upon prompt redirection
         session()->forget('email_otp_code');
+        Cache::forget("email_otp_{$user->id}");
+        Cache::forget("email_otp_addr_{$user->id}");
 
         return back()->with('status', 'verification-code-sent');
     }

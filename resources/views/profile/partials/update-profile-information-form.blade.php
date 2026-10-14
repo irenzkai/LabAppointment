@@ -1,3 +1,15 @@
+@php
+$emailVerifiedElsewhere = \App\Models\User::where('id', '!=', $user->id)
+    ->where('email', strtolower(trim($user->email)))
+    ->whereNotNull('email_verified_at')
+    ->exists();
+
+$phoneVerifiedElsewhere = !empty($user->phone) && \App\Models\User::where('id', '!=', $user->id)
+    ->where('phone', trim($user->phone))
+    ->whereNotNull('phone_verified_at')
+    ->exists();
+@endphp
+
 <div class="card p-4 p-md-5 border-secondary shadow-lg animate-page">
     <h5 class="text-main fw-bold mb-4 border-bottom border-secondary border-opacity-25 pb-2 uppercase" style="letter-spacing: 1px;">Personal Information</h5>
 
@@ -53,7 +65,7 @@
             <div class="col-12 mt-2">
                 <div class="alert alert-clinical p-2 border-warning border-opacity-10" style="background-color: rgba(25, 211, 140, 0.03);">
                     <i class="bi bi-shield-exclamation text-warning me-1.5"></i>
-                    <small class="text-muted"><strong>Safety Notice:</strong> Modifying your registered email or phone number will automatically reset its verification status and require re-verification.</small>
+                    <small class="text-muted"><strong>Safety Notice:</strong> Modifying your registered email or phone number will automatically reset its verification status and require re-verification. Each credential can only be verified on one active account for login security.</small>
                 </div>
             </div>
 
@@ -63,16 +75,29 @@
                     <label class="smaller text-secondary fw-bold mb-0 uppercase">Email Address</label>
                     <div id="email_badge_container">
                         @if($user->email_verified_at)
-                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                                <i class="bi bi-patch-check-fill"></i> Verified
+                            </span>
+                        @elseif($emailVerifiedElsewhere)
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                                <i class="bi bi-exclamation-octagon-fill"></i> In Use on Another Account
+                            </span>
                         @else
                             <div class="d-flex align-items-center">
-                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span>
+                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                                    <i class="bi bi-exclamation-triangle-fill"></i> Unverified
+                                </span>
                                 <button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal('email')" style="font-size:0.7rem;">Verify Now</button>
                             </div>
                         @endif
                     </div>
                 </div>
                 <input type="email" name="email" id="prof_email" class="form-control" value="{{ old('email', $user->email) }}" oninput="handleProfileEmailInput()" required>
+                @if(!$user->email_verified_at && $emailVerifiedElsewhere)
+                    <div id="email_conflict_notice" class="text-danger small mt-1 fw-bold" style="font-size: 0.72rem;">
+                        <i class="bi bi-exclamation-circle me-1"></i>This email has already been verified on another account. You cannot verify it here. Please update your email address or deactivate this profile.
+                    </div>
+                @endif
             </div>
 
             <div class="col-md-6">
@@ -80,10 +105,18 @@
                     <label class="smaller text-secondary fw-bold mb-0 uppercase">Phone Number</label>
                     <div id="phone_badge_container">
                         @if($user->phone_verified_at)
-                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                                <i class="bi bi-patch-check-fill"></i> Verified
+                            </span>
+                        @elseif($phoneVerifiedElsewhere)
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                                <i class="bi bi-exclamation-octagon-fill"></i> In Use on Another Account
+                            </span>
                         @else
                             <div class="d-flex align-items-center">
-                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span>
+                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                                    <i class="bi bi-exclamation-triangle-fill"></i> Unverified
+                                </span>
                                 <button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal('phone')" style="font-size:0.7rem;">Verify Now</button>
                             </div>
                         @endif
@@ -94,6 +127,11 @@
                     <input type="text" id="phone_display" class="form-control" placeholder="171234567" maxlength="9" oninput="this.value = this.value.replace(/[^0-9]/g, ''); syncProfilePhoneNumber()" required>
                 </div>
                 <input type="hidden" name="phone" id="phone_hidden" value="{{ old('phone', $user->phone) }}">
+                @if(!$user->phone_verified_at && $phoneVerifiedElsewhere)
+                    <div id="phone_conflict_notice" class="text-danger small mt-1 fw-bold" style="font-size: 0.72rem;">
+                        <i class="bi bi-exclamation-circle me-1"></i>This phone number has already been verified on another account. You cannot verify it here. Please update your phone number.
+                    </div>
+                @endif
             </div>
 
             {{-- Demographics --}}
@@ -249,10 +287,12 @@ const safeStorage = {
     }
 };
 
-const originalEmail = "{{ $user->email }}";
-const originalPhone = "{{ $user->phone }}";
+const originalEmail = "{{ strtolower(trim($user->email)) }}";
+const originalPhone = "{{ trim($user->phone) }}";
 
-// Evaluate email_verified_at directly to prevent phone-only verification from faking email status
+const emailVerifiedElsewhere = {{ (!$user->email_verified_at && $emailVerifiedElsewhere) ? 'true' : 'false' }};
+const phoneVerifiedElsewhere = {{ (!$user->phone_verified_at && $phoneVerifiedElsewhere) ? 'true' : 'false' }};
+
 let emailVerifiedLocally = {{ $user->email_verified_at ? 'true' : 'false' }};
 let verifiedEmailValue = originalEmail;
 
@@ -265,30 +305,44 @@ let isSubmittingForm = false;
 function handleProfileEmailInput() {
     const emailInput = document.getElementById('prof_email');
     const badgeContainer = document.getElementById('email_badge_container');
+    const conflictNotice = document.getElementById('email_conflict_notice');
     if (!emailInput || !badgeContainer) return;
 
     const currentVal = emailInput.value.trim().toLowerCase();
     const isVerified = emailVerifiedLocally && currentVal === verifiedEmailValue.toLowerCase();
+    const isOriginalValue = (currentVal === originalEmail.toLowerCase());
 
     if (isVerified) {
         badgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
+        if (conflictNotice) conflictNotice.classList.add('d-none');
+    } else if (isOriginalValue && emailVerifiedElsewhere) {
+        badgeContainer.innerHTML = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-octagon-fill"></i> In Use on Another Account</span>';
+        if (conflictNotice) conflictNotice.classList.remove('d-none');
     } else {
         badgeContainer.innerHTML = '<div class="d-flex align-items-center"><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span><button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal(\'email\')" style="font-size:0.7rem;">Verify Now</button></div>';
+        if (conflictNotice) conflictNotice.classList.add('d-none');
     }
 }
 
 function handleProfilePhoneInput() {
     const phoneInput = document.getElementById('phone_hidden');
     const phoneBadgeContainer = document.getElementById('phone_badge_container');
+    const phoneConflictNotice = document.getElementById('phone_conflict_notice');
     if (!phoneInput || !phoneBadgeContainer) return;
 
     const currentVal = phoneInput.value.trim();
     const isVerified = phoneVerifiedLocally && currentVal === verifiedPhoneValue;
+    const isOriginalValue = (currentVal === originalPhone);
 
     if (isVerified) {
         phoneBadgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
+        if (phoneConflictNotice) phoneConflictNotice.classList.add('d-none');
+    } else if (isOriginalValue && phoneVerifiedElsewhere) {
+        phoneBadgeContainer.innerHTML = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-octagon-fill"></i> In Use on Another Account</span>';
+        if (phoneConflictNotice) phoneConflictNotice.classList.remove('d-none');
     } else {
         phoneBadgeContainer.innerHTML = '<div class="d-flex align-items-center"><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span><button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal(\'phone\')" style="font-size:0.7rem;">Verify Now</button></div>';
+        if (phoneConflictNotice) phoneConflictNotice.classList.add('d-none');
     }
 }
 
@@ -468,8 +522,8 @@ function validateProfileForm(event) {
     }
 
     // Intercept unverified email changes
-    if (currentEmail && currentEmail !== originalEmail) {
-        if (!emailVerifiedLocally || currentEmail !== verifiedEmailValue) {
+    if (currentEmail && currentEmail.toLowerCase() !== originalEmail.toLowerCase()) {
+        if (!emailVerifiedLocally || currentEmail.toLowerCase() !== verifiedEmailValue.toLowerCase()) {
             event.preventDefault();
             event.stopPropagation();
             isSubmittingForm = true;
@@ -528,19 +582,8 @@ function resetProfileForm(event) {
         verifiedPhoneValue = originalPhone;
         isSubmittingForm = false;
 
-        const badgeContainer = document.getElementById('email_badge_container');
-        if (badgeContainer) {
-            badgeContainer.innerHTML = emailVerifiedLocally
-                ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>'
-                : '<div class="d-flex align-items-center"><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span><button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal(\'email\')" style="font-size:0.7rem;">Verify Now</button></div>';
-        }
-
-        const phoneBadgeContainer = document.getElementById('phone_badge_container');
-        if (phoneBadgeContainer) {
-            phoneBadgeContainer.innerHTML = phoneVerifiedLocally
-                ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>'
-                : '<div class="d-flex align-items-center"><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span><button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal(\'phone\')" style="font-size:0.7rem;">Verify Now</button></div>';
-        }
+        handleProfileEmailInput();
+        handleProfilePhoneInput();
 
         document.querySelectorAll('.invalid-feedback-inline').forEach(el => {
             el.classList.add('d-none');
@@ -557,12 +600,26 @@ function resetProfileForm(event) {
 // --- MODAL TRIGGERS ---
 function openProfileVerifyModal(type) {
     if (type === 'email') {
+        const emailInput = document.getElementById('prof_email');
+        const currentVal = emailInput ? emailInput.value.trim().toLowerCase() : '';
+        if (currentVal === originalEmail.toLowerCase() && emailVerifiedElsewhere) {
+            alert('This email address has already been claimed and verified on another active account. Please update your email address or deactivate this profile.');
+            return;
+        }
+
         const emailModal = new bootstrap.Modal(document.getElementById('profileEmailVerifyModal'));
         emailModal.show();
         const firstBox = document.querySelector('.otp-box:not(.phone-otp-box)[data-index="0"]');
         if (firstBox) setTimeout(() => firstBox.focus(), 150);
         triggerAutoSendProfileOtp();
     } else {
+        const phoneInput = document.getElementById('phone_hidden');
+        const currentVal = phoneInput ? phoneInput.value.trim() : '';
+        if (currentVal === originalPhone && phoneVerifiedElsewhere) {
+            alert('This mobile phone number has already been claimed and verified on another active account. Please update your phone number.');
+            return;
+        }
+
         const phoneModal = new bootstrap.Modal(document.getElementById('profilePhoneVerifyModal'));
         phoneModal.show();
         const firstPhoneBox = document.querySelector('.phone-otp-box[data-index="0"]');
@@ -668,7 +725,7 @@ async function triggerAutoSendProfileOtp() {
     }
 
     try {
-        await fetch("{{ route('verification.send-otp') }}", {
+        const res = await fetch("{{ route('verification.send-otp') }}", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -677,6 +734,13 @@ async function triggerAutoSendProfileOtp() {
             },
             body: JSON.stringify({ email: emailInput.value.trim(), channel: 'email' })
         });
+        const resData = await res.json();
+        if (!res.ok && resData.message) {
+            if (errorMsgDiv) {
+                errorMsgDiv.innerText = resData.message;
+                errorMsgDiv.classList.remove('d-none');
+            }
+        }
         const expiryTime = now + (30 * 1000);
         safeStorage.setItem('resend_cooldown_expiry', expiryTime.toString());
         updateEmailResendState();
@@ -741,6 +805,7 @@ async function submitProfileOtpCode(event) {
         });
 
         const data = await response.json();
+
         if (data.success) {
             emailVerifiedLocally = true;
             verifiedEmailValue = data.email || (emailInput ? emailInput.value.trim() : originalEmail);
@@ -752,6 +817,8 @@ async function submitProfileOtpCode(event) {
             if (badgeContainer) {
                 badgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
             }
+            const conflictNotice = document.getElementById('email_conflict_notice');
+            if (conflictNotice) conflictNotice.classList.add('d-none');
 
             if (isSubmittingForm) {
                 const currentPhone = hiddenPhone ? hiddenPhone.value.trim() : '';
@@ -806,7 +873,7 @@ async function triggerAutoSendProfilePhoneOtp() {
     }
 
     try {
-        await fetch("{{ route('verification.send-sms-otp') }}", {
+        const res = await fetch("{{ route('verification.send-sms-otp') }}", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -815,6 +882,13 @@ async function triggerAutoSendProfilePhoneOtp() {
             },
             body: JSON.stringify({ phone: phoneVal, channel: 'sms' })
         });
+        const resData = await res.json();
+        if (!res.ok && resData.message) {
+            if (errorMsgDiv) {
+                errorMsgDiv.innerText = resData.message;
+                errorMsgDiv.classList.remove('d-none');
+            }
+        }
         const expiryTime = now + (30 * 1000);
         safeStorage.setItem('phone_resend_cooldown', expiryTime.toString());
         updateProfilePhoneResendState();
@@ -888,6 +962,8 @@ async function submitProfilePhoneOtpCode(event) {
             if (phoneBadgeContainer) {
                 phoneBadgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
             }
+            const phoneConflictNotice = document.getElementById('phone_conflict_notice');
+            if (phoneConflictNotice) phoneConflictNotice.classList.add('d-none');
 
             if (isSubmittingForm) {
                 const mainForm = document.getElementById('profileUpdateForm');
@@ -1040,7 +1116,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (hiddenPhone && (hiddenPhone.startsWith('09') || hiddenPhone.startsWith('9')) && (hiddenPhone.length === 11 || hiddenPhone.length === 10)) {
         let suffixVal = hiddenPhone.startsWith('09') ? hiddenPhone.substring(2) : hiddenPhone.substring(1);
         const displayInput = document.getElementById('phone_display');
-        const hiddenInput = document.getElementById('phone_hidden');
         if (displayInput) displayInput.value = suffixVal;
         if (hiddenInput) hiddenInput.value = '09' + suffixVal;
     } else {

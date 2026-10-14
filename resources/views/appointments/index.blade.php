@@ -1,187 +1,197 @@
 @extends('layouts.app')
 @section('title', 'Laboratory Appointments')
+
 @section('content')
-<div class="container-fluid text-start animate-page">
-{{-- Page Header --}}
-<div class="d-flex justify-content-between align-items-center mb-5 border-bottom pb-3" style="border-color: var(--border-color) !important;">
-    <div>
-        <h2 class="text-accent fw-bold mb-0 uppercase tracking-tight" style="font-size: 1.85rem; letter-spacing: 1px;">
-            {{ $is_staff ? 'Master Clinical Queue' : 'My Appointments' }}
-        </h2>
-        <p class="text-muted mb-0 small">
-            {{ $is_staff ? 'Monitor, approve, and track real-time clinical workflows.' : 'Track your diagnostic bookings and access clinical results.' }}
-        </p>
-    </div>
-    @if(!$is_staff)
-        <a href="{{ route('patient.history') }}" class="btn-custom btn-outline-accent px-3 py-2">
-            <i class="bi bi-clock-history me-2"></i> VIEW ARCHIVED RECORDS
-        </a>
-    @endif
-</div>
-
-{{-- Split Pane Grid Layout --}}
-<div class="row g-4">
-    {{-- LEFT PANEL: Card Lists & Filters --}}
-    <div class="col-lg-5 col-xl-4">
-        {{-- Navigation Tabs (Patient Only) --}}
-        @if(!$is_staff)
-            <ul class="nav nav-pills mb-3 gap-1 bg-secondary bg-opacity-10 p-1.5 rounded-3 border border-secondary border-opacity-25" id="appTabs" role="tablist">
-                <li class="nav-item flex-grow-1">
-                    <button class="nav-link active w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-self" onclick="resetActiveDetail()">Myself</button>
-                </li>
-                <li class="nav-item flex-grow-1">
-                    <button class="nav-link w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-family" onclick="resetActiveDetail()">Family</button>
-                </li>
-                <li class="nav-item flex-grow-1">
-                    <button class="nav-link w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-bulk" onclick="resetActiveDetail()">Bulk</button>
-                </li>
-            </ul>
-        @else
-            {{-- Server-side Search & Configuration Filter Toolbar for Staff --}}
-            <form action="{{ route('appointments.index') }}" method="GET" class="mb-4">
-                {{-- Ensures filtering in Master Queue preserves view=queue --}}
-                <input type="hidden" name="view" value="queue">
-                <div class="row g-2">
-                    <div class="col-12 mb-2">
-                        <div class="input-group input-group-sm border border-secondary border-opacity-25 rounded-3 overflow-hidden">
-                            <span class="input-group-text border-0 text-secondary" style="background-color: var(--bg-card);">
-                                <i class="bi bi-search"></i>
-                            </span>
-                            <input type="text" name="search" class="form-control border-0 shadow-none py-2" style="background-color: var(--bg-card); color: var(--text-main);" placeholder="Search patient, ID, or batch..." value="{{ request('search') }}">
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <select name="status" class="form-select form-select-sm" style="background-color: var(--bg-card); color: var(--text-main); border-color: rgba(255,255,255,0.15);" onchange="this.form.submit()">
-                            <option value="">All Statuses</option>
-                            <option value="needs_action" {{ request('status') === 'needs_action' ? 'selected' : '' }}>Needs Action</option>
-                            <option value="no_action" {{ request('status') === 'no_action' ? 'selected' : '' }}>No Action Needed</option>
-                            <option value="expired" {{ request('status') === 'expired' ? 'selected' : '' }}>Expired</option>
-                            <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
-                            <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
-                            <option value="retest" {{ request('status') === 'retest' ? 'selected' : '' }}>Retest Required</option>
-                            <option value="tested" {{ request('status') === 'tested' ? 'selected' : '' }}>Tested</option>
-                            <option value="encoded" {{ request('status') === 'encoded' ? 'selected' : '' }}>Encoded</option>
-                            <option value="released" {{ request('status') === 'released' ? 'selected' : '' }}>Released</option>
-                            <option value="canceled" {{ request('status') === 'canceled' ? 'selected' : '' }}>Canceled</option>
-                        </select>
-                    </div>
-                    <div class="col-3">
-                        <select name="sort_by" class="form-select form-select-sm" style="background-color: var(--bg-card); color: var(--text-main); border-color: rgba(255,255,255,0.15);" onchange="this.form.submit()">
-                            <option value="date" {{ request('sort_by', 'date') === 'date' ? 'selected' : '' }}>Date</option>
-                            <option value="name" {{ request('sort_by') === 'name' ? 'selected' : '' }}>Name</option>
-                            <option value="submitted" {{ request('sort_by') === 'submitted' ? 'selected' : '' }}>Submitted</option>
-                        </select>
-                    </div>
-                    <div class="col-3">
-                        <select name="order" class="form-select form-select-sm" style="background-color: var(--bg-card); color: var(--text-main); border-color: rgba(255,255,255,0.15);" onchange="this.form.submit()">
-                            <option value="desc" {{ request('order', 'desc') === 'desc' ? 'selected' : '' }}>Desc</option>
-                            <option value="asc" {{ request('order') === 'asc' ? 'selected' : '' }}>Asc</option>
-                        </select>
-                    </div>
-                </div>
-            </form>
-        @endif
-
-        {{-- Main List Wrapper --}}
-        <div class="tab-content" id="listContent">
-            {{-- STAFF MAIN QUEUE --}}
-            @if($is_staff)
-                <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
-                    @forelse($staffQueue as $batchId => $group)
-                        @php 
-                            $isGroup = $group instanceof \Illuminate\Support\Collection;
-                            $first = $isGroup ? $group->first() : $group;
-                        @endphp
-                        @include('appointments.partials.list-card', ['app' => $first, 'groupCount' => $isGroup ? $group->count() : 1, 'batchId' => $batchId])
-                    @empty
-                        <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
-                            <i class="bi bi-folder-x text-accent fs-1 mb-3 opacity-75"></i>
-                            <p class="small mb-0">No appointments in queue.</p>
-                        </div>
-                    @endforelse
-                </div>
-                {{-- Staff Pagination Links --}}
-                <div class="mt-4 d-flex justify-content-center">
-                    {{ $staffPaginator->links() }}
-                </div>
-            @else
-                {{-- PATIENT: MYSELF --}}
-                <div class="tab-pane fade show active" id="pane-self">
-                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
-                        @forelse($self as $app)
-                            @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1])
-                        @empty
-                            <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
-                                <i class="bi bi-calendar-x text-accent fs-1 mb-3 opacity-75"></i>
-                                <p class="small mb-0">No personal bookings found.</p>
-                            </div>
-                        @endforelse
-                    </div>
-                    {{-- Myself Pagination Links --}}
-                    <div class="mt-4 d-flex justify-content-center">
-                        {{ $self->links() }}
-                    </div>
-                </div>
-
-                {{-- PATIENT: FAMILY DEPENDENTS --}}
-                <div class="tab-pane fade" id="pane-family">
-                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
-                        @forelse($dependents as $app)
-                            @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1])
-                        @empty
-                            <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
-                                <i class="bi bi-people text-accent fs-1 mb-3 opacity-75"></i>
-                                <p class="small mb-0">No dependent bookings found.</p>
-                            </div>
-                        @endforelse
-                    </div>
-                    {{-- Family Pagination Links --}}
-                    <div class="mt-4 d-flex justify-content-center">
-                        {{ $dependents->links() }}
-                    </div>
-                </div>
-
-                {{-- PATIENT: ORGANIZATIONAL BULK --}}
-                <div class="tab-pane fade" id="pane-bulk">
-                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
-                        @forelse($bulkGroups as $batchId => $group)
-                            @php $first = $group->first(); @endphp
-                            @include('appointments.partials.list-card', ['app' => $first, 'groupCount' => $group->count(), 'batchId' => $batchId])
-                        @empty
-                            <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
-                                <i class="bi bi-buildings text-accent fs-1 mb-3 opacity-75"></i>
-                                <p class="small mb-0">No corporate groups found.</p>
-                            </div>
-                        @endforelse
-                    </div>
-                    {{-- Bulk Pagination Links --}}
-                    <div class="mt-4 d-flex justify-content-center">
-                        {{ $bulkPaginator->links() }}
-                    </div>
-                </div>
-            @endif
+<div class="container-fluid text-start animate-page py-2" id="appointments-index-root">
+    {{-- Page Header --}}
+    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
+        <div>
+            <h2 class="text-accent fw-bold mb-0 uppercase tracking-tight" style="font-size: 1.85rem; letter-spacing: 1px;">
+                {{ $is_staff ? 'Master Clinical Queue' : 'My Appointments' }}
+            </h2>
+            <p class="text-muted mb-0 small" style="color: var(--text-muted) !important;">
+                {{ $is_staff ? 'Monitor, approve, and track real-time clinical workflows.' : 'Track your diagnostic bookings and access clinical results.' }}
+            </p>
         </div>
+        @if(!$is_staff)
+            <a href="{{ route('patient.history') }}" class="btn-custom btn-outline-accent px-3 py-2 d-inline-flex align-items-center gap-2 text-decoration-none" style="font-size: 0.8rem;">
+                <i class="bi bi-clock-history"></i>
+                <span>VIEW ARCHIVED RECORDS</span>
+            </a>
+        @endif
     </div>
 
-    {{-- RIGHT PANEL: Active Clinical Sheet Workspace --}}
-    <div class="col-lg-7 col-xl-8" style="top: 100px; align-self: flex-start; {{ !$is_staff ? 'margin-top: 52px;' : '' }}">
-        <div id="workspace-container" class="h-100">
-            {{-- Default Empty State Placeholder --}}
-            <div id="details-placeholder" class="card p-5 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100" style="min-height: 420px; background-color: var(--bg-card);">
-                <div class="bg-secondary bg-opacity-10 rounded-circle p-3 mb-4 text-accent d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
-                    <i class="bi bi-clipboard2-pulse-fill fs-1 text-accent"></i>
-                </div>
-                <h4 class="text-main fw-bold mb-2 uppercase">Clinical Detail Workspace</h4>
-                <p class="text-muted small mb-0" style="max-width: 380px;">Select any clinical entry from the left-hand panel to review its test breakdowns, billing summaries, and context actions.</p>
+    {{-- Split Pane Grid Layout --}}
+    <div class="row g-4 position-relative">
+        {{-- LEFT PANEL: Card Lists & Filters --}}
+        <div class="col-12 col-lg-5 col-xl-4" id="left-queue-panel">
+            {{-- Navigation Tabs (Patient Only) --}}
+            @if(!$is_staff)
+                <ul class="nav nav-pills mb-3 gap-1 bg-secondary bg-opacity-10 p-1.5 rounded-3 border" style="border-color: var(--border-color) !important;" id="appTabs" role="tablist">
+                    <li class="nav-item flex-grow-1">
+                        <button class="nav-link active w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-self" onclick="resetActiveDetail()">Myself</button>
+                    </li>
+                    <li class="nav-item flex-grow-1">
+                        <button class="nav-link w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-family" onclick="resetActiveDetail()">Family</button>
+                    </li>
+                    <li class="nav-item flex-grow-1">
+                        <button class="nav-link w-100 fs-x-small fw-bold uppercase py-2" data-bs-toggle="pill" data-bs-target="#pane-bulk" onclick="resetActiveDetail()">Bulk</button>
+                    </li>
+                </ul>
+            @else
+                {{-- Dynamic Search & Filter Toolbar for Staff (Asynchronous - No Page Refresh) --}}
+                <form action="{{ route('appointments.index') }}" method="GET" class="mb-3" id="queueFilterForm" onsubmit="event.preventDefault(); triggerDynamicQueueFilter();">
+                    <input type="hidden" name="view" value="queue">
+                    <div class="row g-2">
+                        <div class="col-12 mb-1">
+                            <div class="input-group input-group-sm border rounded-3 overflow-hidden" style="border-color: var(--border-color) !important;">
+                                <span class="input-group-text border-0 text-muted" style="background-color: var(--bg-card); color: var(--text-muted) !important;">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text" name="search" id="queueSearchInput" class="form-control border-0 shadow-none py-2" style="background-color: var(--bg-card); color: var(--text-main);" placeholder="Search patient, ID, or batch..." value="{{ request('search') }}" oninput="debounceQueueSearch()">
+                                <button type="button" class="btn btn-link text-muted p-1 pe-2 d-none" id="clearSearchBtn" onclick="clearQueueSearch()" style="background-color: var(--bg-card);">
+                                    <i class="bi bi-x-circle-fill"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <select name="status" id="filterStatusSelect" class="form-select form-select-sm" style="background-color: var(--bg-card); color: var(--text-main); border-color: var(--border-color);" onchange="triggerDynamicQueueFilter()">
+                                <option value="">All Statuses</option>
+                                <option value="needs_action" {{ request('status') === 'needs_action' ? 'selected' : '' }}>Needs Action</option>
+                                <option value="no_action" {{ request('status') === 'no_action' ? 'selected' : '' }}>No Action Needed</option>
+                                <option value="expired" {{ request('status') === 'expired' ? 'selected' : '' }}>Expired</option>
+                                <option value="pending" {{ request('status') === 'pending' ? 'selected' : '' }}>Pending</option>
+                                <option value="approved" {{ request('status') === 'approved' ? 'selected' : '' }}>Approved</option>
+                                <option value="retest" {{ request('status') === 'retest' ? 'selected' : '' }}>Retest Required</option>
+                                <option value="tested" {{ request('status') === 'tested' ? 'selected' : '' }}>Tested</option>
+                                <option value="encoded" {{ request('status') === 'encoded' ? 'selected' : '' }}>Encoded</option>
+                                <option value="released" {{ request('status') === 'released' ? 'selected' : '' }}>Released</option>
+                                <option value="canceled" {{ request('status') === 'canceled' ? 'selected' : '' }}>Canceled</option>
+                            </select>
+                        </div>
+                        <div class="col-3">
+                            <select name="sort_by" id="filterSortBySelect" class="form-select form-select-sm" style="background-color: var(--bg-card); color: var(--text-main); border-color: var(--border-color);" onchange="triggerDynamicQueueFilter()">
+                                <option value="date" {{ request('sort_by', 'date') === 'date' ? 'selected' : '' }}>Date</option>
+                                <option value="name" {{ request('sort_by') === 'name' ? 'selected' : '' }}>Name</option>
+                                <option value="submitted" {{ request('sort_by') === 'submitted' ? 'selected' : '' }}>Submitted</option>
+                            </select>
+                        </div>
+                        <div class="col-3">
+                            <select name="order" id="filterOrderSelect" class="form-select form-select-sm" style="background-color: var(--bg-card); color: var(--text-main); border-color: var(--border-color);" onchange="triggerDynamicQueueFilter()">
+                                <option value="desc" {{ request('order', 'desc') === 'desc' ? 'selected' : '' }}>Desc</option>
+                                <option value="asc" {{ request('order') === 'asc' ? 'selected' : '' }}>Asc</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+            @endif
+
+            {{-- Main List Wrapper --}}
+            <div class="tab-content position-relative" id="listContent">
+                {{-- STAFF MAIN QUEUE --}}
+                @if($is_staff)
+                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" id="staff-queue-deck" style="max-height: 680px;">
+                        @forelse($staffQueue as $batchId => $group)
+                            @php 
+                                $isGroup = $group instanceof \Illuminate\Support\Collection;
+                                $first = $isGroup ? $group->first() : $group;
+                            @endphp
+                            @include('appointments.partials.list-card', ['app' => $first, 'groupCount' => $isGroup ? $group->count() : 1, 'batchId' => $batchId])
+                        @empty
+                            <div class="card p-5 text-center text-muted border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                                <i class="bi bi-folder-x text-accent fs-1 mb-3 opacity-75" style="color: var(--brand-accent) !important;"></i>
+                                <p class="small mb-0" style="color: var(--text-muted) !important;">No appointments in queue.</p>
+                            </div>
+                        @endforelse
+                    </div>
+
+                    {{-- Staff Pagination Links --}}
+                    <div class="mt-4 d-flex justify-content-center" id="staff-pagination-wrapper">
+                        {{ $staffPaginator->links() }}
+                    </div>
+                @else
+                    {{-- PATIENT: MYSELF --}}
+                    <div class="tab-pane fade show active" id="pane-self">
+                        <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 680px;">
+                            @forelse($self as $app)
+                                @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1])
+                            @empty
+                                <div class="card p-5 text-center text-muted border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                                    <i class="bi bi-calendar-x text-accent fs-1 mb-3 opacity-75" style="color: var(--brand-accent) !important;"></i>
+                                    <p class="small mb-0" style="color: var(--text-muted) !important;">No personal bookings found.</p>
+                                </div>
+                            @endforelse
+                        </div>
+                        <div class="mt-4 d-flex justify-content-center">
+                            {{ $self->links() }}
+                        </div>
+                    </div>
+
+                    {{-- PATIENT: FAMILY DEPENDENTS --}}
+                    <div class="tab-pane fade" id="pane-family">
+                        <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 680px;">
+                            @forelse($dependents as $app)
+                                @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1])
+                            @empty
+                                <div class="card p-5 text-center text-muted border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                                    <i class="bi bi-people text-accent fs-1 mb-3 opacity-75" style="color: var(--brand-accent) !important;"></i>
+                                    <p class="small mb-0" style="color: var(--text-muted) !important;">No dependent bookings found.</p>
+                                </div>
+                            @endforelse
+                        </div>
+                        <div class="mt-4 d-flex justify-content-center">
+                            {{ $dependents->links() }}
+                        </div>
+                    </div>
+
+                    {{-- PATIENT: ORGANIZATIONAL BULK --}}
+                    <div class="tab-pane fade" id="pane-bulk">
+                        <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 680px;">
+                            @forelse($bulkGroups as $batchId => $group)
+                                @php $first = $group->first(); @endphp
+                                @include('appointments.partials.list-card', ['app' => $first, 'groupCount' => $group->count(), 'batchId' => $batchId])
+                            @empty
+                                <div class="card p-5 text-center text-muted border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                                    <i class="bi bi-buildings text-accent fs-1 mb-3 opacity-75" style="color: var(--brand-accent) !important;"></i>
+                                    <p class="small mb-0" style="color: var(--text-muted) !important;">No corporate groups found.</p>
+                                </div>
+                            @endforelse
+                        </div>
+                        <div class="mt-4 d-flex justify-content-center">
+                            {{ $bulkPaginator->links() }}
+                        </div>
+                    </div>
+                @endif
+            </div>
+        </div>
+
+        {{-- RIGHT PANEL: Active Clinical Sheet Workspace --}}
+        <div class="col-12 col-lg-7 col-xl-8 sticky-lg-top" style="top: 90px; align-self: flex-start;" id="right-workspace-col">
+            {{-- Mobile Return to Cards Button --}}
+            <div class="d-lg-none mb-3 d-none" id="mobile-back-to-queue-btn">
+                <button type="button" class="btn btn-sm btn-outline-secondary w-100 py-2 fw-bold uppercase d-flex align-items-center justify-content-center gap-2" onclick="scrollToQueueList()">
+                    <i class="bi bi-arrow-up-circle"></i>
+                    <span>Back to Appointment List</span>
+                </button>
             </div>
 
-            {{-- Render Hidden Detail Panels --}}
-            @foreach($allApps as $app)
-                @include('appointments.partials.detail-card', ['app' => $app, 'is_staff' => $is_staff])
-            @endforeach
+            <div id="workspace-container" class="h-100">
+                {{-- Default Empty State Placeholder --}}
+                <div id="details-placeholder" class="card p-5 text-center border bg-card d-flex flex-column align-items-center justify-content-center h-100" style="min-height: 440px; background-color: var(--bg-card); border-color: var(--border-color) !important; border-radius: 14px;">
+                    <div class="rounded-circle p-3 mb-4 text-accent d-flex align-items-center justify-content-center shadow-sm" style="width: 72px; height: 72px; background-color: rgba(25, 211, 140, 0.1); border: 1.5px solid var(--brand-accent);">
+                        <i class="bi bi-clipboard2-pulse-fill fs-1 text-accent" style="color: var(--brand-accent) !important;"></i>
+                    </div>
+                    <h5 class="text-main fw-bold mb-2 uppercase" style="color: var(--text-main) !important;">Clinical Detail Workspace</h5>
+                    <p class="text-muted small mb-0" style="max-width: 400px; color: var(--text-muted) !important;">Select any appointment from the left-hand directory to inspect requested tests, billing summaries, and actions.</p>
+                </div>
+
+                {{-- Render Hidden Detail Panels --}}
+                @foreach($allApps as $app)
+                    @include('appointments.partials.detail-card', ['app' => $app, 'is_staff' => $is_staff])
+                @endforeach
+            </div>
         </div>
     </div>
-</div>
 </div>
 
 {{-- MULTI-FORMAT LIGHTBOX OVERLAY --}}
@@ -189,295 +199,291 @@
 
 {{-- 5. THEME-ADAPTIVE MODALS LOOP --}}
 @foreach($allApps as $app)
-@php
-    $isExpired = $app->isExpired();
-@endphp
+    @php
+        $isExpired = $app->isExpired();
+    @endphp
 
-{{-- A. DELETE EXPIRED APPOINTMENT MODAL --}}
-@if(Auth::id() == $app->user_id)
-<div class="modal fade" id="deleteExpiredModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-sm modal-dialog-centered">
-        <div class="modal-content border-danger bg-card shadow-lg text-center p-4">
-            <div class="mb-3">
-                <i class="bi bi-trash text-danger display-4 d-block"></i>
+    {{-- A. DELETE EXPIRED APPOINTMENT MODAL --}}
+    @if(Auth::id() == $app->user_id)
+        <div class="modal fade" id="deleteExpiredModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-sm modal-dialog-centered">
+                <div class="modal-content border-danger bg-card shadow-lg text-center p-4" style="background-color: var(--bg-card); border-color: #ff4d4d !important; color: var(--text-main);">
+                    <div class="mb-3">
+                        <i class="bi bi-trash text-danger display-4 d-block"></i>
+                    </div>
+                    <h5 class="text-main fw-bold mb-1 uppercase" style="color: var(--text-main) !important;">Delete Expired Record?</h5>
+                    <p class="text-muted small mb-4" style="color: var(--text-muted) !important;">Are you sure you want to remove this expired appointment from your dashboard? This action will hide the record from your view.</p>
+                    <div class="d-grid gap-2">
+                        <form action="{{ route('appointments.soft-delete', $app->id) }}" method="POST" class="m-0">
+                            @csrf
+                            <button type="submit" class="btn btn-danger w-100 py-2 fw-bold uppercase text-white">DELETE RECORD</button>
+                        </form>
+                        <button type="button" class="btn btn-link text-muted text-decoration-none smaller" data-bs-dismiss="modal">Cancel</button>
+                    </div>
+                </div>
             </div>
-            <h5 class="text-main fw-bold mb-1 uppercase">Delete Expired Record?</h5>
-            <p class="text-secondary small mb-4">Are you sure you want to remove this expired appointment from your dashboard? This action will hide the record from your view.</p>
-            <div class="d-grid gap-2">
-                <form action="{{ route('appointments.soft-delete', $app->id) }}" method="POST" class="m-0">
+        </div>
+    @endif
+
+    {{-- B. CANCEL APPOINTMENT MODAL --}}
+    @if(Auth::id() == $app->user_id)
+        <div class="modal fade" id="cancelAppointmentModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered" style="max-width: 460px;">
+                <form action="{{ route('appointments.cancel', $app->id) }}" method="POST" class="modal-content shadow-lg cancel-appointment-form" data-app-id="{{ $app->id }}" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
                     @csrf
-                    <button type="submit" class="btn btn-danger w-100 py-2 fw-bold uppercase text-white">DELETE RECORD</button>
+                    <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
+                        <h5 class="text-danger fw-bold uppercase small m-0 d-flex align-items-center gap-2">
+                            <i class="bi bi-x-circle-fill fs-5"></i>
+                            <span>Cancel Appointment?</span>
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 text-start">
+                        <p class="small mb-3" style="color: var(--text-main) !important;">Are you sure you want to cancel this appointment?</p>
+                        @php
+                            $scheduledAt = \Carbon\Carbon::parse($app->appointment_date->format('Y-m-d') . ' ' . $app->time_slot);
+                            $hoursUntil = \Carbon\Carbon::now()->diffInHours($scheduledAt, false);
+                            $isWithin24Hours = ($hoursUntil >= 0 && $hoursUntil < 24);
+                            $isPaid = ($app->payment_status === 'paid');
+                        @endphp
+                        @if($app->payment_method === 'Cashless')
+                            @if($isPaid)
+                                @if($isWithin24Hours)
+                                    <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-3 smaller">
+                                        <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
+                                            <i class="bi bi-patch-check-fill text-success"></i>
+                                            <span>Payment Status: Confirmed Paid</span>
+                                        </div>
+                                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                        <strong>50% Fee Applies:</strong> Because cancellation is requested within 24 hours of your slot ({{ $scheduledAt->format('M d, Y h:i A') }}), a <strong>50% administrative cancellation fee</strong> applies. 50% will be refunded to your account.
+                                    </div>
+                                @else
+                                    <div class="alert alert-clinical border-success bg-success bg-opacity-10 text-success p-3 rounded-3 mb-3 smaller">
+                                        <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
+                                            <i class="bi bi-patch-check-fill text-success"></i>
+                                            <span>Payment Status: Confirmed Paid</span>
+                                        </div>
+                                        <i class="bi bi-check-circle-fill me-1"></i>
+                                        <strong>100% Full Refund Eligible:</strong> You are canceling more than 24 hours in advance. Your paid cashless transaction is eligible for a <strong>100% full refund</strong>.
+                                    </div>
+                                @endif
+                            @else
+                                @if($isWithin24Hours)
+                                    <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-3 smaller">
+                                        <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
+                                            <i class="bi bi-clock-history text-warning"></i>
+                                            <span>Payment Status: Not Confirmed Yet (Pending Verification)</span>
+                                        </div>
+                                        <i class="bi bi-info-circle-fill me-1"></i>
+                                        <span>Your uploaded payment receipt has not been confirmed yet. Since you are canceling within 24 hours of your slot ({{ $scheduledAt->format('M d, Y h:i A') }}), a <strong>50% administrative cancellation fee</strong> applies. 50% will be refunded upon confirmation.</span>
+                                    </div>
+                                @else
+                                    <div class="alert alert-clinical border-info bg-info bg-opacity-10 text-info p-3 rounded-3 mb-3 smaller">
+                                        <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
+                                            <i class="bi bi-clock-history text-info"></i>
+                                            <span>Payment Status: Not Confirmed Yet (Pending Verification)</span>
+                                        </div>
+                                        <i class="bi bi-info-circle-fill me-1"></i>
+                                        <span>Your uploaded payment receipt has not been confirmed yet. Since you are canceling more than 24 hours in advance, the booking will be canceled with no charge.</span>
+                                    </div>
+                                @endif
+                            @endif
+                        @else
+                            @if($isWithin24Hours)
+                                <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-3 smaller">
+                                    <i class="bi bi-exclamation-triangle-fill me-1.5"></i>
+                                    <strong>Notice:</strong> Canceling within 24 hours of your scheduled appointment time ({{ $scheduledAt->format('M d, Y h:i A') }}).
+                                </div>
+                            @else
+                                <div class="alert alert-clinical border-secondary bg-secondary bg-opacity-10 text-secondary p-3 rounded-3 mb-3 smaller">
+                                    <i class="bi bi-info-circle-fill me-1.5"></i>
+                                    <span>Free cancellation available for this cash booking (more than 24 hours in advance).</span>
+                                </div>
+                            @endif
+                        @endif
+
+                        {{-- Cancellation Reason Dropdown --}}
+                        <div class="mb-3">
+                            <label for="cancel_reason_select_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Reason for Cancellation</label>
+                            <select id="cancel_reason_select_{{$app->id}}" name="cancellation_reason" class="form-select shadow-none cancel-reason-select" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" onchange="window.toggleCancelReasonField('{{ $app->id }}', this)" required>
+                                <option value="" disabled selected>-- Select a cancellation reason --</option>
+                                <option value="Change of schedule / Unforeseen personal conflict">Change of schedule / Unforeseen personal conflict</option>
+                                <option value="Doctor advised to postpone or cancel test">Doctor advised to postpone or cancel test</option>
+                                <option value="Patient feeling unwell / Unable to visit clinic">Patient feeling unwell / Unable to visit clinic</option>
+                                <option value="Found alternative clinic / duplicate booking">Found alternative clinic / duplicate booking</option>
+                                <option value="Financial or budget constraints">Financial or budget constraints</option>
+                                <option value="Others">Others (Specify below)</option>
+                            </select>
+                        </div>
+
+                        {{-- Dynamic Custom Reason Input for Others --}}
+                        <div id="custom_cancel_reason_wrapper_{{$app->id}}" class="mb-3 d-none">
+                            <label for="custom_cancel_reason_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Specify Custom Reason</label>
+                            <textarea id="custom_cancel_reason_{{$app->id}}" class="form-control shadow-none cancel-reason-textarea" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" rows="3" placeholder="Provide details regarding the cancellation..."></textarea>
+                            <div class="mt-1"><small class="text-muted smaller italic">Minimum 5 characters required for validation.</small></div>
+                        </div>
+
+                        <input type="hidden" name="reason" id="cancel_reason_hidden_{{$app->id}}" value="">
+                    </div>
+                    <div class="modal-footer p-3 border-top d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                        <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Go Back</button>
+                        <button type="submit" class="btn-custom btn-danger-custom py-2 px-4 fw-bold">Cancel Appointment</button>
+                    </div>
                 </form>
-                <button type="button" class="btn btn-link text-secondary text-decoration-none smaller" data-bs-dismiss="modal">Cancel</button>
             </div>
         </div>
-    </div>
-</div>
-@endif
+    @endif
 
-{{-- C. CANCEL APPOINTMENT MODAL WITH CASHLESS CONFIRMED VS UNCONFIRMED STATUS NOTICES & CANCELLATION REASON --}}
-@if(Auth::id() == $app->user_id)
-<div class="modal fade" id="cancelAppointmentModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered" style="max-width: 460px;">
-        <form action="{{ route('appointments.cancel', $app->id) }}" method="POST" class="modal-content shadow-lg border-0 cancel-appointment-form" data-app-id="{{ $app->id }}" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-            @csrf
-            <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
-                <h5 class="text-danger fw-bold uppercase small m-0 d-flex align-items-center gap-2">
-                    <i class="bi bi-x-circle-fill fs-5"></i>
-                    <span>Cancel Appointment?</span>
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-4 text-start">
-                <p class="small text-main mb-3">Are you sure you want to cancel this appointment?</p>
-                @php
-                    $scheduledAt = \Carbon\Carbon::parse($app->appointment_date->format('Y-m-d') . ' ' . $app->time_slot);
-                    $hoursUntil = \Carbon\Carbon::now()->diffInHours($scheduledAt, false);
-                    $isWithin24Hours = ($hoursUntil >= 0 && $hoursUntil < 24);
-                    $isPaid = ($app->payment_status === 'paid');
-                @endphp
-                @if($app->payment_method === 'Cashless')
-                    @if($isPaid)
-                        {{-- Confirmed Paid Cashless Booking --}}
-                        @if($isWithin24Hours)
-                            <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-3 smaller">
-                                <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
-                                    <i class="bi bi-patch-check-fill text-success"></i>
-                                    <span>Payment Status: Confirmed Paid</span>
-                                </div>
-                                <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                                <strong>50% Fee Applies:</strong> Because cancellation is requested within 24 hours of your slot ({{ $scheduledAt->format('M d, Y h:i A') }}), a <strong>50% administrative cancellation fee</strong> applies. 50% will be refunded to your account.
-                            </div>
-                        @else
-                            <div class="alert alert-clinical border-success bg-success bg-opacity-10 text-success p-3 rounded-3 mb-3 smaller">
-                                <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
-                                    <i class="bi bi-patch-check-fill text-success"></i>
-                                    <span>Payment Status: Confirmed Paid</span>
-                                </div>
-                                <i class="bi bi-check-circle-fill me-1"></i>
-                                <strong>100% Full Refund Eligible:</strong> You are canceling more than 24 hours in advance. Your paid cashless transaction is eligible for a <strong>100% full refund</strong>.
-                            </div>
-                        @endif
-                    @else
-                        {{-- Unconfirmed / Pending Cashless Booking --}}
-                        @if($isWithin24Hours)
-                            <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-3 smaller">
-                                <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
-                                    <i class="bi bi-clock-history text-warning"></i>
-                                    <span>Payment Status: Not Confirmed Yet (Pending Verification)</span>
-                                </div>
-                                <i class="bi bi-info-circle-fill me-1"></i>
-                                <span>Your uploaded payment receipt has not been confirmed yet. Since you are canceling within 24 hours of your slot ({{ $scheduledAt->format('M d, Y h:i A') }}), a <strong>50% administrative cancellation fee</strong> applies. 50% will be refunded to your account upon confirmation.</span>
-                            </div>
-                        @else
-                            <div class="alert alert-clinical border-info bg-info bg-opacity-10 text-info p-3 rounded-3 mb-3 smaller">
-                                <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
-                                    <i class="bi bi-clock-history text-info"></i>
-                                    <span>Payment Status: Not Confirmed Yet (Pending Verification)</span>
-                                </div>
-                                <i class="bi bi-info-circle-fill me-1"></i>
-                                <span>Your uploaded payment receipt has not been confirmed yet. Since you are canceling more than 24 hours in advance, the booking will be canceled with no charge.</span>
-                            </div>
-                        @endif
-                    @endif
-                @else
-                    {{-- Cash on Site Booking --}}
-                    @if($isWithin24Hours)
-                        <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-3 smaller">
-                            <i class="bi bi-exclamation-triangle-fill me-1.5"></i>
-                            <strong>Notice:</strong> Canceling within 24 hours of your scheduled appointment time ({{ $scheduledAt->format('M d, Y h:i A') }}).
+    {{-- C. STAFF/ADMIN CLINICAL CONTROLS WORKFLOW MODALS --}}
+    @if($is_staff && auth()->check() && auth()->user()->isEmployee())
+        {{-- Return to Patient Modal --}}
+        <div class="modal fade" id="retModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered">
+                <form action="{{ route('appointments.status', $app->id) }}" id="returnForm{{$app->id}}" method="POST" class="modal-content shadow-lg return-form-element" data-app-id="{{$app->id}}" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                    @csrf
+                    @method('PATCH')
+                    <input type="hidden" name="status" value="returned">
+                    <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
+                        <h5 class="modal-title text-danger fw-bold uppercase small m-0">Return to Patient</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 text-start">
+                        <div class="mb-3">
+                            <label for="return_reason_select_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Reason for Return</label>
+                            <select id="return_reason_select_{{$app->id}}" class="form-select shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" required>
+                                <option value="" disabled selected>-- Select a return reason --</option>
+                                <option value="Mismatched identification documents">Mismatched identification documents</option>
+                                <option value="Incorrect or incomplete personal details">Incorrect or incomplete personal details</option>
+                                <option value="No payment received / pending verification">No payment received / pending verification</option>
+                                <option value="Invalid test selection for patient demographics">Invalid test selection for patient demographics</option>
+                                <option value="Discrepancy in schedule / date selection">Discrepancy in schedule / date selection</option>
+                                <option value="Others">Others (Specify details below)</option>
+                            </select>
                         </div>
-                    @else
-                        <div class="alert alert-clinical border-secondary bg-secondary bg-opacity-10 text-secondary p-3 rounded-3 mb-3 smaller">
-                            <i class="bi bi-info-circle-fill me-1.5"></i>
-                            <span>Free cancellation available for this cash booking (more than 24 hours in advance).</span>
+                        <div id="custom_return_reason_wrapper_{{$app->id}}" class="mb-3 d-none">
+                            <label for="return_reason_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Specify Custom Reason</label>
+                            <textarea name="return_reason" id="return_reason_{{$app->id}}" class="form-control shadow-none return-reason-textarea" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" rows="4" placeholder="Identify the specific correction needed..."></textarea>
                         </div>
-                    @endif
-                @endif
+                        <div class="mt-2"><small class="text-muted smaller italic">Minimum 5 characters required for validation.</small></div>
+                    </div>
+                    <div class="modal-footer p-0" style="background-color: var(--bg-card); border-top: 1px solid var(--border-color);">
+                        <div class="d-flex w-100">
+                            <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Send Return</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
 
-                {{-- Cancellation Reason Dropdown --}}
-                <div class="mb-3">
-                    <label for="cancel_reason_select_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Reason for Cancellation</label>
-                    <select id="cancel_reason_select_{{$app->id}}" name="cancellation_reason" class="form-select shadow-none cancel-reason-select" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" onchange="window.toggleCancelReasonField('{{ $app->id }}', this)" required>
-                        <option value="" disabled selected>-- Select a cancellation reason --</option>
-                        <option value="Change of schedule / Unforeseen personal conflict">Change of schedule / Unforeseen personal conflict</option>
-                        <option value="Doctor advised to postpone or cancel test">Doctor advised to postpone or cancel test</option>
-                        <option value="Patient feeling unwell / Unable to visit clinic">Patient feeling unwell / Unable to visit clinic</option>
-                        <option value="Found alternative clinic / duplicate booking">Found alternative clinic / duplicate booking</option>
-                        <option value="Financial or budget constraints">Financial or budget constraints</option>
-                        <option value="Others">Others (Specify below)</option>
-                    </select>
-                </div>
-
-                {{-- Dynamic Custom Reason Input for Others --}}
-                <div id="custom_cancel_reason_wrapper_{{$app->id}}" class="mb-3 d-none">
-                    <label for="custom_cancel_reason_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Specify Custom Reason</label>
-                    <textarea id="custom_cancel_reason_{{$app->id}}" class="form-control shadow-none cancel-reason-textarea" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" rows="3" placeholder="Provide details regarding the cancellation..."></textarea>
-                    <div class="mt-1"><small class="text-muted smaller italic">Minimum 5 characters required for validation.</small></div>
-                </div>
-
-                {{-- Hidden Input to Guarantee Controller Field Compatibility ('reason') --}}
-                <input type="hidden" name="reason" id="cancel_reason_hidden_{{$app->id}}" value="">
-            </div>
-            <div class="modal-footer p-3 border-top border-secondary border-opacity-10 d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card);">
-                <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Go Back</button>
-                <button type="submit" class="btn-custom btn-danger-custom py-2 px-4 fw-bold">Cancel Appointment</button>
-            </div>
-        </form>
-    </div>
-</div>
-@endif
-
-{{-- D. STAFF/ADMIN CLINICAL CONTROLS WORKFLOW MODALS (Master Queue Only) --}}
-@if($is_staff && auth()->check() && auth()->user()->isEmployee())
-{{-- Return to Patient Modal --}}
-<div class="modal fade" id="retModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered">
-        <form action="{{ route('appointments.status', $app->id) }}" id="returnForm{{$app->id}}" method="POST" class="modal-content shadow-lg return-form-element" data-app-id="{{$app->id}}" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-            @csrf
-            @method('PATCH')
-            <input type="hidden" name="status" value="returned">
-            <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
-                <h5 class="modal-title text-danger fw-bold uppercase small m-0">Return to Patient</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-4 text-start">
-                <div class="mb-3">
-                    <label for="return_reason_select_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Reason for Return</label>
-                    <select id="return_reason_select_{{$app->id}}" class="form-select shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" required>
-                        <option value="" disabled selected>-- Select a return reason --</option>
-                        <option value="Mismatched identification documents">Mismatched identification documents</option>
-                        <option value="Incorrect or incomplete personal details">Incorrect or incomplete personal details</option>
-                        <option value="No payment received / pending verification">No payment received / pending verification</option>
-                        <option value="Invalid test selection for patient demographics">Invalid test selection for patient demographics</option>
-                        <option value="Discrepancy in schedule / date selection">Discrepancy in schedule / date selection</option>
-                        <option value="Others">Others (Specify details below)</option>
-                    </select>
-                </div>
-                <div id="custom_return_reason_wrapper_{{$app->id}}" class="mb-3 d-none">
-                    <label for="return_reason_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Specify Custom Reason</label>
-                    <textarea name="return_reason" id="return_reason_{{$app->id}}" class="form-control shadow-none return-reason-textarea" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" rows="4" placeholder="Identify the specific correction needed..."></textarea>
-                </div>
-                <div class="mt-2"><small class="text-muted smaller italic">Minimum 5 characters required for validation.</small></div>
-            </div>
-            <div class="modal-footer p-0" style="background-color: var(--bg-card); border-top: 1px solid var(--border-color);">
-                <div class="d-flex w-100">
-                    <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Send Return</button>
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
-
-{{-- Payment Confirmation Handshake Modal --}}
-<div class="modal fade" id="confirmPaymentModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content shadow-lg" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-            <div class="modal-header border-secondary border-bottom border-opacity-10 py-3">
-                <h5 class="modal-title text-accent fw-bold uppercase small m-0">Confirm Payment Receipt?</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-4 text-start">
-                <p class="small mb-0 text-muted" style="color: var(--text-main) !important;">
-                    Are you sure you want to flag this appointment as <strong class="fw-bold" style="color: var(--text-main) !important;">PAID</strong>? This will confirm manual receipt of funds for patient <strong class="fw-bold" style="color: var(--text-main) !important;">{{ $app->patient_name }}</strong>.
-                </p>
-            </div>
-            <div class="modal-footer p-0" style="border-top: 1px solid var(--border-color);">
-                <div class="d-flex w-100">
-                    <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
-                    <form action="{{ route('appointments.confirm-payment', $app->id) }}" method="POST" class="w-50 m-0">
-                        @csrf
-                        <input type="hidden" name="payment_status" value="paid">
-                        <button type="submit" class="btn btn-link text-decoration-none w-100 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Yes, Confirm</button>
-                    </form>
+        {{-- Payment Confirmation Modal --}}
+        <div class="modal fade" id="confirmPaymentModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content shadow-lg" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                    <div class="modal-header border-bottom py-3" style="border-color: var(--border-color) !important;">
+                        <h5 class="modal-title text-accent fw-bold uppercase small m-0" style="color: var(--brand-accent) !important;">Confirm Payment Receipt?</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 text-start">
+                        <p class="small mb-0" style="color: var(--text-main) !important;">
+                            Are you sure you want to flag this appointment as <strong class="fw-bold text-success">PAID</strong>? This will confirm manual receipt of funds for patient <strong class="fw-bold" style="color: var(--text-main) !important;">{{ $app->patient_name }}</strong>.
+                        </p>
+                    </div>
+                    <div class="modal-footer p-0" style="border-top: 1px solid var(--border-color);">
+                        <div class="d-flex w-100">
+                            <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
+                            <form action="{{ route('appointments.confirm-payment', $app->id) }}" method="POST" class="w-50 m-0">
+                                @csrf
+                                <input type="hidden" name="payment_status" value="paid">
+                                <button type="submit" class="btn btn-link text-decoration-none w-100 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Yes, Confirm</button>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-</div>
 
-{{-- Revoke Payment Confirmation Modal --}}
-<div class="modal fade" id="revokePaymentModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content shadow-lg" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-            <div class="modal-header border-danger border-bottom border-opacity-10 py-3">
-                <h5 class="modal-title text-danger fw-bold uppercase small m-0">Revoke Payment Status?</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-4 text-start">
-                <p class="small mb-0 text-muted" style="color: var(--text-main) !important;">
-                    Are you sure you want to revert this appointment's payment status to <strong class="text-danger fw-bold">UNPAID</strong>? This will rollback confirmation details for patient <strong style="color: var(--text-main) !important;">{{ $app->patient_name }}</strong>.
-                </p>
-            </div>
-            <div class="modal-footer p-0" style="border-top: 1px solid var(--border-color);">
-                <div class="d-flex w-100">
-                    <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
-                    <form action="{{ route('appointments.confirm-payment', $app->id) }}" method="POST" class="w-50 m-0">
-                        @csrf
-                        <input type="hidden" name="payment_status" value="unpaid">
-                        <button type="submit" class="btn btn-link text-decoration-none w-100 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Yes, Revoke</button>
-                    </form>
+        {{-- Revoke Payment Modal --}}
+        <div class="modal fade" id="revokePaymentModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content shadow-lg" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                    <div class="modal-header border-bottom py-3 border-danger" style="border-color: #ff4d4d !important;">
+                        <h5 class="modal-title text-danger fw-bold uppercase small m-0">Revoke Payment Status?</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 text-start">
+                        <p class="small mb-0" style="color: var(--text-main) !important;">
+                            Are you sure you want to revert this appointment's payment status to <strong class="text-danger fw-bold">UNPAID</strong>? This will rollback confirmation details for patient <strong style="color: var(--text-main) !important;">{{ $app->patient_name }}</strong>.
+                        </p>
+                    </div>
+                    <div class="modal-footer p-0" style="border-top: 1px solid var(--border-color);">
+                        <div class="d-flex w-100">
+                            <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
+                            <form action="{{ route('appointments.confirm-payment', $app->id) }}" method="POST" class="w-50 m-0">
+                                @csrf
+                                <input type="hidden" name="payment_status" value="unpaid">
+                                <button type="submit" class="btn btn-link text-decoration-none w-100 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Yes, Revoke</button>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-</div>
 
-{{-- Mark Payment as Invalid Modal --}}
-<div class="modal fade" id="invalidPaymentModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
-        <form action="{{ route('appointments.invalid-payment', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-            @csrf
-            <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
-                <h5 class="modal-title text-danger fw-bold uppercase small m-0">Flag Payment as Invalid?</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        {{-- Mark Payment as Invalid Modal --}}
+        <div class="modal fade" id="invalidPaymentModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+                <form action="{{ route('appointments.invalid-payment', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                    @csrf
+                    <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
+                        <h5 class="modal-title text-danger fw-bold uppercase small m-0">Flag Payment as Invalid?</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 text-start">
+                        <p class="small text-muted mb-3">Flag this uploaded proof of payment receipt as invalid. Select a justification:</p>
+                        <div class="mb-3">
+                            <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Reason for Invalidating</label>
+                            <select name="reason" id="invalid_reason_select_{{ $app->id }}" class="form-select py-2.5 shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" onchange="window.toggleInvalidReasonField('{{ $app->id }}', this)" required>
+                                <option value="" disabled selected>-- Select an invalidation reason --</option>
+                                <option value="Receipt image is blurry / unreadable">Receipt image is blurry / unreadable</option>
+                                <option value="Reference number mismatch / Fake receipt">Reference number mismatch / Fake receipt</option>
+                                <option value="Incorrect amount sent">Incorrect amount sent</option>
+                                <option value="Others">Others (Specify below)</option>
+                            </select>
+                        </div>
+                        <div id="invalid_custom_reason_wrapper_{{ $app->id }}" class="mb-3 d-none">
+                            <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Specify Custom Reason</label>
+                            <textarea name="custom_reason" id="invalid_custom_reason_{{ $app->id }}" class="form-control" rows="3" placeholder="Provide details regarding the invalid payment..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer p-3 border-top d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                        <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn-custom btn-danger-custom py-2 px-4 fw-bold">Flag as Invalid</button>
+                    </div>
+                </form>
             </div>
-            <div class="modal-body p-4 text-start">
-                <p class="small text-muted mb-3">Flag this uploaded proof of payment receipt as invalid. Select a justification:</p>
-                <div class="mb-3">
-                    <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Reason for Invalidating</label>
-                    <select name="reason" id="invalid_reason_select_{{ $app->id }}" class="form-select py-2.5 shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" onchange="window.toggleInvalidReasonField('{{ $app->id }}', this)" required>
-                        <option value="" disabled selected>-- Select an invalidation reason --</option>
-                        <option value="Receipt image is blurry / unreadable">Receipt image is blurry / unreadable</option>
-                        <option value="Reference number mismatch / Fake receipt">Reference number mismatch / Fake receipt</option>
-                        <option value="Incorrect amount sent">Incorrect amount sent</option>
-                        <option value="Others">Others (Specify below)</option>
-                    </select>
-                </div>
-                <div id="invalid_custom_reason_wrapper_{{ $app->id }}" class="mb-3 d-none">
-                    <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Specify Custom Reason</label>
-                    <textarea name="custom_reason" id="invalid_custom_reason_{{ $app->id }}" class="form-control" rows="3" placeholder="Provide details regarding the invalid payment..."></textarea>
-                </div>
-            </div>
-            <div class="modal-footer p-3 border-top border-secondary border-opacity-10 d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card);">
-                <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn-custom btn-accent btn-danger py-2 px-4 fw-bold">Flag as Invalid</button>
-            </div>
-        </form>
-    </div>
-</div>
+        </div>
 
-{{-- Confirm Refund Modal --}}
-<div class="modal fade" id="confirmRefundModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
-        <form action="{{ route('appointments.refund', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-            @csrf
-            <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
-                <h5 class="modal-title text-success fw-bold uppercase small m-0">Confirm Refund?</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        {{-- Confirm Refund Modal --}}
+        <div class="modal fade" id="confirmRefundModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+                <form action="{{ route('appointments.refund', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                    @csrf
+                    <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
+                        <h5 class="modal-title text-success fw-bold uppercase small m-0">Confirm Refund?</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 text-start">
+                        <p class="small text-muted mb-0">Confirm that the refund for this canceled appointment has been manually processed and completed. This action will log your name and the current timestamp as the official processor.</p>
+                    </div>
+                    <div class="modal-footer p-3 border-top d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                        <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn-custom btn-accent btn-success py-2 px-4 fw-bold">Confirm Refund</button>
+                    </div>
+                </form>
             </div>
-            <div class="modal-body p-4 text-start">
-                <p class="small text-muted mb-0">Confirm that the refund for this canceled appointment has been manually processed and completed. This action will log your name and the current timestamp as the official processor.</p>
-            </div>
-            <div class="modal-footer p-3 border-top border-secondary border-opacity-10 d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card);">
-                <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn-custom btn-accent btn-success py-2 px-4 fw-bold">Confirm Refund</button>
-            </div>
-        </form>
-    </div>
-</div>
-@endif
+        </div>
+    @endif
 @endforeach
 @endsection
 
@@ -485,10 +491,15 @@
 <script src="https://js.pusher.com/8.0.1/pusher.min.js"></script>
 <script>
 let activeRowIdx = null;
+let searchDebounceTimer = null;
 
+/**
+ * 1. WORKSPACE PANEL CONTROLLER & MOBILE RESPONSIVE SCROLL
+ */
 function showAppointmentDetails(appId) {
     const placeholder = document.getElementById('details-placeholder');
     if (placeholder) placeholder.classList.add('d-none');
+
     document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
     document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
     
@@ -500,6 +511,24 @@ function showAppointmentDetails(appId) {
     if (listCard) {
         listCard.classList.add('border-accent', 'shadow-neon');
     }
+
+    // Mobile: Show back button and smoothly scroll into workspace view
+    if (window.innerWidth < 992) {
+        const backBtn = document.getElementById('mobile-back-to-queue-btn');
+        if (backBtn) backBtn.classList.remove('d-none');
+
+        const workspaceCol = document.getElementById('right-workspace-col');
+        if (workspaceCol) {
+            workspaceCol.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+}
+
+function scrollToQueueList() {
+    const leftPanel = document.getElementById('left-queue-panel');
+    if (leftPanel) {
+        leftPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 }
 
 function resetActiveDetail() {
@@ -507,55 +536,129 @@ function resetActiveDetail() {
     if (placeholder) placeholder.classList.remove('d-none');
     document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
     document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+
+    const backBtn = document.getElementById('mobile-back-to-queue-btn');
+    if (backBtn) backBtn.classList.add('d-none');
 }
 
-function syncMasterQueue() {
-    fetch("{{ route('appointments.index', ['view' => 'queue']) }}")
-        .then(response => response.text())
-        .then(html => {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const newContent = doc.getElementById('listContent');
-            const oldContent = document.getElementById('listContent');
-            if (newContent && oldContent) {
-                oldContent.innerHTML = newContent.innerHTML;
-            }
-            const newWorkspace = doc.getElementById('workspace-container');
-            const oldWorkspace = document.getElementById('workspace-container');
-            if (newWorkspace && oldWorkspace) {
-                const activePane = document.querySelector('.appointment-detail-pane:not(.d-none)');
-                const activeId = activePane ? activePane.id : null;
-                oldWorkspace.innerHTML = newWorkspace.innerHTML;
-                if (activeId) {
-                    const placeholder = document.getElementById('details-placeholder');
-                    if (placeholder) placeholder.classList.add('d-none');
-                    const restoredPane = document.getElementById(activeId);
-                    if (restoredPane) restoredPane.classList.remove('d-none');
-                    const recordId = activeId.split('-')[1];
-                    const listCard = document.getElementById(`card-${recordId}`);
-                    if (listCard) listCard.classList.add('border-accent', 'shadow-neon');
-                }
-            }
-            initializeFilters();
-        })
-        .catch(error => console.error('Queue sync failed:', error));
-}
+/**
+ * 2. ASYNCHRONOUS DYNAMIC QUEUE FETCHER & MORPHER (NO PAGE RELOAD)
+ */
+async function fetchQueueWithParams(urlOverride = null) {
+    const form = document.getElementById('queueFilterForm');
+    let url;
+    
+    if (urlOverride) {
+        url = urlOverride;
+    } else if (form) {
+        const formData = new FormData(form);
+        const searchParams = new URLSearchParams(formData);
+        url = form.action + '?' + searchParams.toString();
+    } else {
+        url = "{{ route('appointments.index', ['view' => 'queue']) }}";
+    }
 
-function initializeFilters() {
-    const queueSearch = document.getElementById('queueSearch');
-    if (queueSearch) {
-        queueSearch.addEventListener('input', function() {
-            const query = this.value.trim().toLowerCase();
-            document.querySelectorAll('.app-list-card').forEach(card => {
-                const cardText = card.innerText.toLowerCase();
-                card.classList.toggle('d-none', !cardText.includes(query));
-            });
+    try {
+        const response = await fetch(url, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
+        if (!response.ok) return;
+
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        // Extract currently active detail pane before swapping
+        const activePane = document.querySelector('.appointment-detail-pane:not(.d-none)');
+        const activeId = activePane ? activePane.id : null;
+
+        // 1. Morph List Content
+        const newContent = doc.getElementById('listContent');
+        const oldContent = document.getElementById('listContent');
+        if (newContent && oldContent) {
+            oldContent.style.transition = 'opacity 0.15s ease-out';
+            oldContent.style.opacity = '0.3';
+            setTimeout(() => {
+                oldContent.innerHTML = newContent.innerHTML;
+                oldContent.style.opacity = '1';
+                rebindQueueEvents();
+            }, 150);
+        }
+
+        // 2. Morph Workspace Detail Panels
+        const newWorkspace = doc.getElementById('workspace-container');
+        const oldWorkspace = document.getElementById('workspace-container');
+        if (newWorkspace && oldWorkspace) {
+            oldWorkspace.innerHTML = newWorkspace.innerHTML;
+            if (activeId) {
+                const placeholder = document.getElementById('details-placeholder');
+                if (placeholder) placeholder.classList.add('d-none');
+                const restoredPane = document.getElementById(activeId);
+                if (restoredPane) restoredPane.classList.remove('d-none');
+                const recordId = activeId.split('-')[1];
+                const listCard = document.getElementById(`card-${recordId}`);
+                if (listCard) listCard.classList.add('border-accent', 'shadow-neon');
+            }
+        }
+
+        // Update browser URL without reloading
+        if (!urlOverride && form) {
+            window.history.pushState(null, '', url);
+        }
+    } catch (err) {
+        console.error("Dynamic Queue Fetch failed:", err);
     }
 }
 
+function triggerDynamicQueueFilter() {
+    fetchQueueWithParams();
+}
+
+function debounceQueueSearch() {
+    const input = document.getElementById('queueSearchInput');
+    const clearBtn = document.getElementById('clearSearchBtn');
+    if (clearBtn) {
+        clearBtn.classList.toggle('d-none', !input.value);
+    }
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+        triggerDynamicQueueFilter();
+    }, 350);
+}
+
+function clearQueueSearch() {
+    const input = document.getElementById('queueSearchInput');
+    if (input) {
+        input.value = '';
+        const clearBtn = document.getElementById('clearSearchBtn');
+        if (clearBtn) clearBtn.classList.add('d-none');
+        triggerDynamicQueueFilter();
+    }
+}
+
+function syncMasterQueue() {
+    fetchQueueWithParams(window.location.href);
+}
+
+/**
+ * 3. REBIND EVENT LISTENERS ON DYNAMICALLY INJECTED CONTENT
+ */
+function rebindQueueEvents() {
+    // Pagination AJAX interceptor
+    document.querySelectorAll('#listContent .pagination a').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            fetchQueueWithParams(link.href);
+        });
+    });
+}
+
+/**
+ * 4. DOM DOCUMENT INITIALIZER & REAL-TIME WEBSOCKETS
+ */
 document.addEventListener('DOMContentLoaded', () => {
-    initializeFilters();
+    rebindQueueEvents();
+
     const urlParams = new URLSearchParams(window.location.search);
     const selectId = urlParams.get('id');
     if (selectId) {
@@ -615,7 +718,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (hiddenReason) hiddenReason.value = this.value.trim();
             });
         }
-
         if (select) {
             form.addEventListener('submit', function(e) {
                 const activeVal = select.value === 'Others' ? textarea : select;
@@ -632,17 +734,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    @if($is_staff)
-        if (typeof Pusher !== 'undefined') {
-            const pusher = new Pusher("{{ env('PUSHER_APP_KEY') }}", {
-                cluster: "{{ env('PUSHER_APP_CLUSTER') }}"
-            });
-            const syncChannel = pusher.subscribe('clinical-queue');
-            syncChannel.bind('queue.updated', function() {
-                syncMasterQueue();
-            });
+    // WebSockets Real-time Auto Refresh (Staff & Patients)
+    if (typeof Pusher !== 'undefined') {
+        const pusherKey = "{{ env('PUSHER_APP_KEY') }}";
+        const pusherCluster = "{{ env('PUSHER_APP_CLUSTER') }}";
+        if (pusherKey) {
+            const pusher = new Pusher(pusherKey, { cluster: pusherCluster });
+
+            @if($is_staff)
+                const queueChannel = pusher.subscribe('clinical-queue');
+                queueChannel.bind('queue.updated', () => syncMasterQueue());
+            @else
+                const userChannel = pusher.subscribe('notifications.{{ Auth::id() }}');
+                userChannel.bind('notification.received', () => syncMasterQueue());
+            @endif
         }
-    @endif
+    }
+
+    // Polling fallback every 30 seconds
+    setInterval(syncMasterQueue, 30000);
 });
 
 // Dynamic Invalidation Reason Field Toggle
@@ -697,11 +807,13 @@ window.toggleCancelReasonField = function(appId, select) {
     border-radius: 8px;
     transition: 0.2s ease;
 }
+
 #appTabs .nav-link:hover,
 .nav-pills .nav-link:hover {
     border-color: var(--brand-accent) !important;
     color: var(--brand-accent) !important;
 }
+
 #appTabs .nav-link.active,
 .nav-pills .nav-link.active,
 button.nav-link.active {
@@ -709,35 +821,44 @@ button.nav-link.active {
     color: #1c232d !important;
     border-color: var(--brand-accent) !important;
 }
+
 .border-dashed { border-style: dashed !important; }
 .min-vh-50 { min-height: 50vh; }
+
 #listContent .custom-scroll {
     padding: 6px 12px 6px 6px !important;
 }
+
 .app-list-card {
     transition: all 0.2s ease;
     cursor: pointer;
 }
+
 .app-list-card:hover {
     border-color: var(--brand-accent) !important;
     transform: translateX(2px);
 }
+
 .border-accent {
     border-color: var(--brand-accent) !important;
     border-width: 2px !important;
 }
+
 .shadow-neon {
     box-shadow: 0 0 15px rgba(25, 211, 140, 0.35) !important;
 }
+
 .app-list-card.border-accent {
     background-color: rgba(25, 211, 140, 0.04) !important;
     transform: translateX(4px);
 }
+
 .btn-danger-custom {
     background-color: #ff4d4d !important;
     color: #ffffff !important;
     border: 2px solid #ff4d4d !important;
 }
+
 .btn-danger-custom:hover {
     background-color: #e03b3b !important;
     border-color: #e03b3b !important;

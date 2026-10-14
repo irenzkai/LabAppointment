@@ -3,9 +3,14 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Models\ActivityLog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class PasswordResetLinkController extends Controller
@@ -29,16 +34,63 @@ class PasswordResetLinkController extends Controller
             'email' => ['required', 'email'],
         ]);
 
-        // We will send the password reset link to this user. Once we have attempted
-        // to send the link, we will examine the response then see the message we
-        // need to show to the user. Finally, we'll send out a proper response.
+        $normalizedEmail = strtolower(trim($request->email));
+
+        // 1. Server-Side Anti-Brute Force Protection (IP & Email Throttling)
+        $throttleKey = 'forgot_password:' . Str::transliterate($normalizedEmail . '|' . $request->ip());
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            $seconds = RateLimiter::availableIn($throttleKey);
+            return back()->withInput($request->only('email'))->withErrors([
+                'email' => trans('auth.throttle', [
+                    'seconds' => $seconds,
+                    'minutes' => ceil($seconds / 60),
+                ]),
+            ]);
+        }
+
+        // 2. Check if the email belongs to a deactivated (soft-deleted) account
+        $trashedUser = User::onlyTrashed()->where('email', $normalizedEmail)->first();
+        if ($trashedUser) {
+            RateLimiter::hit($throttleKey, 600);
+            return back()->withInput($request->only('email'))->withErrors([
+                'email' => 'This account is currently deactivated. Please sign in to receive an account reactivation code.',
+            ]);
+        }
+
+        // 3. Strict Verified-Email Enforcement
+        $user = User::where('email', $normalizedEmail)->first();
+        if ($user && is_null($user->email_verified_at)) {
+            RateLimiter::hit($throttleKey, 600);
+
+            if (! is_null($user->phone_verified_at)) {
+                return back()->withInput($request->only('email'))->withErrors([
+                    'email' => 'Password reset links can only be dispatched to verified email addresses. Since your mobile phone is verified, please sign in using your phone number.',
+                ]);
+            }
+
+            return back()->withInput($request->only('email'))->withErrors([
+                'email' => 'Password reset links can only be dispatched to verified email addresses. Please verify your email address before requesting a reset.',
+            ]);
+        }
+
+        // 4. Dispatch the password reset link via Laravel Password Broker
         $status = Password::sendResetLink(
-            $request->only('email')
+            ['email' => $normalizedEmail]
         );
 
-        return $status == Password::RESET_LINK_SENT
-                    ? back()->with('status', __($status))
-                    : back()->withInput($request->only('email'))
-                        ->withErrors(['email' => __($status)]);
+        if ($status == Password::RESET_LINK_SENT) {
+            RateLimiter::hit($throttleKey, 600);
+
+            if ($user) {
+                ActivityLog::record('PASSWORD RESET LINK DISPATCHED', "Password reset link requested for {$user->email}", $user->name);
+            }
+
+            return back()->with('status', __($status));
+        }
+
+        RateLimiter::hit($throttleKey, 600);
+
+        return back()->withInput($request->only('email'))
+            ->withErrors(['email' => __($status)]);
     }
 }
