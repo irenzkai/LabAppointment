@@ -6,6 +6,10 @@ $isAlreadyTested = in_array($app->status, ['tested', 'encoded', 'released']);
 $confirmedPrice = ($app->payment_amount && floatval($app->payment_amount) > 0) 
     ? floatval($app->payment_amount) 
     : floatval($app->totalPrice());
+
+$patientBirthdateStr = $app->patient_birthdate 
+    ? \Carbon\Carbon::parse($app->patient_birthdate)->format('Y-m-d') 
+    : '';
 @endphp
 
 <!-- MAIN SAMPLING & RETEST VERIFICATION MODAL -->
@@ -29,7 +33,7 @@ $confirmedPrice = ($app->payment_amount && floatval($app->payment_amount) > 0)
             <input type="hidden" name="patient_middle_name" value="{{ $app->patient_middle_name }}">
             <input type="hidden" name="patient_last_name" value="{{ $app->patient_last_name }}">
             <input type="hidden" name="patient_suffix" value="{{ $app->patient_suffix }}">
-            <input type="hidden" name="patient_birthdate" value="{{ $app->patient_birthdate ? $app->patient_birthdate->format('Y-m-d') : '' }}">
+            <input type="hidden" name="patient_birthdate" value="{{ $patientBirthdateStr }}">
             <input type="hidden" name="patient_sex" value="{{ $app->patient_sex }}">
             <input type="hidden" name="patient_phone" value="{{ $app->patient_phone }}">
             <input type="hidden" name="patient_street" value="{{ $app->patient_street }}">
@@ -51,14 +55,14 @@ $confirmedPrice = ($app->payment_amount && floatval($app->payment_amount) > 0)
 
                 <!-- MAIN WORKFLOW TABS (No default blue styling) -->
                 @if(!$isAlreadyTested)
-                    <ul class="nav nav-pills nav-fill gap-2" id="mainTab_{{ $app->id }}" role="tablist">
+                    <ul class="nav nav-pills nav-fill gap-2" id="mainTab_{{ $app->id }}" role="list">
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link active fw-bold text-uppercase py-2 rounded-3" id="tested-tab-btn-{{ $app->id }}" data-bs-toggle="pill" type="button" onclick="setModalMainAction({{ $app->id }}, 'tested')" style="font-size: 0.8rem;">
+                            <button class="nav-link active fw-bold text-uppercase py-2 rounded-3" id="tested-tab-btn-{{ $app->id }}" type="button" onclick="setModalMainAction({{ $app->id }}, 'tested')" style="font-size: 0.8rem;">
                                 <i class="bi bi-person-check-fill me-1"></i> 1. Progress to Tested
                             </button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link fw-bold text-uppercase py-2 rounded-3" id="retest-tab-btn-{{ $app->id }}" data-bs-toggle="pill" type="button" onclick="setModalMainAction({{ $app->id }}, 'retest')" style="font-size: 0.8rem;">
+                            <button class="nav-link fw-bold text-uppercase py-2 rounded-3" id="retest-tab-btn-{{ $app->id }}" type="button" onclick="setModalMainAction({{ $app->id }}, 'retest')" style="font-size: 0.8rem;">
                                 <i class="bi bi-arrow-repeat me-1"></i> 2. Return for Retest
                             </button>
                         </li>
@@ -85,7 +89,7 @@ $confirmedPrice = ($app->payment_amount && floatval($app->payment_amount) > 0)
 
                             <small class="text-muted d-block uppercase fw-bold" style="font-size: 0.65rem;">Age / Sex / Birthdate</small>
                             <div class="text-main small mb-2" style="color: var(--text-main) !important;">
-                                {{ $app->patient_age }} Yrs <span class="mx-1">|</span> {{ strtoupper($app->patient_sex) }} <span class="mx-1">|</span> {{ $app->patient_birthdate ? $app->patient_birthdate->format('M d, Y') : 'N/A' }}
+                                {{ $app->patient_age }} Yrs <span class="mx-1">|</span> {{ strtoupper($app->patient_sex) }} <span class="mx-1">|</span> {{ $app->patient_birthdate ? \Carbon\Carbon::parse($app->patient_birthdate)->format('M d, Y') : 'N/A' }}
                             </div>
 
                             <small class="text-muted d-block uppercase fw-bold" style="font-size: 0.65rem;">Contact Phone</small>
@@ -132,11 +136,11 @@ $confirmedPrice = ($app->payment_amount && floatval($app->payment_amount) > 0)
                     <div class="row g-3 align-items-center">
                         <div class="col-md-6">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Estimated Hours</label>
-                            <input type="number" name="est_hours" id="est_hours_{{ $app->id }}" class="form-control py-2 shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" min="0" placeholder="0" value="{{ $app->result_estimated_at ? Carbon\Carbon::parse($app->tested_at)->diffInHours($app->result_estimated_at) : '0' }}">
+                            <input type="number" name="est_hours" id="est_hours_{{ $app->id }}" class="form-control py-2 shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" min="0" placeholder="0" value="{{ $app->result_estimated_at && $app->tested_at ? Carbon\Carbon::parse($app->tested_at)->diffInHours($app->result_estimated_at) : '0' }}">
                         </div>
                         <div class="col-md-6">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Estimated Minutes</label>
-                            <input type="number" name="est_minutes" id="est_mins_{{ $app->id }}" class="form-control py-2 shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" min="0" max="59" placeholder="0" value="{{ $app->result_estimated_at ? (Carbon\Carbon::parse($app->tested_at)->diffInMinutes($app->result_estimated_at) % 60) : '0' }}">
+                            <input type="number" name="est_minutes" id="est_mins_{{ $app->id }}" class="form-control py-2 shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" min="0" max="59" placeholder="0" value="{{ $app->result_estimated_at && $app->tested_at ? (Carbon\Carbon::parse($app->tested_at)->diffInMinutes($app->result_estimated_at) % 60) : '0' }}">
                         </div>
                         <div class="col-12 mt-2">
                             <div class="alert alert-clinical p-2.5 border" style="background-color: rgba(25, 211, 140, 0.03); border-color: var(--border-color) !important; border-radius: 8px;">
@@ -200,7 +204,7 @@ $confirmedPrice = ($app->payment_amount && floatval($app->payment_amount) > 0)
             <div id="modal_validation_error_msg_{{ $app->id }}" class="text-secondary small mb-4 text-start">
                 Please complete all required fields before completing sampling.
             </div>
-            <button type="button" class="btn btn-danger w-100 py-2.5 uppercase fw-bold" onclick="bootstrap.Modal.getInstance(document.getElementById('modalValidationError_{{ $app->id }}')).hide()">
+            <button type="button" class="btn btn-danger w-100 py-2.5 uppercase fw-bold" onclick="bootstrap.Modal.getInstance(document.getElementById('modalValidationError_{{ $app->id }}'))?.hide()">
                 Understood
             </button>
         </div>
@@ -262,7 +266,10 @@ if (!window.validateAndSubmitModalForm) {
         event.stopPropagation();
 
         const form = document.getElementById(`markTestedForm_${appId}`);
-        const action = document.getElementById(`action_${appId}`)?.value || 'tested';
+        if (!form) return false;
+
+        const actionInput = document.getElementById(`action_${appId}`);
+        const action = actionInput ? actionInput.value : 'tested';
         let errors = [];
 
         const payAmount = form.querySelector('[name="payment_amount"]')?.value;
@@ -291,12 +298,14 @@ if (!window.validateAndSubmitModalForm) {
 
             document.getElementById(`modal_validation_error_msg_${appId}`).innerHTML = errorHtml;
             const errModalEl = document.getElementById(`modalValidationError_${appId}`);
-            const errModal = new bootstrap.Modal(errModalEl);
+            const errModal = bootstrap.Modal.getInstance(errModalEl) || new bootstrap.Modal(errModalEl);
             errModal.show();
             return false;
         }
 
-        // Asynchronous form submission
+        // Use getAttribute('action') to avoid JavaScript property shadowing from <input name="action">
+        const formActionUrl = form.getAttribute('action');
+
         const submitBtn = document.getElementById(`modal_submit_btn_${appId}`);
         const originalText = submitBtn ? submitBtn.innerHTML : '';
         if (submitBtn) {
@@ -310,7 +319,7 @@ if (!window.validateAndSubmitModalForm) {
                 || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') 
                 || '';
 
-            const response = await fetch(form.action, {
+            const response = await fetch(formActionUrl, {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -328,7 +337,7 @@ if (!window.validateAndSubmitModalForm) {
             }
 
             if (response.ok) {
-                // Dynamically update master queue in place without reloading
+                // Dynamically refresh master queue in place without full page reload
                 if (typeof fetchQueueWithParams === 'function') {
                     await fetchQueueWithParams(window.location.href);
                 } else if (typeof syncMasterQueue === 'function') {
@@ -338,11 +347,11 @@ if (!window.validateAndSubmitModalForm) {
                 const errData = await response.json();
                 let errMsg = errData.message || "An error occurred while recording sampling.";
                 if (errData.errors) {
-                    errMsg = '<ul class="mb-0 ps-3 text-danger">' + Object.values(errData.errors).flat().map(e => `<li>${e}</li>`).join('') + '</ul>';
+                    errMsg = '<ul class="mb-0 ps-3 text-danger">' + Object.values(errData.errors).flat().map(e => `<li class="mb-1">${e}</li>`).join('') + '</ul>';
                 }
                 document.getElementById(`modal_validation_error_msg_${appId}`).innerHTML = errMsg;
                 const errModalEl = document.getElementById(`modalValidationError_${appId}`);
-                const errModal = new bootstrap.Modal(errModalEl);
+                const errModal = bootstrap.Modal.getInstance(errModalEl) || new bootstrap.Modal(errModalEl);
                 errModal.show();
             }
         } catch (error) {
@@ -360,7 +369,7 @@ if (!window.validateAndSubmitModalForm) {
 </script>
 
 <style>
-/* Ensure modal dialog is positioned below the fixed navbar (72px) at all zoom levels */
+/* Position modal container comfortably below the 72px fixed navbar across all zoom levels */
 #testModal{{ $app->id }}.modal {
     padding-top: 85px !important;
 }
@@ -370,7 +379,7 @@ if (!window.validateAndSubmitModalForm) {
     margin-bottom: 2rem !important;
 }
 
-/* High-contrast Header Tab Button Overrides */
+/* Tab button overrides */
 #mainTab_{{ $app->id }} .nav-link {
     color: var(--text-muted) !important;
     background-color: transparent !important;
