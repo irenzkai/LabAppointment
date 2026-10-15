@@ -105,9 +105,9 @@
                         @endforelse
                     </div>
 
-                    {{-- Staff Pagination Links --}}
+                    {{-- Staff Custom Jump Pagination --}}
                     <div class="mt-4 d-flex justify-content-center" id="staff-pagination-wrapper">
-                        {{ $staffPaginator->links() }}
+                        {{ $staffPaginator->links('appointments.partials.pagination') }}
                     </div>
                 @else
                     {{-- PATIENT: MYSELF --}}
@@ -123,7 +123,7 @@
                             @endforelse
                         </div>
                         <div class="mt-4 d-flex justify-content-center">
-                            {{ $self->links() }}
+                            {{ $self->links('appointments.partials.pagination') }}
                         </div>
                     </div>
 
@@ -140,7 +140,7 @@
                             @endforelse
                         </div>
                         <div class="mt-4 d-flex justify-content-center">
-                            {{ $dependents->links() }}
+                            {{ $dependents->links('appointments.partials.pagination') }}
                         </div>
                     </div>
 
@@ -158,7 +158,7 @@
                             @endforelse
                         </div>
                         <div class="mt-4 d-flex justify-content-center">
-                            {{ $bulkPaginator->links() }}
+                            {{ $bulkPaginator->links('appointments.partials.pagination') }}
                         </div>
                     </div>
                 @endif
@@ -215,7 +215,7 @@
                         <h5 class="text-main fw-bold mb-1 uppercase" style="color: var(--text-main) !important;">Delete Expired Record?</h5>
                         <p class="text-muted small mb-4" style="color: var(--text-muted) !important;">Are you sure you want to remove this expired appointment from your dashboard? This action will hide the record from your view.</p>
                         <div class="d-grid gap-2">
-                            <form action="{{ route('appointments.soft-delete', $app->id) }}" method="POST" class="m-0">
+                            <form action="{{ route('appointments.soft-delete', $app->id) }}" method="POST" class="m-0" onsubmit="handleAjaxActionSubmit(event, this)">
                                 @csrf
                                 <button type="submit" class="btn btn-danger w-100 py-2 fw-bold uppercase text-white">DELETE RECORD</button>
                             </form>
@@ -230,7 +230,7 @@
         @if(Auth::id() == $app->user_id)
             <div class="modal fade" id="cancelAppointmentModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
                 <div class="modal-dialog modal-dialog-centered" style="max-width: 460px;">
-                    <form action="{{ route('appointments.cancel', $app->id) }}" method="POST" class="modal-content shadow-lg cancel-appointment-form" data-app-id="{{ $app->id }}" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                    <form action="{{ route('appointments.cancel', $app->id) }}" method="POST" class="modal-content shadow-lg cancel-appointment-form" data-app-id="{{ $app->id }}" onsubmit="handleAjaxActionSubmit(event, this)" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
                         @csrf
                         <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
                             <h5 class="text-danger fw-bold uppercase small m-0 d-flex align-items-center gap-2">
@@ -340,7 +340,7 @@
             {{-- Return to Patient Modal --}}
             <div class="modal fade" id="retModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
                 <div class="modal-dialog modal-dialog-centered">
-                    <form action="{{ route('appointments.status', $app->id) }}" id="returnForm{{$app->id}}" method="POST" class="modal-content shadow-lg return-form-element" data-app-id="{{$app->id}}" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                    <form action="{{ route('appointments.status', $app->id) }}" id="returnForm{{$app->id}}" method="POST" class="modal-content shadow-lg return-form-element" data-app-id="{{$app->id}}" onsubmit="handleAjaxActionSubmit(event, this)" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
                         @csrf
                         @method('PATCH')
                         <input type="hidden" name="status" value="returned">
@@ -393,7 +393,7 @@
                         <div class="modal-footer p-0" style="border-top: 1px solid var(--border-color);">
                             <div class="d-flex w-100">
                                 <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
-                                <form action="{{ route('appointments.confirm-payment', $app->id) }}" method="POST" class="w-50 m-0">
+                                <form action="{{ route('appointments.confirm-payment', $app->id) }}" method="POST" class="w-50 m-0" onsubmit="handleAjaxActionSubmit(event, this)">
                                     @csrf
                                     <input type="hidden" name="payment_status" value="paid">
                                     <button type="submit" class="btn btn-link text-decoration-none w-100 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Yes, Confirm</button>
@@ -420,7 +420,7 @@
                         <div class="modal-footer p-0" style="border-top: 1px solid var(--border-color);">
                             <div class="d-flex w-100">
                                 <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
-                                <form action="{{ route('appointments.confirm-payment', $app->id) }}" method="POST" class="w-50 m-0">
+                                <form action="{{ route('appointments.confirm-payment', $app->id) }}" method="POST" class="w-50 m-0" onsubmit="handleAjaxActionSubmit(event, this)">
                                     @csrf
                                     <input type="hidden" name="payment_status" value="unpaid">
                                     <button type="submit" class="btn btn-link text-decoration-none w-100 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Yes, Revoke</button>
@@ -434,7 +434,7 @@
             {{-- Mark Payment as Invalid Modal --}}
             <div class="modal fade" id="invalidPaymentModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
                 <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
-                    <form action="{{ route('appointments.invalid-payment', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                    <form action="{{ route('appointments.invalid-payment', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" onsubmit="handleAjaxActionSubmit(event, this)" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
                         @csrf
                         <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
                             <h5 class="modal-title text-danger fw-bold uppercase small m-0">Flag Payment as Invalid?</h5>
@@ -468,7 +468,7 @@
             {{-- Confirm Refund Modal --}}
             <div class="modal fade" id="confirmRefundModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
                 <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
-                    <form action="{{ route('appointments.refund', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                    <form action="{{ route('appointments.refund', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" onsubmit="handleAjaxActionSubmit(event, this)" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
                         @csrf
                         <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
                             <h5 class="modal-title text-success fw-bold uppercase small m-0">Confirm Refund?</h5>
@@ -555,7 +555,6 @@ async function fetchQueueWithParams(urlOverride = null) {
         const formData = new FormData(form);
         const searchParams = new URLSearchParams();
         
-        // Force view=queue
         searchParams.set('view', 'queue');
         
         for (const [key, value] of formData.entries()) {
@@ -583,7 +582,6 @@ async function fetchQueueWithParams(urlOverride = null) {
     }
 
     try {
-        // Explicitly accept text/html to prevent Laravel expectsJson() from intercepting as JSON
         const response = await fetch(finalUrl, {
             headers: {
                 'Accept': 'text/html, application/xhtml+xml',
@@ -601,7 +599,7 @@ async function fetchQueueWithParams(urlOverride = null) {
 
         const html = await response.text();
 
-        // Safety fallback if response is somehow JSON
+        // Safety fallback if response is JSON
         if (html.trim().startsWith('{') || html.trim().startsWith('[')) {
             console.warn("Received JSON response. Retrying with full page navigation.");
             window.location.href = finalUrl;
@@ -631,7 +629,7 @@ async function fetchQueueWithParams(urlOverride = null) {
             oldWorkspace.innerHTML = newWorkspace.innerHTML;
         }
 
-        // 3. Morph Modal Windows to keep dynamic actions functional
+        // 3. Morph Modal Windows
         const newModals = doc.getElementById('queue-modals-container');
         const oldModals = document.getElementById('queue-modals-container');
         if (newModals && oldModals) {
@@ -660,7 +658,6 @@ async function fetchQueueWithParams(urlOverride = null) {
             }
         }
 
-        // If previously selected card no longer exists in current page/filter, select the first card
         if (!restored) {
             const firstCard = document.querySelector('#staff-queue-deck .app-list-card, #listContent .tab-pane.active .app-list-card');
             if (firstCard && firstCard.id) {
@@ -738,7 +735,7 @@ function syncMasterQueue() {
  * 3. REBIND EVENT LISTENERS ON DYNAMICALLY INJECTED CONTENT
  */
 function rebindQueueEvents() {
-    // Intercept pagination clicks dynamically
+    // Intercept standard pagination links dynamically
     document.querySelectorAll('#listContent .pagination a, #staff-pagination-wrapper .pagination a').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
@@ -750,7 +747,32 @@ function rebindQueueEvents() {
 }
 
 /**
- * 4. INITIALIZE MODAL EVENT LISTENERS
+ * 4. JUMP-TO-PAGE ENGINE FOR TYPEABLE "..." ELLIPSIS
+ */
+window.jumpToQueuePage = function(inputEl) {
+    if (!inputEl) return;
+    const pageParam = inputEl.dataset.pageName || 'staff_page';
+    const maxPage = parseInt(inputEl.dataset.maxPage, 10) || 1;
+    let page = parseInt(inputEl.value.trim(), 10);
+    
+    if (isNaN(page) || page < 1) return;
+    if (page > maxPage) page = maxPage;
+
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set(pageParam, page);
+    
+    // Clear input to reset placeholder
+    inputEl.value = '';
+
+    if (typeof fetchQueueWithParams === 'function') {
+        fetchQueueWithParams(currentUrl.toString());
+    } else {
+        window.location.href = currentUrl.toString();
+    }
+};
+
+/**
+ * 5. INITIALIZE MODAL EVENT LISTENERS
  */
 function initModalListeners() {
     // Return to Patient form reason listeners
@@ -817,7 +839,7 @@ function initModalListeners() {
 }
 
 /**
- * 5. DOM DOCUMENT INITIALIZER & REAL-TIME WEBSOCKETS
+ * 6. DOM DOCUMENT INITIALIZER & REAL-TIME WEBSOCKETS
  */
 document.addEventListener('DOMContentLoaded', () => {
     rebindQueueEvents();
@@ -983,6 +1005,37 @@ button.nav-link.active {
     background-color: #e03b3b !important;
     border-color: #e03b3b !important;
     transform: translateY(-1px);
+}
+
+/* TYPEABLE "..." JUMP INPUT STYLING */
+.queue-jump-input::-webkit-outer-spin-button,
+.queue-jump-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.queue-jump-input[type=number] {
+    -moz-appearance: textfield;
+}
+
+.queue-jump-input {
+    width: 38px;
+    height: 35px;
+    padding: 2px 4px;
+    font-weight: 700;
+    font-size: 0.78rem;
+    border-radius: 6px;
+    background-color: var(--bg-card);
+    color: var(--text-main);
+    border: 1.5px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.queue-jump-input:focus {
+    border-color: var(--brand-accent) !important;
+    box-shadow: 0 0 8px rgba(25, 211, 140, 0.3) !important;
+    background-color: var(--bg-card) !important;
+    color: var(--text-main) !important;
 }
 </style>
 @endpush
