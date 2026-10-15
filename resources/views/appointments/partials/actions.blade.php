@@ -280,7 +280,7 @@
                 {{-- STEP B: APPROVED / RETEST -> MARK AS TESTED (Lab Tech Only) & EDIT DEMOGRAPHICS (Staff) --}}
                 @if($app->status == 'approved' || $app->status == 'retest')
                     @can('isLabTech')
-                        <button type="button" class="btn-custom btn-accent w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#testModal{{ $app->id }}">
+                        <button type="button" class="btn-custom btn-accent w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#testModal{{ $app->id }}" onclick="if(typeof setModalMainAction === 'function'){ setModalMainAction({{ $app->id }}, 'tested'); }">
                             <i class="bi bi-person-check me-1"></i> MARK PATIENT AS TESTED
                         </button>
                         @include('appointments.partials.mark-tested-modal')
@@ -304,7 +304,7 @@
                             <i class="bi bi-pencil-square me-1"></i> ENCODE RESULTS
                         </a>
                         @can('isLabTech')
-                            <button type="button" class="btn-custom btn-outline-danger py-2 fw-bold text-center" data-bs-toggle="modal" data-bs-target="#testModal{{ $app->id }}">
+                            <button type="button" class="btn-custom btn-outline-danger py-2 fw-bold text-center" data-bs-toggle="modal" data-bs-target="#testModal{{ $app->id }}" onclick="if(typeof setModalMainAction === 'function'){ setModalMainAction({{ $app->id }}, 'retest'); }">
                                 <i class="bi bi-arrow-repeat me-1"></i> MARK FOR RETEST
                             </button>
                             @include('appointments.partials.mark-tested-modal')

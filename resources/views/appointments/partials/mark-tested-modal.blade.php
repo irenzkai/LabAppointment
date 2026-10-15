@@ -47,13 +47,14 @@ $patientBirthdateStr = $app->patient_birthdate
 
             <div class="modal-header border-bottom py-3 d-flex flex-column align-items-stretch" style="border-color: var(--border-color) !important; background-color: var(--bg-card);">
                 <div class="d-flex justify-content-between align-items-center {{ !$isAlreadyTested ? 'mb-3' : '' }}">
-                    <h5 class="modal-title text-accent fw-bold uppercase small m-0" id="modal_title_{{ $app->id }}" style="color: var(--brand-accent) !important;">
-                        <i class="bi bi-shield-check me-2 fs-5"></i>{{ $isAlreadyTested ? 'Clinical Retest Request Hub' : 'Clinical Sampling & Verification Hub' }}
+                    <h5 class="modal-title {{ $isAlreadyTested ? 'text-warning' : 'text-accent' }} fw-bold uppercase small m-0" id="modal_title_{{ $app->id }}">
+                        <i class="bi {{ $isAlreadyTested ? 'bi-arrow-repeat text-warning' : 'bi-shield-check text-accent' }} me-2 fs-5"></i>
+                        {{ $isAlreadyTested ? 'Clinical Retest Request Hub' : 'Clinical Sampling & Verification Hub' }}
                     </h5>
                     <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
 
-                <!-- MAIN WORKFLOW TABS (No default blue styling) -->
+                <!-- MAIN WORKFLOW TABS (Displayed only if not yet tested) -->
                 @if(!$isAlreadyTested)
                     <ul class="nav nav-pills nav-fill gap-2" id="mainTab_{{ $app->id }}" role="list">
                         <li class="nav-item" role="presentation">
@@ -109,7 +110,6 @@ $patientBirthdateStr = $app->patient_birthdate
                                 @endforeach
                             </div>
 
-                            {{-- Confirmed Price fetched dynamically from Service Price --}}
                             <small class="text-muted d-block uppercase fw-bold" style="font-size: 0.65rem;">Confirmed Price / Total Bill</small>
                             <div class="text-accent fw-bold fs-6 mb-2" style="color: var(--brand-accent) !important;">
                                 ₱{{ number_format($confirmedPrice, 2) }}
@@ -128,8 +128,8 @@ $patientBirthdateStr = $app->patient_birthdate
 
                 <!-- PROCESSING PARAMETERS INPUT SECTION -->
 
-                <!-- PANE 1: PROGRESS TO TESTED (TIME ESTIMATION ONLY) -->
-                <div id="tested_process_fields_{{ $app->id }}">
+                <!-- PANE 1: PROGRESS TO TESTED (TIME ESTIMATION ONLY) - Hidden if already tested -->
+                <div id="tested_process_fields_{{ $app->id }}" class="{{ $isAlreadyTested ? 'd-none' : '' }}">
                     <h6 class="text-accent mb-3 small fw-bold uppercase border-bottom pb-2" style="border-color: var(--border-color) !important; color: var(--brand-accent) !important;">
                         Processing Time Estimation
                     </h6>
@@ -151,15 +151,15 @@ $patientBirthdateStr = $app->patient_birthdate
                     </div>
                 </div>
 
-                <!-- PANE 2: RETEST REQUEST -->
-                <div id="retest_process_fields_{{ $app->id }}" class="d-none">
+                <!-- PANE 2: RETEST REQUEST - Shown by default if already tested -->
+                <div id="retest_process_fields_{{ $app->id }}" class="{{ $isAlreadyTested ? '' : 'd-none' }}">
                     <h6 class="text-warning mb-3 small fw-bold uppercase border-bottom pb-2" style="border-color: var(--border-color) !important;">
                         Retesting Criteria
                     </h6>
                     <div class="row g-3">
                         <div class="col-12">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Reason for Return</label>
-                            <select id="retest_reason_select_{{ $app->id }}" name="retest_reason" class="form-select py-2 shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" onchange="toggleModalCustomRetest({{ $app->id }}, this.value)">
+                            <select id="retest_reason_select_{{ $app->id }}" name="retest_reason" class="form-select py-2 shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" onchange="toggleModalCustomRetest({{ $app->id }}, this.value)" {{ $isAlreadyTested ? 'required' : '' }}>
                                 <option value="" disabled selected>-- Select a return justification --</option>
                                 <option value="Hemolyzed specimen (unsuitable for testing)">Hemolyzed specimen (unsuitable for testing)</option>
                                 <option value="Incomplete or clotted blood sample">Incomplete or clotted blood sample</option>
@@ -185,8 +185,10 @@ $patientBirthdateStr = $app->patient_birthdate
 
             <div class="modal-footer border-top bg-transparent p-3" style="border-color: var(--border-color) !important;">
                 <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">CANCEL</button>
-                <button type="submit" class="btn-custom btn-accent py-2 px-4 fw-bold uppercase shadow-sm" id="modal_submit_btn_{{ $app->id }}">
-                    APPROVE & RECORD SAMPLING
+                <button type="submit" 
+                        class="btn-custom {{ $isAlreadyTested ? 'btn-outline-danger' : 'btn-accent' }} py-2 px-4 fw-bold uppercase shadow-sm" 
+                        id="modal_submit_btn_{{ $app->id }}">
+                    {{ $isAlreadyTested ? 'CONFIRM RETEST EXCEPTION' : 'APPROVE & RECORD SAMPLING' }}
                 </button>
             </div>
         </form>
@@ -221,6 +223,7 @@ if (!window.setModalMainAction) {
         const retestPane = document.getElementById(`retest_process_fields_${appId}`);
         const submitBtn = document.getElementById(`modal_submit_btn_${appId}`);
         const selectRetest = document.getElementById(`retest_reason_select_${appId}`);
+        const modalTitle = document.getElementById(`modal_title_${appId}`);
 
         if (action === 'tested') {
             if (testPane) testPane.classList.remove('d-none');
@@ -229,6 +232,10 @@ if (!window.setModalMainAction) {
                 submitBtn.innerText = "APPROVE & RECORD SAMPLING";
                 submitBtn.className = "btn-custom btn-accent py-2 px-4 fw-bold uppercase shadow-sm";
             }
+            if (modalTitle) {
+                modalTitle.className = "modal-title text-accent fw-bold uppercase small m-0";
+                modalTitle.innerHTML = '<i class="bi bi-shield-check text-accent me-2 fs-5"></i>Clinical Sampling & Verification Hub';
+            }
             if (selectRetest) selectRetest.removeAttribute('required');
         } else {
             if (testPane) testPane.classList.add('d-none');
@@ -236,6 +243,10 @@ if (!window.setModalMainAction) {
             if (submitBtn) {
                 submitBtn.innerText = "CONFIRM RETEST EXCEPTION";
                 submitBtn.className = "btn-custom btn-outline-danger py-2 px-4 fw-bold uppercase shadow-sm";
+            }
+            if (modalTitle) {
+                modalTitle.className = "modal-title text-warning fw-bold uppercase small m-0";
+                modalTitle.innerHTML = '<i class="bi bi-arrow-repeat text-warning me-2 fs-5"></i>Clinical Retest Request Hub';
             }
             if (selectRetest) selectRetest.setAttribute('required', 'required');
         }
@@ -303,7 +314,7 @@ if (!window.validateAndSubmitModalForm) {
             return false;
         }
 
-        // Use getAttribute('action') to avoid JavaScript property shadowing from <input name="action">
+        // Avoid property shadowing from <input name="action">
         const formActionUrl = form.getAttribute('action');
 
         const submitBtn = document.getElementById(`modal_submit_btn_${appId}`);
@@ -337,7 +348,7 @@ if (!window.validateAndSubmitModalForm) {
             }
 
             if (response.ok) {
-                // Dynamically refresh master queue in place without full page reload
+                // Refresh master queue in place without full page reload
                 if (typeof fetchQueueWithParams === 'function') {
                     await fetchQueueWithParams(window.location.href);
                 } else if (typeof syncMasterQueue === 'function') {
@@ -365,6 +376,22 @@ if (!window.validateAndSubmitModalForm) {
 
         return false;
     };
+}
+
+// Global modal opener delegator to switch to retest automatically when required
+if (!window.retestModalWatcherRegistered) {
+    window.retestModalWatcherRegistered = true;
+    document.addEventListener('show.bs.modal', function(e) {
+        if (e.target && e.target.id && e.target.id.startsWith('testModal')) {
+            const appId = e.target.id.replace('testModal', '');
+            const actionInput = document.getElementById(`action_${appId}`);
+            if (actionInput && actionInput.value === 'retest') {
+                if (typeof setModalMainAction === 'function') {
+                    setModalMainAction(appId, 'retest');
+                }
+            }
+        }
+    });
 }
 </script>
 
