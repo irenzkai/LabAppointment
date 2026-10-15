@@ -15,9 +15,9 @@
         </div>
     </div>
 
-    {{-- Management Quick Access Cards --}}
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
+    {{-- Management Quick Access Cards (Includes User List for Lab History) --}}
+    <div class="row g-3 mb-4 row-cols-2 row-cols-md-3 row-cols-xl-5">
+        <div class="col">
             <a href="{{ route('services.manage') }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
                 <div class="d-flex align-items-center gap-3">
                     <div class="text-accent fs-3"><i class="bi bi-list-stars"></i></div>
@@ -28,7 +28,7 @@
                 </div>
             </a>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col">
             <a href="{{ route('appointments.index', ['view' => 'queue']) }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
                 <div class="d-flex align-items-center gap-3">
                     <div class="text-accent fs-3"><i class="bi bi-kanban"></i></div>
@@ -39,7 +39,18 @@
                 </div>
             </a>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col">
+            <a href="{{ route('admin.users.index') }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="text-accent fs-3"><i class="bi bi-people"></i></div>
+                    <div>
+                        <div class="fw-bold text-main small uppercase">User List</div>
+                        <small class="text-secondary smaller">Lab history archive</small>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col">
             <a href="{{ route('admin.payment-providers.index') }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
                 <div class="d-flex align-items-center gap-3">
                     <div class="text-accent fs-3"><i class="bi bi-qr-code-scan"></i></div>
@@ -50,7 +61,7 @@
                 </div>
             </a>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col">
             <a href="{{ route('admin.appointment-settings') }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
                 <div class="d-flex align-items-center gap-3">
                     <div class="text-accent fs-3"><i class="bi bi-clock-history"></i></div>
@@ -170,7 +181,7 @@
             </div>
         </div>
 
-        {{-- Status Distribution Chart (Redesigned Hover Tooltips) --}}
+        {{-- Status Distribution Chart --}}
         <div class="col-lg-6">
             <div class="card p-4 border-secondary bg-card shadow-sm h-100 text-start">
                 <h6 class="text-accent fw-bold uppercase small mb-3"><i class="bi bi-donut-chart-fill me-1.5"></i>Status Distribution Breakdown</h6>
@@ -326,7 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderTrendChart('monthly');
 
-    // 2. Status Doughnut Chart (With Redesigned High-Legibility Tooltips on Hover)
+    // 2. Status Doughnut Chart
     const statusCtx = document.getElementById('statusDoughnutChart').getContext('2d');
     new Chart(statusCtx, {
         type: 'doughnut',

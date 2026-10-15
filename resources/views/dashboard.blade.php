@@ -83,7 +83,7 @@
 
     {{-- 3. MAIN ACTION GRID --}}
     <div class="row g-4">
-        {{-- LEFT PANEL: Recent Inquiries (Dynamically Updating Container) --}}
+        {{-- LEFT PANEL: Recent Inquiries (Updated via on-demand refresh button) --}}
         <div class="col-12 col-lg-8">
             <div class="card shadow-sm border overflow-hidden h-100" style="background-color: var(--bg-card); border-color: var(--border-color) !important; border-radius: 14px;">
                 <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center border-bottom" style="background-color: var(--brand-dark); border-color: rgba(255, 255, 255, 0.08) !important;">
@@ -92,9 +92,15 @@
                         <span>My Recent Inquiries</span>
                     </h6>
                     <div class="d-flex align-items-center gap-2">
-                        <span id="live-sync-indicator" class="badge bg-secondary bg-opacity-25 text-white-50 border border-secondary border-opacity-25" style="font-size: 0.65rem;">
-                            <i class="bi bi-broadcast text-accent me-1"></i>LIVE SYNC
-                        </span>
+                        {{-- Circular Refresh Button (No Page Reload, No Periodic Polling) --}}
+                        <button type="button" 
+                                class="btn btn-sm btn-outline-accent rounded-circle d-flex align-items-center justify-content-center shadow-none" 
+                                id="manual-refresh-btn" 
+                                onclick="refreshDashboardInquiries()" 
+                                title="Refresh Inquiries" 
+                                style="width: 32px; height: 32px; padding: 0;">
+                            <i class="bi bi-arrow-clockwise" id="refresh-icon" style="font-size: 0.95rem;"></i>
+                        </button>
                         <a href="{{ route('appointments.index') }}" class="text-accent small text-decoration-none fw-bold ms-2 hover-accent" style="color: var(--brand-accent) !important; font-size: 0.75rem;">
                             VIEW ALL &rarr;
                         </a>
@@ -250,10 +256,20 @@
 .hover-accent:hover {
     color: var(--brand-accent-hover) !important;
 }
+
+/* Smooth icon spin on click */
+@keyframes spinClockwise {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.spin-animation {
+    animation: spinClockwise 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
 </style>
 
 <!-- =========================================================================
-     SCRIPTS: REAL-TIME CLOCK & DYNAMIC REFRESH ENGINE
+     SCRIPTS: REAL-TIME CLOCK & ON-DEMAND FLICKER-FREE REFRESH
 ========================================================================= -->
 @push('scripts')
 <script>
@@ -275,13 +291,23 @@ setInterval(updateClock, 1000);
 updateClock();
 
 /**
- * 2. DYNAMIC LIVE REFRESH ENGINE (NO PAGE RELOAD REQUIRED)
+ * 2. ON-DEMAND FLICKER-FREE REFRESH (NO PERIODIC POLLING)
  */
 async function refreshDashboardInquiries() {
+    const refreshBtn = document.getElementById('manual-refresh-btn');
+    const refreshIcon = document.getElementById('refresh-icon');
+
+    if (refreshIcon) refreshIcon.classList.add('spin-animation');
+    if (refreshBtn) refreshBtn.disabled = true;
+
     try {
         const response = await fetch("{{ route('main') }}", {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            headers: { 
+                'Accept': 'text/html, application/xhtml+xml',
+                'X-Requested-With': 'XMLHttpRequest' 
+            }
         });
+
         if (!response.ok) return;
 
         const html = await response.text();
@@ -291,52 +317,19 @@ async function refreshDashboardInquiries() {
         const newBody = doc.getElementById('recent-inquiries-body');
         const currentBody = document.getElementById('recent-inquiries-body');
 
+        // Swap directly with ZERO opacity flicker or timeout delays
         if (newBody && currentBody) {
-            currentBody.style.transition = 'opacity 0.2s ease-out';
-            currentBody.style.opacity = '0.3';
-
-            setTimeout(() => {
-                currentBody.innerHTML = newBody.innerHTML;
-                currentBody.style.opacity = '1';
-
-                // Flash sync indicator
-                const syncBadge = document.getElementById('live-sync-indicator');
-                if (syncBadge) {
-                    syncBadge.classList.replace('text-white-50', 'text-accent');
-                    setTimeout(() => syncBadge.classList.replace('text-accent', 'text-white-50'), 1500);
-                }
-            }, 200);
+            currentBody.innerHTML = newBody.innerHTML;
         }
     } catch (err) {
-        console.warn("Live dashboard sync failed:", err);
+        console.warn("Manual dashboard inquiries refresh failed:", err);
+    } finally {
+        setTimeout(() => {
+            if (refreshIcon) refreshIcon.classList.remove('spin-animation');
+            if (refreshBtn) refreshBtn.disabled = false;
+        }, 600);
     }
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    // A. Real-Time WebSockets Listener via Pusher
-    if (typeof Pusher !== 'undefined') {
-        const pusherKey = "{{ env('PUSHER_APP_KEY') }}";
-        const pusherCluster = "{{ env('PUSHER_APP_CLUSTER') }}";
-        if (pusherKey) {
-            const pusher = new Pusher(pusherKey, { cluster: pusherCluster });
-
-            // Listen to private notifications channel
-            const notifChannel = pusher.subscribe('notifications.{{ Auth::id() }}');
-            notifChannel.bind('notification.received', () => {
-                refreshDashboardInquiries();
-            });
-
-            // Listen to clinical queue updates
-            const queueChannel = pusher.subscribe('clinical-queue');
-            queueChannel.bind('queue.updated', () => {
-                refreshDashboardInquiries();
-            });
-        }
-    }
-
-    // B. Background polling fallback every 20 seconds
-    setInterval(refreshDashboardInquiries, 20000);
-});
 </script>
 @endpush
 @endsection

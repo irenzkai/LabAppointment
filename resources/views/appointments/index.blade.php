@@ -105,7 +105,7 @@
                         @endforelse
                     </div>
 
-                    {{-- Staff Custom Jump Pagination --}}
+                    {{-- Staff Custom Jump Pagination (< 1 2 3 4 ... 5 >) --}}
                     <div class="mt-4 d-flex justify-content-center" id="staff-pagination-wrapper">
                         {{ $staffPaginator->links('appointments.partials.pagination') }}
                     </div>
@@ -197,7 +197,7 @@
 {{-- MULTI-FORMAT LIGHTBOX OVERLAY --}}
 @include('layouts.partials.lightbox-overlay')
 
-{{-- 5. THEME-ADAPTIVE MODALS WRAPPER (Dynamically reloaded on filter/page changes) --}}
+{{-- 5. THEME-ADAPTIVE MODALS WRAPPER (Dynamically synchronized on actions) --}}
 <div id="queue-modals-container">
     @foreach($allApps as $app)
         @php
@@ -490,7 +490,6 @@
 @endsection
 
 @push('scripts')
-<script src="https://js.pusher.com/8.0.1/pusher.min.js"></script>
 <script>
 let searchDebounceTimer = null;
 
@@ -513,7 +512,6 @@ function showAppointmentDetails(appId) {
         listCard.classList.add('border-accent', 'shadow-neon');
     }
 
-    // Mobile view scroll handling
     if (window.innerWidth < 992) {
         const backBtn = document.getElementById('mobile-back-to-queue-btn');
         if (backBtn) backBtn.classList.remove('d-none');
@@ -543,7 +541,8 @@ function resetActiveDetail() {
 }
 
 /**
- * 2. ASYNCHRONOUS DYNAMIC QUEUE FETCHER & MORPHER (NO PAGE RELOAD)
+ * 2. ASYNCHRONOUS FLICKER-FREE QUEUE FETCHER & MORPHER
+ * Updates strictly upon user interaction (no periodic background timers).
  */
 async function fetchQueueWithParams(urlOverride = null) {
     const form = document.getElementById('queueFilterForm');
@@ -573,14 +572,6 @@ async function fetchQueueWithParams(urlOverride = null) {
     @endif
     const finalUrl = parsedUrl.toString();
 
-    // Immediate visual feedback (dim queue list during loading)
-    const listContent = document.getElementById('listContent');
-    if (listContent) {
-        listContent.style.transition = 'opacity 0.15s ease-out';
-        listContent.style.opacity = '0.35';
-        listContent.style.pointerEvents = 'none';
-    }
-
     try {
         const response = await fetch(finalUrl, {
             headers: {
@@ -589,19 +580,12 @@ async function fetchQueueWithParams(urlOverride = null) {
             }
         });
 
-        if (!response.ok) {
-            if (listContent) {
-                listContent.style.opacity = '1';
-                listContent.style.pointerEvents = 'auto';
-            }
-            return;
-        }
+        if (!response.ok) return;
 
         const html = await response.text();
 
         // Safety fallback if response is JSON
         if (html.trim().startsWith('{') || html.trim().startsWith('[')) {
-            console.warn("Received JSON response. Retrying with full page navigation.");
             window.location.href = finalUrl;
             return;
         }
@@ -613,30 +597,28 @@ async function fetchQueueWithParams(urlOverride = null) {
         const activePane = document.querySelector('.appointment-detail-pane:not(.d-none)');
         const activeId = activePane ? activePane.id : null;
 
-        // 1. Morph List Content
+        // 1. Morph List Content cleanly without opacity dips
         const newContent = doc.getElementById('listContent');
         const oldContent = document.getElementById('listContent');
         if (newContent && oldContent) {
             oldContent.innerHTML = newContent.innerHTML;
-            oldContent.style.opacity = '1';
-            oldContent.style.pointerEvents = 'auto';
         }
 
-        // 2. Morph Workspace Detail Panels
+        // 2. Morph Workspace Detail Panels cleanly
         const newWorkspace = doc.getElementById('workspace-container');
         const oldWorkspace = document.getElementById('workspace-container');
         if (newWorkspace && oldWorkspace) {
             oldWorkspace.innerHTML = newWorkspace.innerHTML;
         }
 
-        // 3. Morph Modal Windows
+        // 3. Morph Modal Windows to keep dynamic actions functional
         const newModals = doc.getElementById('queue-modals-container');
         const oldModals = document.getElementById('queue-modals-container');
         if (newModals && oldModals) {
             oldModals.innerHTML = newModals.innerHTML;
         }
 
-        // 4. Update browser URL history without reload
+        // 4. Update browser URL history without page reload
         window.history.pushState({ path: finalUrl }, '', finalUrl);
 
         // 5. Synchronize Form Inputs with new URL state
@@ -646,7 +628,7 @@ async function fetchQueueWithParams(urlOverride = null) {
         rebindQueueEvents();
         initModalListeners();
 
-        // 7. Select appropriate appointment card
+        // 7. Retain active card or select first available
         let restored = false;
         if (activeId) {
             const recordId = activeId.replace('details-', '');
@@ -670,10 +652,6 @@ async function fetchQueueWithParams(urlOverride = null) {
 
     } catch (err) {
         console.error("Dynamic Queue Fetch failed:", err);
-        if (listContent) {
-            listContent.style.opacity = '1';
-            listContent.style.pointerEvents = 'auto';
-        }
     }
 }
 
@@ -714,7 +692,7 @@ function debounceQueueSearch() {
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
         triggerDynamicQueueFilter();
-    }, 300);
+    }, 350);
 }
 
 function clearQueueSearch() {
@@ -725,10 +703,6 @@ function clearQueueSearch() {
         if (clearBtn) clearBtn.classList.add('d-none');
         triggerDynamicQueueFilter();
     }
-}
-
-function syncMasterQueue() {
-    fetchQueueWithParams(window.location.href);
 }
 
 /**
@@ -761,21 +735,14 @@ window.jumpToQueuePage = function(inputEl) {
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.set(pageParam, page);
     
-    // Clear input to reset placeholder
     inputEl.value = '';
-
-    if (typeof fetchQueueWithParams === 'function') {
-        fetchQueueWithParams(currentUrl.toString());
-    } else {
-        window.location.href = currentUrl.toString();
-    }
+    fetchQueueWithParams(currentUrl.toString());
 };
 
 /**
  * 5. INITIALIZE MODAL EVENT LISTENERS
  */
 function initModalListeners() {
-    // Return to Patient form reason listeners
     document.querySelectorAll('.return-form-element').forEach(form => {
         if (form.dataset.bound === 'true') return;
         form.dataset.bound = 'true';
@@ -806,7 +773,6 @@ function initModalListeners() {
         }
     });
 
-    // Patient Cancellation form reason listeners
     document.querySelectorAll('.cancel-appointment-form').forEach(form => {
         if (form.dataset.bound === 'true') return;
         form.dataset.bound = 'true';
@@ -839,7 +805,7 @@ function initModalListeners() {
 }
 
 /**
- * 6. DOM DOCUMENT INITIALIZER & REAL-TIME WEBSOCKETS
+ * 6. DOM DOCUMENT INITIALIZER
  */
 document.addEventListener('DOMContentLoaded', () => {
     rebindQueueEvents();
@@ -863,7 +829,6 @@ document.addEventListener('DOMContentLoaded', () => {
             showAppointmentDetails(selectId);
         }
     } else {
-        // Auto-select first card on desktop initial load
         const firstCard = document.querySelector('#staff-queue-deck .app-list-card, #listContent .tab-pane.active .app-list-card');
         if (firstCard && firstCard.id && window.innerWidth >= 992) {
             const firstId = firstCard.id.replace('card-', '');
@@ -875,26 +840,6 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('popstate', () => {
         fetchQueueWithParams(window.location.href);
     });
-
-    // WebSockets Real-time Auto Refresh (Staff & Patients)
-    if (typeof Pusher !== 'undefined') {
-        const pusherKey = "{{ env('PUSHER_APP_KEY') }}";
-        const pusherCluster = "{{ env('PUSHER_APP_CLUSTER') }}";
-        if (pusherKey) {
-            const pusher = new Pusher(pusherKey, { cluster: pusherCluster });
-
-            @if($is_staff)
-                const queueChannel = pusher.subscribe('clinical-queue');
-                queueChannel.bind('queue.updated', () => syncMasterQueue());
-            @else
-                const userChannel = pusher.subscribe('notifications.{{ Auth::id() }}');
-                userChannel.bind('notification.received', () => syncMasterQueue());
-            @endif
-        }
-    }
-
-    // Background polling fallback
-    setInterval(syncMasterQueue, 30000);
 });
 
 // Dynamic Invalidation Reason Field Toggle
@@ -972,13 +917,12 @@ button.nav-link.active {
 }
 
 .app-list-card {
-    transition: all 0.2s ease;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
     cursor: pointer;
 }
 
 .app-list-card:hover {
     border-color: var(--brand-accent) !important;
-    transform: translateX(2px);
 }
 
 .border-accent {
@@ -987,12 +931,11 @@ button.nav-link.active {
 }
 
 .shadow-neon {
-    box-shadow: 0 0 15px rgba(25, 211, 140, 0.35) !important;
+    box-shadow: 0 0 12px rgba(25, 211, 140, 0.25) !important;
 }
 
 .app-list-card.border-accent {
     background-color: rgba(25, 211, 140, 0.04) !important;
-    transform: translateX(4px);
 }
 
 .btn-danger-custom {

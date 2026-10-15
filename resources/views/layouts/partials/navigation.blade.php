@@ -1,5 +1,6 @@
 @php
     $notifCount = auth()->check() ? auth()->user()->unreadNotifications->count() : 0;
+    $recentNotifications = auth()->check() ? auth()->user()->notifications()->take(6)->get() : collect();
 @endphp
 
 <!-- =========================================================================
@@ -84,7 +85,7 @@
                     @elseif(Auth::user()->isEmployee())
                         {{-- Staff Dropdown --}}
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle {{ request()->routeIs('staff.panel') || (request()->routeIs('appointments.index') && request('view') === 'queue') || request()->routeIs('services.manage') || request()->routeIs('admin.payment-providers.*') || request()->routeIs('admin.appointment-settings') ? 'active' : '' }}" href="#" id="staffMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <a class="nav-link dropdown-toggle {{ request()->routeIs('staff.panel') || (request()->routeIs('appointments.index') && request('view') === 'queue') || request()->routeIs('services.manage') || request()->routeIs('admin.payment-providers.*') || request()->routeIs('admin.appointment-settings') || request()->routeIs('admin.users.*') ? 'active' : '' }}" href="#" id="staffMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 STAFF PANEL
                             </a>
                             <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary mt-2" aria-labelledby="staffMenuDropdown">
@@ -94,6 +95,11 @@
                                     </a>
                                 </li>
                                 <li><hr class="dropdown-divider border-secondary border-opacity-50"></li>
+                                <li>
+                                    <a class="dropdown-item small py-2" href="{{ route('admin.users.index') }}">
+                                        <i class="bi bi-people me-2 text-accent"></i>User List
+                                    </a>
+                                </li>
                                 <li>
                                     <a class="dropdown-item small py-2" href="{{ route('appointments.index', ['view' => 'queue']) }}">
                                         <i class="bi bi-kanban me-2 text-accent"></i>Master Queue
@@ -132,16 +138,90 @@
                         <span>REGISTER</span>
                     </a>
                 @else
-                    {{-- DESKTOP NOTIFICATION BELL ICON (DIRECT LINK) --}}
-                    <a href="{{ route('notifications.index') }}" class="btn btn-link text-white position-relative p-2 text-decoration-none" title="Notifications">
-                        <i class="bi bi-bell-fill fs-5" style="color: var(--brand-accent) !important;"></i>
-                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white border border-dark nav-notif-badge {{ $notifCount > 0 ? '' : 'd-none' }}" style="font-size: 0.62rem; margin-top: 8px; margin-left: -10px;">
-                            {{ $notifCount }}
-                        </span>
-                    </a>
+                    {{-- DESKTOP NOTIFICATION BELL WITH DROPDOWN --}}
+                    <div class="dropdown">
+                        <button class="btn btn-link text-white position-relative p-2 text-decoration-none dropdown-toggle no-caret" 
+                                id="desktopNotifDropdown" 
+                                data-bs-toggle="dropdown" 
+                                aria-expanded="false" 
+                                title="Notifications">
+                            <i class="bi bi-bell-fill fs-5" style="color: var(--brand-accent) !important;"></i>
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white border border-dark nav-notif-badge {{ $notifCount > 0 ? '' : 'd-none' }}" style="font-size: 0.62rem; margin-top: 8px; margin-left: -10px;">
+                                {{ $notifCount }}
+                            </span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end dropdown-menu-dark shadow-lg border-secondary mt-2 p-0 notif-dropdown-menu" 
+                             aria-labelledby="desktopNotifDropdown" 
+                             style="width: 360px; max-width: 90vw; border-radius: 12px; overflow: hidden; background-color: var(--bg-card); border: 1.5px solid var(--border-color) !important;">
+                            
+                            {{-- Dropdown Header --}}
+                            <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="background-color: var(--brand-dark); border-color: var(--border-color) !important;">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="fw-bold small text-white uppercase tracking-wider" style="font-size: 0.75rem;">Notifications</span>
+                                    @if($notifCount > 0)
+                                        <span class="badge bg-danger rounded-pill smaller" style="font-size: 0.62rem;">{{ $notifCount }} new</span>
+                                    @endif
+                                </div>
+                                @if($notifCount > 0)
+                                    <a href="{{ route('notifications.clearAll') }}" class="text-accent smaller fw-bold text-decoration-none hover-accent" style="font-size: 0.7rem; color: var(--brand-accent) !important;">
+                                        Mark all read
+                                    </a>
+                                @endif
+                            </div>
+
+                            {{-- Notification Items List --}}
+                            <div class="custom-scroll" style="max-height: 360px; overflow-y: auto;">
+                                @forelse($recentNotifications as $notif)
+                                    @php
+                                        $isUnread = is_null($notif->read_at);
+                                        $type = $notif->data['type'] ?? 'info';
+                                        $icon = match($type) {
+                                            'success' => 'bi-check-circle-fill text-success',
+                                            'danger' => 'bi-exclamation-octagon-fill text-danger',
+                                            'warning' => 'bi-exclamation-triangle-fill text-warning',
+                                            default => 'bi-info-circle-fill text-accent'
+                                        };
+                                    @endphp
+                                    <a href="{{ route('notifications.markAsRead', $notif->id) }}" 
+                                       class="d-flex gap-3 align-items-start p-3 border-bottom text-decoration-none notif-item {{ $isUnread ? 'bg-unread' : '' }}" 
+                                       style="border-color: var(--border-color) !important;">
+                                        <i class="bi {{ $icon }} fs-5 mt-0.5 flex-shrink-0" @if($type === 'info') style="color: var(--brand-accent) !important;" @endif></i>
+                                        <div class="flex-grow-1 min-w-0 text-start">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span class="fw-bold small text-truncate {{ $isUnread ? 'text-accent' : '' }}" style="font-size: 0.8rem; color: {{ $isUnread ? 'var(--brand-accent)' : 'var(--text-main)' }} !important;">
+                                                    {{ $notif->data['title'] ?? 'Notification' }}
+                                                </span>
+                                                @if($isUnread)
+                                                    <span class="rounded-pill p-1 ms-2" title="Unread" style="background-color: var(--brand-accent); width: 7px; height: 7px; display: inline-block;"></span>
+                                                @endif
+                                            </div>
+                                            <p class="text-muted mb-1 text-truncate-2" style="font-size: 0.72rem; line-height: 1.35; color: var(--text-muted) !important;">
+                                                {{ $notif->data['message'] ?? '' }}
+                                            </p>
+                                            <small class="text-muted text-opacity-75" style="font-size: 0.65rem;">
+                                                {{ $notif->created_at->diffForHumans() }}
+                                            </small>
+                                        </div>
+                                    </a>
+                                @empty
+                                    <div class="p-4 text-center text-muted small" style="color: var(--text-muted) !important;">
+                                        <i class="bi bi-bell-slash fs-3 d-block mb-2 opacity-50"></i>
+                                        <span>No notifications right now</span>
+                                    </div>
+                                @endforelse
+                            </div>
+
+                            {{-- Dropdown Footer --}}
+                            <div class="p-2.5 text-center border-top" style="border-color: var(--border-color) !important; background-color: var(--brand-dark);">
+                                <a href="{{ route('notifications.index') }}" class="text-accent small fw-bold text-decoration-none d-block hover-accent" style="font-size: 0.75rem; color: var(--brand-accent) !important;">
+                                    VIEW ALL NOTIFICATIONS &rarr;
+                                </a>
+                            </div>
+                        </div>
+                    </div>
 
                     {{-- BOOK NOW CTA BUTTON --}}
-                    <a href="{{ route('appointments.create') }}" class="btn-custom btn-accent px-3 py-2">
+                    <a href="{{ route('appointments.create') }}" class="btn-custom btn-accent px-3 py-2 text-decoration-none">
                         <i class="bi bi-plus-lg me-1"></i> BOOK NOW
                     </a>
 
@@ -208,16 +288,21 @@
         <!-- 3. MOBILE & TABLET RIGHT-SIDE ACTIONS (SCREENS < 992px) -->
         <div class="d-flex align-items-center gap-2 d-lg-none ms-auto">
             @auth
-                {{-- MOBILE NOTIFICATION BELL ICON (DIRECT LINK) --}}
-                <a href="{{ route('notifications.index') }}" class="btn btn-link position-relative p-2 text-decoration-none" title="Notifications">
+                {{-- MOBILE NOTIFICATION BELL: OPENS RIGHT HALF-PANEL OFFCANVAS --}}
+                <button class="btn btn-link position-relative p-2 text-decoration-none border-0 shadow-none" 
+                        type="button" 
+                        data-bs-toggle="offcanvas" 
+                        data-bs-target="#mobileNotificationsOffcanvas" 
+                        aria-controls="mobileNotificationsOffcanvas" 
+                        title="Notifications">
                     <i class="bi bi-bell-fill fs-5" style="color: var(--brand-accent) !important;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white border border-dark nav-notif-badge {{ $notifCount > 0 ? '' : 'd-none' }}" style="font-size: 0.6rem; margin-top: 8px; margin-left: -10px;">
                         {{ $notifCount }}
                     </span>
-                </a>
+                </button>
             @endauth
 
-            <!-- Hamburger Button toggling the Right-Side Half Panel -->
+            <!-- Hamburger Button toggling Navigation Offcanvas -->
             <button class="navbar-toggler border-0 shadow-none p-1" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileNavOffcanvas" aria-controls="mobileNavOffcanvas" aria-label="Toggle navigation">
                 <i class="bi bi-list text-accent fs-1" style="color: var(--brand-accent) !important; line-height: 1;"></i>
             </button>
@@ -226,7 +311,87 @@
 </nav>
 
 <!-- =========================================================================
-     RIGHT-SIDE HALF-PANEL (OFFCANVAS FOR MOBILE & TABLETS)
+     4. MOBILE NOTIFICATIONS RIGHT HALF-PANEL (OFFCANVAS)
+========================================================================= -->
+<div class="offcanvas offcanvas-end custom-offcanvas-half" tabindex="-1" id="mobileNotificationsOffcanvas" aria-labelledby="mobileNotificationsOffcanvasLabel">
+    {{-- Offcanvas Header --}}
+    <div class="offcanvas-header border-bottom py-3 px-4" style="border-color: var(--border-color) !important;">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-bell-fill text-accent fs-5" style="color: var(--brand-accent) !important;"></i>
+            <h5 class="offcanvas-title fw-800 mb-0 uppercase tracking-tight" id="mobileNotificationsOffcanvasLabel" style="font-size: 1.15rem; color: var(--text-main) !important;">
+                Notifications
+            </h5>
+            @if($notifCount > 0)
+                <span class="badge bg-danger rounded-pill smaller ms-1" style="font-size: 0.65rem;">{{ $notifCount }} new</span>
+            @endif
+        </div>
+        <button type="button" class="btn-close shadow-none" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+
+    {{-- Offcanvas Sub-Header Actions --}}
+    @if($notifCount > 0)
+        <div class="px-4 py-2 border-bottom d-flex justify-content-end bg-brand-dark bg-opacity-25" style="border-color: var(--border-color) !important;">
+            <a href="{{ route('notifications.clearAll') }}" class="text-accent smaller fw-bold text-decoration-none hover-accent" style="font-size: 0.72rem; color: var(--brand-accent) !important;">
+                <i class="bi bi-check2-all me-1"></i>Mark all as read
+            </a>
+        </div>
+    @endif
+
+    {{-- Offcanvas Notification List --}}
+    <div class="offcanvas-body p-0 d-flex flex-column justify-content-between custom-scroll" style="overflow-y: auto;">
+        <div>
+            @forelse($recentNotifications as $notif)
+                @php
+                    $isUnread = is_null($notif->read_at);
+                    $type = $notif->data['type'] ?? 'info';
+                    $icon = match($type) {
+                        'success' => 'bi-check-circle-fill text-success',
+                        'danger' => 'bi-exclamation-octagon-fill text-danger',
+                        'warning' => 'bi-exclamation-triangle-fill text-warning',
+                        default => 'bi-info-circle-fill text-accent'
+                    };
+                @endphp
+                <a href="{{ route('notifications.markAsRead', $notif->id) }}" 
+                   class="d-flex gap-3 align-items-start p-3 border-bottom text-decoration-none notif-item {{ $isUnread ? 'bg-unread' : '' }}" 
+                   style="border-color: var(--border-color) !important;">
+                    <i class="bi {{ $icon }} fs-5 mt-0.5 flex-shrink-0" @if($type === 'info') style="color: var(--brand-accent) !important;" @endif></i>
+                    <div class="flex-grow-1 min-w-0 text-start">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="fw-bold small text-truncate" style="font-size: 0.82rem; color: {{ $isUnread ? 'var(--brand-accent)' : 'var(--text-main)' }} !important;">
+                                {{ $notif->data['title'] ?? 'Notification' }}
+                            </span>
+                            @if($isUnread)
+                                <span class="rounded-pill p-1 ms-2" title="Unread" style="background-color: var(--brand-accent); width: 7px; height: 7px; display: inline-block;"></span>
+                            @endif
+                        </div>
+                        <p class="text-muted mb-1 text-truncate-2" style="font-size: 0.75rem; line-height: 1.4; color: var(--text-muted) !important;">
+                            {{ $notif->data['message'] ?? '' }}
+                        </p>
+                        <small class="text-muted text-opacity-75" style="font-size: 0.65rem;">
+                            {{ $notif->created_at->diffForHumans() }}
+                        </small>
+                    </div>
+                </a>
+            @empty
+                <div class="p-5 text-center text-muted small" style="color: var(--text-muted) !important;">
+                    <i class="bi bi-bell-slash fs-1 d-block mb-2 opacity-50"></i>
+                    <span>No notifications received yet</span>
+                </div>
+            @endforelse
+        </div>
+
+        {{-- Offcanvas Footer --}}
+        <div class="p-3 border-top" style="border-color: var(--border-color) !important;">
+            <a href="{{ route('notifications.index') }}" class="btn btn-sm btn-outline-accent w-100 py-2 fw-bold uppercase d-flex align-items-center justify-content-center gap-2 text-decoration-none" style="font-size: 0.78rem;">
+                <i class="bi bi-card-checklist"></i>
+                <span>VIEW FULL NOTIFICATIONS PAGE</span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- =========================================================================
+     5. RIGHT-SIDE HALF-PANEL (OFFCANVAS FOR MOBILE & TABLETS - NAVIGATION)
 ========================================================================= -->
 <div class="offcanvas offcanvas-end custom-offcanvas-half" tabindex="-1" id="mobileNavOffcanvas" aria-labelledby="mobileNavOffcanvasLabel">
     {{-- Offcanvas Header --}}
@@ -388,6 +553,12 @@
                             </a>
                         </li>
                         <li>
+                            <a href="{{ route('admin.users.index') }}" class="mobile-nav-link {{ request()->routeIs('admin.users.*') ? 'active' : '' }}">
+                                <i class="bi bi-people"></i>
+                                <span>User List</span>
+                            </a>
+                        </li>
+                        <li>
                             <a href="{{ route('appointments.index', ['view' => 'queue']) }}" class="mobile-nav-link {{ request('view') === 'queue' ? 'active' : '' }}">
                                 <i class="bi bi-kanban"></i>
                                 <span>Master Queue</span>
@@ -435,7 +606,7 @@
 </div>
 
 <!-- =========================================================================
-     SCOPED STYLES FOR HALF-PANEL OFFCANVAS & ACTIVE THEMES
+     SCOPED STYLES FOR NOTIFICATIONS & HALF-PANEL OFFCANVAS
 ========================================================================= -->
 <style>
 /* Main Navbar Base */
@@ -443,6 +614,29 @@
     background-color: var(--nav-bg, #1c232d) !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     min-height: 72px;
+}
+
+/* Remove default caret from dropdown toggle buttons */
+.no-caret::after {
+    display: none !important;
+}
+
+/* Notification Items & Dropdown */
+.notif-item {
+    transition: background-color 0.15s ease-in-out;
+}
+.notif-item:hover {
+    background-color: rgba(25, 211, 140, 0.08) !important;
+}
+.notif-item.bg-unread {
+    background-color: rgba(25, 211, 140, 0.04);
+}
+
+.text-truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 /* Right-Side Half Panel Adaptive Theming */
@@ -471,7 +665,7 @@
     box-shadow: -10px 0 35px rgba(0, 0, 0, 0.7) !important;
 }
 
-/* Layer backdrop above page components and floating theme button */
+/* Layer backdrop above page components */
 .offcanvas-backdrop {
     z-index: 2040 !important;
 }
@@ -497,7 +691,6 @@
     transition: all 0.2s ease-in-out;
 }
 
-/* 24px Fixed Icon Box with 14px space before text */
 .mobile-nav-link i {
     font-size: 1.15rem;
     width: 24px;

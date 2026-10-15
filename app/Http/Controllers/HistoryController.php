@@ -58,12 +58,12 @@ class HistoryController extends Controller
                         ->whereNotNull('batch_id')
                         ->where(function($s2) use ($targetUser) {
                             $s2->whereNull('patient_email')
-                               ->orWhere('patient_email', '')
-                               ->orWhereRaw('LOWER(patient_email) = ?', [strtolower($targetUser->email)]);
+                                ->orWhere('patient_email', '')
+                                ->orWhereRaw('LOWER(patient_email) = ?', [strtolower($targetUser->email)]);
                         })
                         ->where(function($s3) use ($targetUser) {
                             $s3->whereRaw('LOWER(patient_name) = ?', [strtolower($targetUser->name)])
-                               ->orWhere('patient_first_name', $targetUser->first_name);
+                                ->orWhere('patient_first_name', $targetUser->first_name);
                         });
                 });
             })
@@ -81,9 +81,9 @@ class HistoryController extends Controller
         $recordsModels = LaboratoryHistoryRecord::whereHas('laboratoryHistory', function($q) use ($targetUser) {
             $q->where('user_id', $targetUser->id);
         })
-        ->with(['scans', 'procedures'])
-        ->latest('date_of_record')
-        ->get();
+            ->with(['scans', 'procedures'])
+            ->latest('date_of_record')
+            ->get();
 
         $existingRecords = $recordsModels->map(function($r) {
             return [
@@ -116,7 +116,6 @@ class HistoryController extends Controller
         $user = Auth::user();
         $history = LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
         $history->update(['permission_status' => 'pending_staff']);
-
         ActivityLog::record('HISTORY REQUEST', 'Patient requested data import', $user->name);
 
         $internalStaff = User::whereIn('role', ['staff', 'lab_tech', 'admin'])->get();
@@ -140,7 +139,14 @@ class HistoryController extends Controller
     {
         session()->put("access_granted_{$user->id}_history", true);
         $history = LaboratoryHistory::where('user_id', $user->id)->first();
-        $history->update(['permission_status' => 'pending_patient']);
+        if ($history) {
+            $history->update(['permission_status' => 'pending_patient']);
+        } else {
+            LaboratoryHistory::create([
+                'user_id' => $user->id,
+                'permission_status' => 'pending_patient'
+            ]);
+        }
 
         $user->notify(new AppointmentNotification([
             'title' => 'Data Import Permission',
@@ -204,18 +210,23 @@ class HistoryController extends Controller
             'scans.*' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10000',
             'scan_labels' => 'required|array|min:1',
             'scan_labels.*' => 'required|string|max:255',
-            'scan_cert_nos' => 'nullable|array',
-            'scan_cert_nos.*' => 'nullable|string|max:255',
+            // Enforce Certificate Number as mandatory for every uploaded scan
+            'scan_cert_nos' => 'required|array|min:1',
+            'scan_cert_nos.*' => 'required|string|max:255',
         ], [
             'patient_suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
             'tests_requested.required' => 'At least one procedure/test must be selected.',
-            'scans.required' => 'At least one scanned document is required.'
+            'scans.required' => 'At least one scanned document is required.',
+            'scan_cert_nos.required' => 'Certificate Number is required for each uploaded document.',
+            'scan_cert_nos.*.required' => 'Every uploaded scan must have a corresponding Certificate Number.',
         ]);
 
         $history = LaboratoryHistory::where('user_id', $user->id)->firstOrCreate(['user_id' => $user->id]);
 
         $fName = strtoupper(trim($request->patient_first_name));
-        $mName = ($request->patient_middle_name && strtoupper($request->patient_middle_name) !== 'N/A') ? strtoupper(trim($request->patient_middle_name)) : 'N/A';
+        $mName = ($request->patient_middle_name && strtoupper($request->patient_middle_name) !== 'N/A') 
+            ? strtoupper(trim($request->patient_middle_name)) 
+            : 'N/A';
         $lName = strtoupper(trim($request->patient_last_name));
         $suffix = $request->filled('patient_suffix') ? strtoupper(trim($request->patient_suffix)) : null;
 
@@ -253,7 +264,7 @@ class HistoryController extends Controller
             ]);
         }
 
-        // 3. Save Scans
+        // 3. Save Scans with Certificate Number
         if ($request->hasFile('scans')) {
             foreach ($request->file('scans') as $index => $file) {
                 if ($file->isValid()) {
@@ -262,7 +273,7 @@ class HistoryController extends Controller
                         'history_record_id' => $record->id,
                         'label' => $request->scan_labels[$index] ?? 'Diagnostic Scan',
                         'file_path' => $path,
-                        'certificate_no' => $request->scan_cert_nos[$index] ?? null,
+                        'certificate_no' => trim($request->scan_cert_nos[$index]),
                     ]);
                 }
             }

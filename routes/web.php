@@ -142,10 +142,14 @@ Route::middleware(['auth', 'verified', 'force.password'])->group(function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Staff & Admin Shared Settings / Gateways (Gate: isStaff)
+    | Staff & Admin Shared Settings, Gateways & Directories (Gate: isStaff)
     |--------------------------------------------------------------------------
     */
     Route::middleware(['can:isStaff'])->prefix('admin')->group(function () {
+        // User Directory / Patient List for Lab History (Accessible to Staff, Lab Tech, Admin)
+        Route::get('/users', [AdminController::class, 'index'])->name('admin.users.index');
+        Route::get('/users/{id}/history', [AdminController::class, 'patientHistory'])->name('admin.users.history');
+
         // Schedule Editor
         Route::get('/appointment-settings', [AppointmentConfigController::class, 'index'])->name('admin.appointment-settings');
         Route::post('/appointment-settings', [AppointmentConfigController::class, 'store'])->name('admin.appointment-settings.store');
@@ -167,15 +171,13 @@ Route::middleware(['auth', 'verified', 'force.password'])->group(function () {
     Route::middleware(['can:isAdmin'])->prefix('admin')->group(function () {
         Route::get('/panel', [DashboardController::class, 'adminPanel'])->name('admin.panel');
 
-        // User Management Routes
-        Route::get('/users', [AdminController::class, 'index'])->name('admin.users.index');
+        // User Management Routes (Administrative Mutation Operations)
         Route::get('/users/create', [AdminController::class, 'createUser'])->name('admin.users.create');
         Route::post('/users', [AdminController::class, 'storeUser'])->name('admin.users.store');
         Route::get('/users/{id}/edit', [AdminController::class, 'editUser'])->name('admin.users.edit');
         Route::put('/users/{id}', [AdminController::class, 'updateUser'])->name('admin.users.update');
         Route::patch('/users/{id}/toggle-status', [AdminController::class, 'toggleUserStatus'])->name('admin.users.toggle-status');
         Route::post('/users/{id}/send-verification', [AdminController::class, 'sendVerificationEmail'])->name('admin.users.send-verification');
-        Route::get('/users/{id}/history', [AdminController::class, 'patientHistory'])->name('admin.users.history');
 
         // Admin Dedicated Full-Page Dependent Management Routes
         Route::get('/users/{user}/dependents/create', [AdminController::class, 'createDependentForUser'])->name('admin.users.dependents.create');

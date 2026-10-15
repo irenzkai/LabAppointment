@@ -13,11 +13,10 @@ class AdminController extends Controller
 {
     public function index() 
     {
+        // All accounts are included because every user (patients, staff, lab techs, admins) has a patient interface and clinical history
         $query = User::withTrashed()->where('id', '!=', Auth::id());
-        if (Auth::user()->role === 'staff') {
-            $query->where('role', '!=', 'admin');
-        }
         $users = $query->latest()->get();
+
         return view('admin.users', compact('users'));
     }
 
@@ -313,7 +312,6 @@ class AdminController extends Controller
         }
 
         if ($user->trashed()) {
-            // Guard against account conflict: do not reactivate if verified on another account
             $emailConflict = User::where('id', '!=', $user->id)
                 ->where('email', $user->email)
                 ->whereNotNull('email_verified_at')
@@ -331,7 +329,6 @@ class AdminController extends Controller
             $user->restore();
             $actionLabel = "REACTIVATED";
         } else {
-            // Deactivation unverified credentials so they can be re-registered safely
             $user->email_verified_at = null;
             $user->phone_verified_at = null;
             $user->save();
@@ -915,7 +912,9 @@ class AdminController extends Controller
                 if (!empty($selectedIds)) {
                     $txQuery->whereIn('id', $selectedIds);
                 }
-                if ($txStatus !== 'all') $txQuery->where('payment_status', $txStatus);
+                if ($txStatus !== 'all') {
+                    $txQuery->where('payment_status', $txStatus);
+                }
                 if ($txAppStatus !== 'all') {
                     if ($txAppStatus === 'expired') {
                         $txQuery->whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])

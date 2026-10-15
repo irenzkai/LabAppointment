@@ -18,7 +18,7 @@
         <div class="row g-3 text-start">
             {{-- 1. RECORD PARAMETERS --}}
             <div class="col-md-6">
-                <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Date of Original Record</label>
+                <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Date of Original Record <span class="text-danger">*</span></label>
                 <input type="date" name="date_of_record" id="dig_date_of_record" class="form-control @error('date_of_record') is-invalid @enderror" value="{{ old('date_of_record') }}" required max="{{ date('Y-m-d') }}">
                 <div class="invalid-feedback d-none" id="err_date_of_record"></div>
                 @error('date_of_record')
@@ -26,7 +26,7 @@
                 @enderror
             </div>
             <div class="col-md-6">
-                <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Requested By (Entity / Organization)</label>
+                <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Requested By (Entity / Organization) <span class="text-danger">*</span></label>
                 <input type="text" name="requested_by" id="dig_requested_by" class="form-control @error('requested_by') is-invalid @enderror" value="{{ old('requested_by', 'INDIVIDUAL') }}" required>
                 <div class="invalid-feedback d-none" id="err_requested_by"></div>
                 @error('requested_by')
@@ -39,7 +39,7 @@
                 <h6 class="text-accent mb-3 small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3">Verify Patient Demographic Snapshot</h6>
                 <div class="row g-3">
                     <div class="col-md-3">
-                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">First Name</label>
+                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">First Name <span class="text-danger">*</span></label>
                         <input type="text" name="patient_first_name" id="dig_first_name" class="form-control uppercase @error('patient_first_name') is-invalid @enderror" value="{{ old('patient_first_name', $targetUser->first_name) }}" required>
                         <div class="invalid-feedback d-none" id="err_patient_first_name"></div>
                         @error('patient_first_name')
@@ -55,7 +55,7 @@
                         @enderror
                     </div>
                     <div class="col-md-3">
-                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Last Name</label>
+                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Last Name <span class="text-danger">*</span></label>
                         <input type="text" name="patient_last_name" id="dig_last_name" class="form-control uppercase @error('patient_last_name') is-invalid @enderror" value="{{ old('patient_last_name', $targetUser->last_name) }}" required>
                         <div class="invalid-feedback d-none" id="err_patient_last_name"></div>
                         @error('patient_last_name')
@@ -71,7 +71,7 @@
                         @enderror
                     </div>
                     <div class="col-md-6">
-                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Age</label>
+                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Age <span class="text-danger">*</span></label>
                         <input type="number" name="age" id="dig_age" class="form-control @error('age') is-invalid @enderror" value="{{ old('age', $targetUser->birthdate ? \Carbon\Carbon::parse($targetUser->birthdate)->age : '') }}" required min="0">
                         <div class="invalid-feedback d-none" id="err_age"></div>
                         @error('age')
@@ -79,7 +79,7 @@
                         @enderror
                     </div>
                     <div class="col-md-6">
-                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Sex</label>
+                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Sex <span class="text-danger">*</span></label>
                         <select name="sex" id="dig_sex" class="form-select @error('sex') is-invalid @enderror" required>
                             <option value="Male" {{ old('sex', $targetUser->sex) == 'Male' ? 'selected' : '' }}>Male</option>
                             <option value="Female" {{ old('sex', $targetUser->sex) == 'Female' ? 'selected' : '' }}>Female</option>
@@ -96,7 +96,7 @@
             <div class="col-12 mt-3">
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Province</label>
+                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Province <span class="text-danger">*</span></label>
                         <select id="dig_province" class="form-select @error('patient_province') is-invalid @enderror" onchange="fetchDigCities(this.value)" required>
                             <option value="">Select Province</option>
                         </select>
@@ -106,7 +106,7 @@
                         @enderror
                     </div>
                     <div class="col-md-6">
-                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">City / Municipality</label>
+                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">City / Municipality <span class="text-danger">*</span></label>
                         <select id="dig_city" class="form-select @error('patient_city') is-invalid @enderror" onchange="fetchDigBarangays(this.value)" disabled required>
                             <option value="">Select Province First</option>
                         </select>
@@ -116,7 +116,7 @@
                         @enderror
                     </div>
                     <div class="col-md-6">
-                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Barangay</label>
+                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Barangay <span class="text-danger">*</span></label>
                         <select id="dig_brgy" class="form-select @error('patient_barangay') is-invalid @enderror" onchange="updateDigCompiledAddress()" disabled required>
                             <option value="">Select City First</option>
                         </select>
@@ -126,7 +126,7 @@
                         @enderror
                     </div>
                     <div class="col-md-6">
-                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Street / House No.</label>
+                        <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Street / House No. <span class="text-danger">*</span></label>
                         <input type="text" id="dig_street" name="patient_street" class="form-control uppercase @error('patient_street') is-invalid @enderror" value="{{ old('patient_street', $targetUser->street) }}" placeholder="House/Lot/Block/Street" oninput="updateDigCompiledAddress()" required>
                         <div class="invalid-feedback d-none" id="err_dig_street"></div>
                         @error('patient_street')
@@ -185,15 +185,15 @@
             {{-- 4. ATTACH SCANS & MANUALLY LABEL --}}
             <div class="col-12 mt-4">
                 <h6 class="text-accent mb-2 small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3">Results Document Uploads (PDF / Images Only)</h6>
-                <p class="text-secondary small mb-3">Upload physical documents and assign descriptive titles (e.g. "Urinalysis PDF", "Hematology Image") and optional Certificate Numbers.</p>
+                <p class="text-secondary small mb-3">Upload physical documents and assign descriptive titles (e.g. "Urinalysis PDF", "Hematology Image") and required Certificate Numbers.</p>
 
                 <div class="table-responsive border border-secondary border-opacity-25 rounded-3 mb-1">
                     <table class="table align-middle mb-0" style="color: var(--text-main);">
                         <thead class="text-secondary small uppercase" style="background-color: rgba(0, 0, 0, 0.02); border-bottom: 1.5px solid var(--border-color);">
                             <tr>
-                                <th>Upload File</th>
-                                <th style="width: 30%;">Assign Label</th>
-                                <th style="width: 25%;">Certificate Number (Optional)</th>
+                                <th>Upload File <span class="text-danger">*</span></th>
+                                <th style="width: 30%;">Assign Label <span class="text-danger">*</span></th>
+                                <th style="width: 28%;">Certificate Number <span class="text-danger">*</span></th>
                                 <th style="width: 50px;"></th>
                             </tr>
                         </thead>
@@ -204,10 +204,16 @@
                 </div>
                 <div class="invalid-feedback d-none mb-3" id="err_scans"></div>
                 @error('scans')
-                    <div class="text-danger small mb-3 fw-bold">{{ $message }}</div>
+                    <div class="text-danger small mb-2 fw-bold">{{ $message }}</div>
+                @enderror
+                @error('scan_cert_nos')
+                    <div class="text-danger small mb-2 fw-bold">{{ $message }}</div>
+                @enderror
+                @error('scan_cert_nos.*')
+                    <div class="text-danger small mb-2 fw-bold">{{ $message }}</div>
                 @enderror
 
-                <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex justify-content-between align-items-center mt-2">
                     <button type="button" class="btn btn-sm btn-outline-accent py-1.5 px-3 fw-bold" onclick="addScanUploadRow()">
                         <i class="bi bi-file-earmark-plus-fill me-1"></i> ADD FILE LINE
                     </button>
@@ -227,7 +233,7 @@
     </form>
 </div>
 
-{{-- Row Template for dynamic manual parameters --}}
+{{-- Row Template for dynamic manual parameters (Cert Number is required) --}}
 <template id="scanRowTemplate">
     <tr class="border-secondary border-opacity-10">
         <td>
@@ -237,7 +243,7 @@
             <input type="text" name="scan_labels[]" class="form-control" placeholder="e.g. Hematology Report" required>
         </td>
         <td>
-            <input type="text" name="scan_cert_nos[]" class="form-control" placeholder="e.g. 01261065">
+            <input type="text" name="scan_cert_nos[]" class="form-control uppercase" placeholder="e.g. CERT-2026-0042" required>
         </td>
         <td class="text-end pe-3">
             <button type="button" class="btn btn-link text-danger p-0" onclick="this.closest('tr').remove()"><i class="bi bi-x-circle fs-5"></i></button>
@@ -550,7 +556,7 @@ function validateDigitizerForm(e) {
         markInvalid(badgeContainer, 'err_tests_requested', 'At least one procedure/test must be selected.');
     }
 
-    // 5. Scans
+    // 5. Scans (File, Label, and Certificate Number required)
     const rows = document.querySelectorAll('#scansTableBody tr');
     if (rows.length === 0) {
         const scansTable = document.getElementById('scansTableBody');
@@ -559,11 +565,16 @@ function validateDigitizerForm(e) {
         rows.forEach((tr, index) => {
             const fileInput = tr.querySelector('input[type="file"]');
             const labelInput = tr.querySelector('input[name="scan_labels[]"]');
+            const certInput = tr.querySelector('input[name="scan_cert_nos[]"]');
+
             if (fileInput && !fileInput.files.length) {
                 markInvalid(fileInput, 'err_scans', `File line ${index + 1} requires a file.`);
             }
             if (labelInput && !labelInput.value.trim()) {
                 markInvalid(labelInput, 'err_scans', `File line ${index + 1} requires a label.`);
+            }
+            if (certInput && !certInput.value.trim()) {
+                markInvalid(certInput, 'err_scans', `File line ${index + 1} requires a Certificate Number.`);
             }
         });
     }
