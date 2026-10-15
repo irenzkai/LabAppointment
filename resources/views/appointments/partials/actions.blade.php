@@ -16,7 +16,7 @@
     $statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
 @endphp
 
-<div class="mt-2 text-start">
+<div class="mt-2 text-start" id="actions-pane-{{ $app->id }}">
     {{-- 1. FEEDBACK: SHOW RETURN REASON (Visible to Everyone) --}}
     @if($app->status == 'returned' && $app->return_reason)
         <div class="alert-clinical p-3 mb-3 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
@@ -166,7 +166,7 @@
                 <span class="small text-secondary fw-bold uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">Doctor's Referral Note:</span>
                 <span class="badge bg-info text-dark px-2 py-1 small">ATTACHED</span>
             </div>
-            <div class="d-flex align-items-center gap-3 bg-white p-2 rounded border cursor-pointer" style="cursor: pointer;" onclick="openFilePreview('{{ Storage::url($app->referral_note) }}', 'Doctor\'s Referral Note')" title="Click to view full screen">
+            <div class="d-flex align-items-center gap-3 bg-white p-2 rounded border cursor-pointer" style="cursor: pointer;" onclick="if(typeof openFilePreview === 'function'){ openFilePreview('{{ Storage::url($app->referral_note) }}', 'Doctor\'s Referral Note'); }" title="Click to view full screen">
                 <i class="bi bi-file-earmark-medical-fill text-accent display-6"></i>
                 <div class="text-start">
                     <div class="fw-bold small text-dark text-truncate" style="max-width: 180px;">Doctor_Referral_Note{{ $refExt ? '.'.strtolower($refExt) : '' }}</div>
@@ -187,7 +187,7 @@
             </div>
             @if($app->payment_receipt)
                 @php $payExt = pathinfo($app->payment_receipt, PATHINFO_EXTENSION); @endphp
-                <div class="d-flex align-items-center gap-3 bg-white p-2 rounded mb-3 border cursor-pointer" style="cursor: pointer;" onclick="openFilePreview('{{ Storage::url($app->payment_receipt) }}', 'Proof of Payment Receipt')" title="Click to view full screen">
+                <div class="d-flex align-items-center gap-3 bg-white p-2 rounded mb-3 border cursor-pointer" style="cursor: pointer;" onclick="if(typeof openFilePreview === 'function'){ openFilePreview('{{ Storage::url($app->payment_receipt) }}', 'Proof of Payment Receipt'); }" title="Click to view full screen">
                     <i class="bi bi-file-earmark-image-fill text-accent display-6"></i>
                     <div class="text-start">
                         <div class="fw-bold small text-dark text-truncate" style="max-width: 180px;">Proof_of_Payment{{ $payExt ? '.'.strtolower($payExt) : '' }}</div>
@@ -256,7 +256,7 @@
                         $isApproveDisabled = ($app->payment_method === 'Cashless' && $app->payment_status !== 'paid');
                     @endphp
                     <div class="d-flex gap-2 justify-content-end mb-2">
-                        <form action="{{ route('appointments.status', $app->id) }}" method="POST" class="flex-grow-1 m-0">
+                        <form action="{{ route('appointments.status', $app->id) }}" method="POST" class="flex-grow-1 m-0 ajax-action-form" data-app-id="{{ $app->id }}" onsubmit="handleAjaxActionSubmit(event, this)">
                             @csrf
                             @method('PATCH')
                             <input type="hidden" name="status" value="approved">
@@ -316,7 +316,7 @@
                 @if($app->status == 'encoded')
                     <div class="d-grid">
                         @can('isLabTech')
-                            <button type="button" class="btn-custom btn-accent w-100 py-2" onclick="promptAccess('{{ $app->id }}', 'hub', 'edit')">
+                            <button type="button" class="btn-custom btn-accent w-100 py-2" onclick="if(typeof promptAccess === 'function'){ promptAccess('{{ $app->id }}', 'hub', 'edit'); }">
                                 <i class="bi bi-shield-check me-1"></i> REVIEW & VERIFY
                             </button>
                         @else
@@ -370,3 +370,58 @@
         @endif
     @endif
 </div>
+
+<script>
+if (!window.handleAjaxActionSubmit) {
+    window.handleAjaxActionSubmit = async function(e, form) {
+        e.preventDefault();
+        const btn = form.querySelector('button[type="submit"]');
+        const originalText = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Processing...';
+        }
+
+        try {
+            const formData = new FormData(form);
+            const csrfToken = form.querySelector('input[name="_token"]')?.value 
+                || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') 
+                || '';
+
+            const response = await fetch(form.action, {
+                method: form.method || 'POST',
+                body: formData,
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': csrfToken
+                }
+            });
+
+            // Dismiss any open parent modal
+            const modalEl = form.closest('.modal');
+            if (modalEl && typeof bootstrap !== 'undefined') {
+                const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+            }
+
+            // Dynamically refresh master queue without page reload
+            if (typeof fetchQueueWithParams === 'function') {
+                await fetchQueueWithParams(window.location.href);
+            } else if (typeof syncMasterQueue === 'function') {
+                syncMasterQueue();
+            }
+
+        } catch (err) {
+            console.error('AJAX Action Error:', err);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+    };
+}
+</script>

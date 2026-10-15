@@ -32,9 +32,12 @@ class AppointmentController extends Controller
 
         $services = Service::where('is_available', true)->orderBy('name')->get();
         $paymentProviders = PaymentProvider::where('is_active', true)->get();
-        $viewMode = $request->query('view');
 
-        if ($user->isPatient() || $viewMode !== 'queue') {
+        $viewMode = $request->query('view');
+        $isStaffUser = $user->isEmployee();
+        $isStaffQueue = $isStaffUser && ($viewMode !== 'patient');
+
+        if (! $isStaffQueue) {
             // Myself: Individual appointments booked by user for self
             $self = Appointment::with(['services', 'user', 'dependent', 'result'])
                 ->where('user_id', $user->id)
@@ -68,23 +71,23 @@ class AppointmentController extends Controller
                 ->concat($dependents->getCollection())
                 ->concat($bulkPaginator->getCollection());
 
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() && ! $request->acceptsHtml()) {
                 return response()->json([
-                    'self'          => $self,
-                    'dependents'    => $dependents,
-                    'bulkGroups'    => $bulkGroups,
+                    'self' => $self,
+                    'dependents' => $dependents,
+                    'bulkGroups' => $bulkGroups,
                     'bulkPaginator' => $bulkPaginator,
                 ]);
             }
 
             return view('appointments.index', [
-                'self'             => $self,
-                'dependents'       => $dependents,
-                'bulkGroups'       => $bulkGroups,
-                'bulkPaginator'    => $bulkPaginator,
-                'allApps'          => $allApps,
-                'is_staff'         => false,
-                'services'         => $services,
+                'self' => $self,
+                'dependents' => $dependents,
+                'bulkGroups' => $bulkGroups,
+                'bulkPaginator' => $bulkPaginator,
+                'allApps' => $allApps,
+                'is_staff' => false,
+                'services' => $services,
                 'paymentProviders' => $paymentProviders
             ]);
         }
@@ -174,20 +177,20 @@ class AppointmentController extends Controller
             ->groupBy(fn($item) => $item->batch_id ?? 'single_' . $item->id);
         $allApps = $staffPaginator->getCollection();
 
-        if ($request->expectsJson()) {
+        if ($request->expectsJson() && ! $request->acceptsHtml()) {
             return response()->json([
-                'staffQueue'     => $staffQueue,
+                'staffQueue' => $staffQueue,
                 'staffPaginator' => $staffPaginator,
-                'allApps'        => $allApps,
+                'allApps' => $allApps,
             ]);
         }
 
         return view('appointments.index', [
-            'staffQueue'       => $staffQueue,
-            'staffPaginator'   => $staffPaginator,
-            'allApps'          => $allApps,
-            'is_staff'         => true,
-            'services'         => $services,
+            'staffQueue' => $staffQueue,
+            'staffPaginator' => $staffPaginator,
+            'allApps' => $allApps,
+            'is_staff' => true,
+            'services' => $services,
             'paymentProviders' => $paymentProviders
         ]);
     }
@@ -229,27 +232,27 @@ class AppointmentController extends Controller
         };
 
         $request->validate([
-            'target_type'        => 'required|in:self,dependent,bulk',
-            'dependent_id'       => 'required_if:target_type,dependent|nullable|exists:dependents,id',
-            'organization_name'  => 'required_if:target_type,bulk|nullable|string|max:255',
+            'target_type' => 'required|in:self,dependent,bulk',
+            'dependent_id' => 'required_if:target_type,dependent|nullable|exists:dependents,id',
+            'organization_name' => 'required_if:target_type,bulk|nullable|string|max:255',
             'patient_first_name' => ['required', 'string', 'max:60', $nameRule],
             'patient_middle_name'=> ['nullable', 'string', 'max:60', $nameRule],
-            'patient_last_name'  => ['required', 'string', 'max:60', $nameRule],
-            'patient_suffix'     => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
-            'patient_sex'        => 'required|in:Male,Female',
-            'patient_birthdate'  => 'required|date|before_or_equal:today',
-            'patient_phone'      => ['required', 'string', 'regex:/^09\d{9}$/'],
-            'patient_email'      => 'nullable|email|max:191',
-            'patient_street'     => 'required|string|max:150',
-            'patient_barangay'   => 'required|string|max:100',
-            'patient_city'        => 'required|string|max:100',
-            'patient_province'   => 'required|string|max:100',
-            'referral_note'      => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
-            'service_ids'        => 'required|array|min:1',
-            'appointment_date'   => 'required|date|after_or_equal:today',
-            'time_slot'          => 'required',
-            'payment_method'     => 'required|string',
-            'payment_receipt'    => 'required_if:payment_method,Cashless|nullable|file|mimes:pdf,jpg,jpeg,png|max:10240'
+            'patient_last_name' => ['required', 'string', 'max:60', $nameRule],
+            'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
+            'patient_sex' => 'required|in:Male,Female',
+            'patient_birthdate' => 'required|date|before_or_equal:today',
+            'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
+            'patient_email' => 'nullable|email|max:191',
+            'patient_street' => 'required|string|max:150',
+            'patient_barangay' => 'required|string|max:100',
+            'patient_city' => 'required|string|max:100',
+            'patient_province' => 'required|string|max:100',
+            'referral_note' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'service_ids' => 'required|array|min:1',
+            'appointment_date' => 'required|date|after_or_equal:today',
+            'time_slot' => 'required',
+            'payment_method' => 'required|string',
+            'payment_receipt' => 'required_if:payment_method,Cashless|nullable|file|mimes:pdf,jpg,jpeg,png|max:10240'
         ], [
             'patient_phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
             'patient_suffix.regex'=> 'The suffix may only contain letters, spaces, and periods.'
@@ -262,10 +265,10 @@ class AppointmentController extends Controller
             ->whereIn('status', ['pending', 'approved', 'tested', 'encoded', 'released'])->count();
 
         if ($bookedCount >= ($config->max_patients_per_slot ?? 1)) {
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() && ! $request->acceptsHtml()) {
                 return response()->json([
                     'message' => 'This slot is no longer available. Please select another time.',
-                    'errors'  => ['time_slot' => ['This slot is no longer available. Please select another time.']]
+                    'errors' => ['time_slot' => ['This slot is no longer available. Please select another time.']]
                 ], 422);
             }
             return back()->withErrors(['time_slot' => 'This slot is no longer available. Please select another time.'])->withInput();
@@ -274,7 +277,6 @@ class AppointmentController extends Controller
         $mName = $request->patient_middle_name;
         $lName = $request->patient_last_name;
         $suffix = $request->filled('patient_suffix') ? strtoupper($request->patient_suffix) : '';
-
         $fullName = $request->patient_first_name . ($mName && strtoupper($mName) !== 'N/A' ? ' ' . $mName : '') . ' ' . $lName;
         if (!empty($suffix)) {
             $fullName .= ' ' . $suffix;
@@ -286,28 +288,28 @@ class AppointmentController extends Controller
             : (Auth::check() ? strtolower(Auth::user()->email) : null);
 
         $data = [
-            'user_id'             => Auth::id(),
-            'dependent_id'        => ($request->target_type === 'dependent') ? $request->dependent_id : null,
-            'organization_name'   => ($request->target_type === 'bulk') ? strtoupper($request->organization_name) : null,
-            'batch_id'            => ($request->target_type === 'bulk') ? Str::random(10) : null,
-            'appointment_date'    => $request->appointment_date,
-            'time_slot'           => $request->time_slot,
-            'patient_first_name'  => strtoupper($request->patient_first_name),
+            'user_id' => Auth::id(),
+            'dependent_id' => ($request->target_type === 'dependent') ? $request->dependent_id : null,
+            'organization_name' => ($request->target_type === 'bulk') ? strtoupper($request->organization_name) : null,
+            'batch_id' => ($request->target_type === 'bulk') ? Str::random(10) : null,
+            'appointment_date' => $request->appointment_date,
+            'time_slot' => $request->time_slot,
+            'patient_first_name' => strtoupper($request->patient_first_name),
             'patient_middle_name' => $mName ? strtoupper($mName) : 'N/A',
-            'patient_last_name'   => strtoupper($lName),
-            'patient_suffix'      => $suffix ?: null,
-            'patient_name'        => strtoupper($fullName),
-            'patient_email'       => $patientEmail,
-            'patient_sex'         => $request->patient_sex,
-            'patient_birthdate'   => $request->patient_birthdate,
-            'patient_phone'       => $request->patient_phone,
-            'patient_street'      => strtoupper($request->patient_street),
-            'patient_barangay'    => strtoupper($request->patient_barangay),
-            'patient_city'        => strtoupper($request->patient_city),
-            'patient_province'    => strtoupper($request->patient_province),
-            'payment_method'      => $request->payment_method,
-            'payment_status'      => 'unpaid',
-            'status'              => 'pending'
+            'patient_last_name' => strtoupper($lName),
+            'patient_suffix' => $suffix ?: null,
+            'patient_name' => strtoupper($fullName),
+            'patient_email' => $patientEmail,
+            'patient_sex' => $request->patient_sex,
+            'patient_birthdate' => $request->patient_birthdate,
+            'patient_phone' => $request->patient_phone,
+            'patient_street' => strtoupper($request->patient_street),
+            'patient_barangay' => strtoupper($request->patient_barangay),
+            'patient_city' => strtoupper($request->patient_city),
+            'patient_province' => strtoupper($request->patient_province),
+            'payment_method' => $request->payment_method,
+            'payment_status' => 'unpaid',
+            'status' => 'pending'
         ];
 
         if ($request->hasFile('referral_note') && $request->file('referral_note')->isValid()) {
@@ -328,10 +330,10 @@ class AppointmentController extends Controller
             $notifiables = User::whereIn('role', ['staff', 'lab_tech', 'admin'])->get();
             foreach ($notifiables as $staff) {
                 $staff->notify(new AppointmentNotification([
-                    'title'   => 'New Booking Request',
+                    'title' => 'New Booking Request',
                     'message' => "Patient: {$appointment->patient_name} for " . date('M d', strtotime($appointment->appointment_date)),
-                    'url'     => route('appointments.index'),
-                    'type'    => 'info'
+                    'url' => route('appointments.index'),
+                    'type' => 'info'
                 ]));
                 event(new NotificationSent($staff->id, 'New Booking Request', "Patient: {$appointment->patient_name} for " . date('M d', strtotime($appointment->appointment_date))));
             }
@@ -339,10 +341,10 @@ class AppointmentController extends Controller
             DB::commit();
             event(new QueueUpdated());
 
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() && ! $request->acceptsHtml()) {
                 return response()->json([
-                    'success'     => true,
-                    'message'     => 'Appointment successfully requested!',
+                    'success' => true,
+                    'message' => 'Appointment successfully requested!',
                     'appointment' => $appointment->load(['services', 'user', 'dependent'])
                 ], 200);
             }
@@ -353,7 +355,7 @@ class AppointmentController extends Controller
             if (isset($data['referral_note'])) Storage::disk('public')->delete($data['referral_note']);
             if (isset($data['payment_receipt'])) Storage::disk('public')->delete($data['payment_receipt']);
 
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() && ! $request->acceptsHtml()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Booking failed: ' . $e->getMessage(),
@@ -373,7 +375,9 @@ class AppointmentController extends Controller
 
         if (!$isOwner) abort(403, 'Unauthorized action.');
 
-        if ($appointment->status === 'released') return redirect()->route('appointments.index')->with('error', 'Released appointments are locked and cannot be modified.');
+        if ($appointment->status === 'released') {
+            return redirect()->route('appointments.index')->with('error', 'Released appointments are locked and cannot be modified.');
+        }
 
         $isExpired = $appointment->isExpired();
         if (!($appointment->status === 'returned' || $appointment->status === 'canceled' || $isExpired)) {
@@ -383,12 +387,12 @@ class AppointmentController extends Controller
         $services = Service::where('is_available', true)->orderBy('name')->get();
         $paymentProviders = PaymentProvider::where('is_active', true)->get();
 
-        if (request()->expectsJson()) {
+        if (request()->expectsJson() && ! request()->acceptsHtml()) {
             return response()->json([
-                'appointment'      => $appointment->load(['services', 'user', 'dependent']),
-                'services'         => $services,
+                'appointment' => $appointment->load(['services', 'user', 'dependent']),
+                'services' => $services,
                 'paymentProviders' => $paymentProviders,
-                'isExpired'        => $isExpired
+                'isExpired' => $isExpired
             ]);
         }
 
@@ -405,7 +409,7 @@ class AppointmentController extends Controller
         if (!$isOwner) abort(403, 'Unauthorized action.');
 
         if ($appointment->status === 'released') {
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() && ! $request->acceptsHtml()) {
                 return response()->json(['message' => 'Released appointments cannot be updated.'], 403);
             }
             return redirect()->route('appointments.index')->with('error', 'Released appointments cannot be updated.');
@@ -435,28 +439,28 @@ class AppointmentController extends Controller
         };
 
         $rules = [
-            'patient_first_name'  => ['required', 'string', 'max:60', $nameRule],
+            'patient_first_name' => ['required', 'string', 'max:60', $nameRule],
             'patient_middle_name' => ['nullable', 'string', 'max:60', $nameRule],
-            'patient_last_name'   => ['required', 'string', 'max:60', $nameRule],
-            'patient_suffix'      => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
-            'patient_sex'         => 'required|in:Male,Female',
-            'patient_birthdate'   => 'required|date|before_or_equal:today',
-            'patient_phone'       => ['required', 'string', 'regex:/^09\d{9}$/'],
-            'patient_email'       => 'nullable|email|max:191',
-            'patient_street'      => 'required|string|max:150',
-            'patient_barangay'    => 'required|string|max:100',
-            'patient_city'        => 'required|string|max:100',
-            'patient_province'    => 'required|string|max:100',
-            'service_ids'         => 'required|array|min:1',
-            'appointment_date'    => 'required|date|after_or_equal:today',
-            'time_slot'           => 'required',
+            'patient_last_name' => ['required', 'string', 'max:60', $nameRule],
+            'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
+            'patient_sex' => 'required|in:Male,Female',
+            'patient_birthdate' => 'required|date|before_or_equal:today',
+            'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
+            'patient_email' => 'nullable|email|max:191',
+            'patient_street' => 'required|string|max:150',
+            'patient_barangay' => 'required|string|max:100',
+            'patient_city' => 'required|string|max:100',
+            'patient_province' => 'required|string|max:100',
+            'service_ids' => 'required|array|min:1',
+            'appointment_date' => 'required|date|after_or_equal:today',
+            'time_slot' => 'required',
         ];
 
         if (!$isBulk) {
             $rules['payment_method'] = 'required|string';
             $rules['referral_note'] = 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240';
-
             $isReceiptRequired = false;
+
             if ($request->payment_method === 'Cashless' && $appointment->payment_status !== 'paid') {
                 if (in_array($appointment->status, ['canceled', 'returned']) || in_array($appointment->payment_status, ['invalid', 'refunded'])) {
                     if (!$appointment->payment_receipt || $request->input('remove_receipt') === '1') {
@@ -464,6 +468,7 @@ class AppointmentController extends Controller
                     }
                 }
             }
+
             $rules['payment_receipt'] = $isReceiptRequired ? 'required|file|mimes:pdf,jpg,jpeg,png|max:10240' : 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240';
         }
 
@@ -480,10 +485,10 @@ class AppointmentController extends Controller
             ->where('id', '!=', $appointment->id)->count();
 
         if ($booked >= ($config->max_patients_per_slot ?? 1)) {
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() && ! $request->acceptsHtml()) {
                 return response()->json([
                     'message' => 'Slot is full.',
-                    'errors'  => ['time_slot' => ['Slot is full.']]
+                    'errors' => ['time_slot' => ['Slot is full.']]
                 ], 422);
             }
             return back()->withErrors(['time_slot' => 'Slot is full.'])->withInput();
@@ -492,7 +497,6 @@ class AppointmentController extends Controller
         $mName = $request->patient_middle_name;
         $lName = $request->patient_last_name;
         $suffix = $request->filled('patient_suffix') ? strtoupper($request->patient_suffix) : '';
-
         $fullName = $request->patient_first_name . ($mName && strtoupper($mName) !== 'N/A' ? ' ' . $mName : '') . ' ' . $lName;
         if (!empty($suffix)) $fullName .= ' ' . $suffix;
 
@@ -510,45 +514,50 @@ class AppointmentController extends Controller
             : ($appointment->patient_email ?: (Auth::check() ? strtolower(Auth::user()->email) : null));
 
         $updateData = [
-            'patient_first_name'  => strtoupper($request->patient_first_name),
+            'patient_first_name' => strtoupper($request->patient_first_name),
             'patient_middle_name' => ($mName && strtoupper($mName) !== 'N/A') ? strtoupper($mName) : 'N/A',
-            'patient_last_name'   => strtoupper($lName),
-            'patient_suffix'      => $suffix ?: null,
-            'patient_name'        => strtoupper($fullName),
-            'patient_email'       => $patientEmail,
-            'patient_sex'         => $request->patient_sex,
-            'patient_birthdate'   => $request->patient_birthdate,
-            'patient_phone'       => $request->patient_phone,
-            'patient_street'      => $street,
-            'patient_barangay'    => $barangay,
-            'patient_city'        => $city,
-            'patient_province'    => $province,
-            'appointment_date'    => $request->appointment_date,
-            'time_slot'           => $request->time_slot,
-            'status'              => 'pending',
-            'payment_status'      => $paymentStatus,
-            'return_reason'       => null,
+            'patient_last_name' => strtoupper($lName),
+            'patient_suffix' => $suffix ?: null,
+            'patient_name' => strtoupper($fullName),
+            'patient_email' => $patientEmail,
+            'patient_sex' => $request->patient_sex,
+            'patient_birthdate' => $request->patient_birthdate,
+            'patient_phone' => $request->patient_phone,
+            'patient_street' => $street,
+            'patient_barangay' => $barangay,
+            'patient_city' => $city,
+            'patient_province' => $province,
+            'appointment_date' => $request->appointment_date,
+            'time_slot' => $request->time_slot,
+            'status' => 'pending',
+            'payment_status' => $paymentStatus,
+            'return_reason' => null,
             'cancellation_reason' => null
         ];
 
         if (!$isBulk) {
             $updateData['payment_method'] = $request->payment_method;
+
             if ($request->payment_method === 'Cash') {
                 if ($appointment->payment_receipt) Storage::disk('public')->delete($appointment->payment_receipt);
                 $updateData['payment_receipt'] = null;
             }
+
             if ($request->input('remove_referral') === '1') {
                 if ($appointment->referral_note) Storage::disk('public')->delete($appointment->referral_note);
                 $updateData['referral_note'] = null;
             }
+
             if ($request->hasFile('referral_note') && $request->file('referral_note')->isValid()) {
                 if ($appointment->referral_note) Storage::disk('public')->delete($appointment->referral_note);
                 $updateData['referral_note'] = $request->file('referral_note')->store('referrals', 'public');
             }
+
             if ($request->input('remove_receipt') === '1') {
                 if ($appointment->payment_receipt) Storage::disk('public')->delete($appointment->payment_receipt);
                 $updateData['payment_receipt'] = null;
             }
+
             if ($request->hasFile('payment_receipt') && $request->file('payment_receipt')->isValid()) {
                 if ($appointment->payment_receipt) Storage::disk('public')->delete($appointment->payment_receipt);
                 $updateData['payment_receipt'] = $request->file('payment_receipt')->store('receipts', 'public');
@@ -563,19 +572,20 @@ class AppointmentController extends Controller
         $notifiables = User::whereIn('role', ['staff', 'lab_tech', 'admin'])->get();
         foreach ($notifiables as $staff) {
             $staff->notify(new AppointmentNotification([
-                'title'   => 'Resubmitted Booking',
+                'title' => 'Resubmitted Booking',
                 'message' => "Patient: {$appointment->patient_name} has corrected and resubmitted their appointment.",
-                'url'     => route('appointments.index'),
-                'type'    => 'info'
+                'url' => route('appointments.index'),
+                'type' => 'info'
             ]));
             event(new NotificationSent($staff->id, 'Resubmitted Booking', "Patient: {$appointment->patient_name} has corrected and resubmitted their appointment."));
         }
+
         event(new QueueUpdated());
 
-        if ($request->expectsJson()) {
+        if ($request->expectsJson() && ! $request->acceptsHtml()) {
             return response()->json([
-                'success'     => true,
-                'message'     => 'Appointment resubmitted for approval.',
+                'success' => true,
+                'message' => 'Appointment resubmitted for approval.',
                 'appointment' => $appointment->fresh(['services', 'user', 'dependent']),
             ], 200);
         }
@@ -586,14 +596,15 @@ class AppointmentController extends Controller
     public function updateStatus(Request $request, Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
+
         $request->validate([
-            'status'        => 'required|in:approved,returned,released',
+            'status' => 'required|in:approved,returned,released',
             'return_reason' => 'required_if:status,returned'
         ]);
 
         $updatePayload = [
-            'status'              => $request->status,
-            'return_reason'       => ($request->status == 'returned') ? $request->return_reason : null,
+            'status' => $request->status,
+            'return_reason' => ($request->status == 'returned') ? $request->return_reason : null,
             'cancellation_reason' => null
         ];
 
@@ -612,18 +623,18 @@ class AppointmentController extends Controller
 
                     if ($request->status === 'approved') {
                         $patient->notify(new AppointmentNotification([
-                            'title'   => 'Appointment Approved',
+                            'title' => 'Appointment Approved',
                             'message' => "Your laboratory appointment scheduled for {$dateFormatted} at {$timeFormatted} has been approved.",
-                            'url'     => route('appointments.index'),
-                            'type'    => 'success'
+                            'url' => route('appointments.index'),
+                            'type' => 'success'
                         ]));
                         event(new NotificationSent($patient->id, 'Appointment Approved', "Your laboratory appointment scheduled for {$dateFormatted} at {$timeFormatted} has been approved."));
                     } elseif ($request->status === 'returned') {
                         $patient->notify(new AppointmentNotification([
-                            'title'   => 'Appointment Returned',
+                            'title' => 'Appointment Returned',
                             'message' => "Your appointment scheduled for {$dateFormatted} at {$timeFormatted} requires corrections: \"{$request->return_reason}\"",
-                            'url'     => route('appointments.index'),
-                            'type'    => 'danger'
+                            'url' => route('appointments.index'),
+                            'type' => 'danger'
                         ]));
                         event(new NotificationSent($patient->id, 'Appointment Returned', "Your appointment scheduled for {$dateFormatted} at {$timeFormatted} requires corrections."));
                     }
@@ -638,18 +649,18 @@ class AppointmentController extends Controller
 
                 if ($request->status === 'approved') {
                     $appointment->user->notify(new AppointmentNotification([
-                        'title'   => 'Appointment Approved',
+                        'title' => 'Appointment Approved',
                         'message' => "Your laboratory appointment scheduled for {$dateFormatted} at {$timeFormatted} has been approved.",
-                        'url'     => route('appointments.index'),
-                        'type'    => 'success'
+                        'url' => route('appointments.index'),
+                        'type' => 'success'
                     ]));
                     event(new NotificationSent($patient->id, 'Appointment Approved', "Your laboratory appointment scheduled for {$dateFormatted} at {$timeFormatted} has been approved."));
                 } elseif ($request->status === 'returned') {
                     $appointment->user->notify(new AppointmentNotification([
-                        'title'   => 'Appointment Returned',
+                        'title' => 'Appointment Returned',
                         'message' => "Your appointment scheduled for {$dateFormatted} at {$timeFormatted} requires corrections: \"{$request->return_reason}\"",
-                        'url'     => route('appointments.index'),
-                        'type'    => 'danger'
+                        'url' => route('appointments.index'),
+                        'type' => 'danger'
                     ]));
                     event(new NotificationSent($patient->id, 'Appointment Returned', "Your appointment scheduled for {$dateFormatted} at {$timeFormatted} requires corrections."));
                 }
@@ -669,10 +680,10 @@ class AppointmentController extends Controller
 
         event(new QueueUpdated());
 
-        if ($request->expectsJson()) {
+        if ($request->expectsJson() && ! $request->acceptsHtml()) {
             return response()->json([
-                'success'     => true,
-                'message'     => 'Appointment updated to ' . strtoupper($request->status),
+                'success' => true,
+                'message' => 'Appointment updated to ' . strtoupper($request->status),
                 'appointment' => $appointment->fresh(),
             ]);
         }
@@ -687,6 +698,7 @@ class AppointmentController extends Controller
     public function markTested(Request $request, Appointment $appointment)
     {
         if (Gate::denies('isLabTech')) abort(403, 'Clinical personnel only.');
+
         $action = $request->input('action', 'tested');
 
         $nameRule = function ($attribute, $value, $fail) {
@@ -712,23 +724,23 @@ class AppointmentController extends Controller
 
         if ($action === 'retest') {
             $request->validate([
-                'patient_first_name'   => ['required', 'string', 'max:60', $nameRule],
-                'patient_middle_name'  => ['nullable', 'string', 'max:60', $nameRule],
-                'patient_last_name'    => ['required', 'string', 'max:60', $nameRule],
-                'patient_suffix'       => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
-                'patient_birthdate'    => 'required|date|before_or_equal:today',
-                'patient_sex'          => 'required|in:Male,Female',
-                'patient_phone'        => ['required', 'string', 'regex:/^09\d{9}$/'],
-                'patient_street'       => 'required|string|max:150',
-                'patient_barangay'     => 'required|string|max:100',
-                'patient_city'         => 'required|string|max:100',
-                'patient_province'     => 'required|string|max:100',
-                'service_ids'          => 'required|array|min:1',
-                'payment_amount'       => 'required|numeric|min:0',
-                'retest_reason'        => 'required|string',
+                'patient_first_name' => ['required', 'string', 'max:60', $nameRule],
+                'patient_middle_name' => ['nullable', 'string', 'max:60', $nameRule],
+                'patient_last_name' => ['required', 'string', 'max:60', $nameRule],
+                'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
+                'patient_birthdate' => 'required|date|before_or_equal:today',
+                'patient_sex' => 'required|in:Male,Female',
+                'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
+                'patient_street' => 'required|string|max:150',
+                'patient_barangay' => 'required|string|max:100',
+                'patient_city' => 'required|string|max:100',
+                'patient_province' => 'required|string|max:100',
+                'service_ids' => 'required|array|min:1',
+                'payment_amount' => 'required|numeric|min:0',
+                'retest_reason' => 'required|string',
                 'retest_custom_reason' => 'required_if:retest_reason,Others|nullable|string|min:5',
             ], [
-                'patient_phone.regex'  => 'The phone number must start with 09 and contain exactly 11 digits.',
+                'patient_phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
                 'patient_suffix.regex' => 'The suffix may only contain letters, spaces, and periods.',
             ]);
 
@@ -745,23 +757,23 @@ class AppointmentController extends Controller
             if (!empty($suffix)) $displayName .= " {$suffix}";
 
             $updatePayload = [
-                'patient_first_name'  => $fName,
+                'patient_first_name' => $fName,
                 'patient_middle_name' => $mName,
-                'patient_last_name'   => $lName,
-                'patient_suffix'      => $suffix ?: null,
-                'patient_name'        => $displayName,
-                'patient_birthdate'   => $request->patient_birthdate,
-                'patient_sex'         => $request->patient_sex,
-                'patient_phone'       => $request->patient_phone,
-                'patient_street'      => strtoupper(trim($request->patient_street)),
-                'patient_barangay'    => strtoupper(trim($request->patient_barangay)),
-                'patient_city'        => strtoupper(trim($request->patient_city)),
-                'patient_province'    => strtoupper(trim($request->patient_province)),
-                'payment_status'      => 'paid',
-                'status'              => 'retest',
-                'return_reason'       => $retestReason,
+                'patient_last_name' => $lName,
+                'patient_suffix' => $suffix ?: null,
+                'patient_name' => $displayName,
+                'patient_birthdate' => $request->patient_birthdate,
+                'patient_sex' => $request->patient_sex,
+                'patient_phone' => $request->patient_phone,
+                'patient_street' => strtoupper(trim($request->patient_street)),
+                'patient_barangay' => strtoupper(trim($request->patient_barangay)),
+                'patient_city' => strtoupper(trim($request->patient_city)),
+                'patient_province' => strtoupper(trim($request->patient_province)),
+                'payment_status' => 'paid',
+                'status' => 'retest',
+                'return_reason' => $retestReason,
                 'cancellation_reason' => null,
-                'tested_at'           => null,
+                'tested_at' => null,
                 'result_estimated_at' => null
             ];
 
@@ -777,20 +789,20 @@ class AppointmentController extends Controller
             $patient = $appointment->user;
             if ($patient) {
                 $patient->notify(new AppointmentNotification([
-                    'title'   => 'Retesting Required',
+                    'title' => 'Retesting Required',
                     'message' => "Your clinical sample requires a recollect due to: \"{$retestReason}\". Please return to the Medscreen Diagnostic Laboratory for retesting.",
-                    'url'     => route('appointments.index'),
-                    'type'    => 'danger'
+                    'url' => route('appointments.index'),
+                    'type' => 'danger'
                 ]));
                 event(new NotificationSent($patient->id, 'Retesting Required', "Your sample requires a recollect. Please return to the lab."));
             }
 
             event(new QueueUpdated());
 
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() && ! $request->acceptsHtml()) {
                 return response()->json([
-                    'success'     => true,
-                    'message'     => 'Appointment successfully flagged for retesting.',
+                    'success' => true,
+                    'message' => 'Appointment successfully flagged for retesting.',
                     'appointment' => $appointment->fresh(),
                 ]);
             }
@@ -799,23 +811,23 @@ class AppointmentController extends Controller
         }
 
         $request->validate([
-            'patient_first_name'  => ['required', 'string', 'max:60', $nameRule],
+            'patient_first_name' => ['required', 'string', 'max:60', $nameRule],
             'patient_middle_name' => ['nullable', 'string', 'max:60', $nameRule],
-            'patient_last_name'   => ['required', 'string', 'max:60', $nameRule],
-            'patient_suffix'      => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
-            'patient_birthdate'   => 'required|date|before_or_equal:today',
-            'patient_sex'         => 'required|in:Male,Female',
-            'patient_phone'       => ['required', 'string', 'regex:/^09\d{9}$/'],
-            'patient_street'      => 'required|string|max:150',
-            'patient_barangay'    => 'required|string|max:100',
-            'patient_city'        => 'required|string|max:100',
-            'patient_province'    => 'required|string|max:100',
-            'service_ids'         => 'required|array|min:1',
-            'payment_amount'      => 'required|numeric|min:0',
-            'est_hours'           => 'nullable|integer|min:0',
-            'est_minutes'         => 'nullable|integer|min:0',
+            'patient_last_name' => ['required', 'string', 'max:60', $nameRule],
+            'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
+            'patient_birthdate' => 'required|date|before_or_equal:today',
+            'patient_sex' => 'required|in:Male,Female',
+            'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
+            'patient_street' => 'required|string|max:150',
+            'patient_barangay' => 'required|string|max:100',
+            'patient_city' => 'required|string|max:100',
+            'patient_province' => 'required|string|max:100',
+            'service_ids' => 'required|array|min:1',
+            'payment_amount' => 'required|numeric|min:0',
+            'est_hours' => 'nullable|integer|min:0',
+            'est_minutes' => 'nullable|integer|min:0',
         ], [
-            'patient_phone.regex'  => 'The phone number must start with 09 and contain exactly 11 digits.',
+            'patient_phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
             'patient_suffix.regex' => 'The suffix may only contain letters, spaces, and periods.',
         ]);
 
@@ -832,23 +844,23 @@ class AppointmentController extends Controller
         if (!empty($suffix)) $displayName .= " {$suffix}";
 
         $updatePayload = [
-            'patient_first_name'  => $fName,
+            'patient_first_name' => $fName,
             'patient_middle_name' => $mName,
-            'patient_last_name'   => $lName,
-            'patient_suffix'      => $suffix ?: null,
-            'patient_name'        => $displayName,
-            'patient_birthdate'   => $request->patient_birthdate,
-            'patient_sex'         => $request->patient_sex,
-            'patient_phone'       => $request->patient_phone,
-            'patient_street'      => strtoupper(trim($request->patient_street)),
-            'patient_barangay'    => strtoupper(trim($request->patient_barangay)),
-            'patient_city'        => strtoupper(trim($request->patient_city)),
-            'patient_province'    => strtoupper(trim($request->patient_province)),
-            'payment_status'      => 'paid',
-            'status'              => 'tested',
-            'tested_at'           => now(),
+            'patient_last_name' => $lName,
+            'patient_suffix' => $suffix ?: null,
+            'patient_name' => $displayName,
+            'patient_birthdate' => $request->patient_birthdate,
+            'patient_sex' => $request->patient_sex,
+            'patient_phone' => $request->patient_phone,
+            'patient_street' => strtoupper(trim($request->patient_street)),
+            'patient_barangay' => strtoupper(trim($request->patient_barangay)),
+            'patient_city' => strtoupper(trim($request->patient_city)),
+            'patient_province' => strtoupper(trim($request->patient_province)),
+            'payment_status' => 'paid',
+            'status' => 'tested',
+            'tested_at' => now(),
             'result_estimated_at' => $est,
-            'return_reason'       => null,
+            'return_reason' => null,
             'cancellation_reason' => null
         ];
 
@@ -865,20 +877,20 @@ class AppointmentController extends Controller
         if ($patient) {
             $estTimeText = $est ? " (Estimated processing duration: " . ($h > 0 ? "{$h}h " : "") . ($m > 0 ? "{$m}m " : "") . ")" : "";
             $patient->notify(new AppointmentNotification([
-                'title'   => 'Sampling Completed',
+                'title' => 'Sampling Completed',
                 'message' => "Your clinical laboratory sampling is complete. Your results are currently being processed in our lab." . $estTimeText,
-                'url'     => route('appointments.index'),
-                'type'    => 'info'
+                'url' => route('appointments.index'),
+                'type' => 'info'
             ]));
             event(new NotificationSent($patient->id, 'Sampling Completed', "Your clinical laboratory sampling is complete. Your results are currently being processed in our lab."));
         }
 
         event(new QueueUpdated());
 
-        if ($request->expectsJson()) {
+        if ($request->expectsJson() && ! $request->acceptsHtml()) {
             return response()->json([
-                'success'     => true,
-                'message'     => 'Sampling logged. Results are being processed.',
+                'success' => true,
+                'message' => 'Sampling logged. Results are being processed.',
                 'appointment' => $appointment->fresh(),
             ]);
         }
@@ -888,7 +900,6 @@ class AppointmentController extends Controller
 
     /**
      * Dedicated Demographic and Diagnostic Examination Editor for Staff.
-     * Allowed during pre-release stages (e.g., approved, pending, retest, tested, encoded) for Staff/Admin.
      */
     public function editDetails(Appointment $appointment)
     {
@@ -903,10 +914,10 @@ class AppointmentController extends Controller
 
         $services = Service::where('is_available', true)->orderBy('name')->get();
 
-        if (request()->expectsJson()) {
+        if (request()->expectsJson() && ! request()->acceptsHtml()) {
             return response()->json([
                 'appointment' => $appointment->load(['services', 'user', 'dependent']),
-                'services'    => $services,
+                'services' => $services,
             ]);
         }
 
@@ -924,7 +935,7 @@ class AppointmentController extends Controller
         }
 
         if ($appointment->status === 'released') {
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() && ! $request->acceptsHtml()) {
                 return response()->json(['message' => 'Released appointments cannot be updated.'], 403);
             }
             return redirect()->back()->with('error', 'Released appointments are locked and cannot be modified.');
@@ -952,22 +963,22 @@ class AppointmentController extends Controller
         };
 
         $request->validate([
-            'patient_first_name'  => ['required', 'string', 'max:60', $nameRule],
+            'patient_first_name' => ['required', 'string', 'max:60', $nameRule],
             'patient_middle_name' => ['nullable', 'string', 'max:60', $nameRule],
-            'patient_last_name'   => ['required', 'string', 'max:60', $nameRule],
-            'patient_suffix'      => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
-            'patient_sex'         => 'required|in:Male,Female',
-            'patient_birthdate'   => 'required|date|before_or_equal:today',
-            'patient_phone'       => ['required', 'string', 'regex:/^09\d{9}$/'],
-            'patient_street'      => 'required|string|max:150',
-            'patient_barangay'    => 'required|string|max:100',
-            'patient_city'        => 'required|string|max:100',
-            'patient_province'    => 'required|string|max:100',
-            'service_ids'         => 'required|array|min:1',
-            'payment_amount'      => 'required|numeric|min:0',
-            'reason'              => 'required|string|min:5',
+            'patient_last_name' => ['required', 'string', 'max:60', $nameRule],
+            'patient_suffix' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z\s.]+$/u'],
+            'patient_sex' => 'required|in:Male,Female',
+            'patient_birthdate' => 'required|date|before_or_equal:today',
+            'patient_phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
+            'patient_street' => 'required|string|max:150',
+            'patient_barangay' => 'required|string|max:100',
+            'patient_city' => 'required|string|max:100',
+            'patient_province' => 'required|string|max:100',
+            'service_ids' => 'required|array|min:1',
+            'payment_amount' => 'required|numeric|min:0',
+            'reason' => 'required|string|min:5',
         ], [
-            'patient_phone.regex'  => 'The phone number must start with 09 and contain exactly 11 digits.',
+            'patient_phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
             'patient_suffix.regex' => 'The suffix may only contain letters, spaces, and periods.',
         ]);
 
@@ -979,18 +990,18 @@ class AppointmentController extends Controller
         if (!empty($suffix)) $fullName .= ' ' . $suffix;
 
         $updateData = [
-            'patient_first_name'  => strtoupper($request->patient_first_name),
+            'patient_first_name' => strtoupper($request->patient_first_name),
             'patient_middle_name' => ($mName && strtoupper($mName) !== 'N/A') ? strtoupper($mName) : 'N/A',
-            'patient_last_name'   => strtoupper($lName),
-            'patient_suffix'      => $suffix ?: null,
-            'patient_name'        => strtoupper($fullName),
-            'patient_sex'         => $request->patient_sex,
-            'patient_birthdate'   => $request->patient_birthdate,
-            'patient_phone'       => $request->patient_phone,
-            'patient_street'      => strtoupper(trim($request->patient_street)),
-            'patient_barangay'    => strtoupper(trim($request->patient_barangay)),
-            'patient_city'        => strtoupper(trim($request->patient_city)),
-            'patient_province'    => strtoupper(trim($request->patient_province)),
+            'patient_last_name' => strtoupper($lName),
+            'patient_suffix' => $suffix ?: null,
+            'patient_name' => strtoupper($fullName),
+            'patient_sex' => $request->patient_sex,
+            'patient_birthdate' => $request->patient_birthdate,
+            'patient_phone' => $request->patient_phone,
+            'patient_street' => strtoupper(trim($request->patient_street)),
+            'patient_barangay' => strtoupper(trim($request->patient_barangay)),
+            'patient_city' => strtoupper(trim($request->patient_city)),
+            'patient_province' => strtoupper(trim($request->patient_province)),
         ];
 
         if (\Illuminate\Support\Facades\Schema::hasColumn('appointments', 'payment_amount')) {
@@ -1001,6 +1012,7 @@ class AppointmentController extends Controller
         $appointment->services()->sync($request->service_ids);
 
         ActivityLog::record('DETAILS REVISED', 'Patient demographics & services updated: ' . $request->input('reason'), $appointment->patient_name, $appointment->id);
+
         event(new QueueUpdated());
 
         $from = $request->input('from');
@@ -1022,12 +1034,12 @@ class AppointmentController extends Controller
             $redirectUrl = route('appointments.index', ['view' => 'queue', 'id' => $appointment->id]);
         }
 
-        if ($request->expectsJson()) {
+        if ($request->expectsJson() && ! $request->acceptsHtml()) {
             return response()->json([
-                'success'     => true,
-                'message'     => 'Patient demographics and tests updated successfully.',
+                'success' => true,
+                'message' => 'Patient demographics and tests updated successfully.',
                 'appointment' => $appointment->fresh(['services', 'user', 'dependent']),
-                'redirect'    => $redirectUrl,
+                'redirect' => $redirectUrl,
             ], 200);
         }
 
@@ -1050,8 +1062,8 @@ class AppointmentController extends Controller
 
         // 1. Validation: Extract cancellation reason (from dropdown or custom "Others" input)
         $request->validate([
-            'cancellation_reason'        => 'nullable|string|min:5|max:1000',
-            'reason'                     => 'nullable|string|min:5|max:1000',
+            'cancellation_reason' => 'nullable|string|min:5|max:1000',
+            'reason' => 'nullable|string|min:5|max:1000',
             'custom_cancellation_reason' => 'nullable|string|min:5|max:1000',
         ]);
 
@@ -1064,13 +1076,12 @@ class AppointmentController extends Controller
 
         // 2. Batch Cancellation Handling (ONLY permitted up to pending/returned)
         if ($appointment->batch_id && $request->input('batch') === 'true' && $appointment->user_id === $user->id) {
-            // Check if any booking in this batch has already progressed to approved or beyond
             $hasApprovedOrLater = Appointment::where('batch_id', $appointment->batch_id)
                 ->whereIn('status', ['approved', 'retest', 'tested', 'encoded', 'released'])
                 ->exists();
 
             if ($hasApprovedOrLater) {
-                if ($request->expectsJson()) {
+                if ($request->expectsJson() && ! $request->acceptsHtml()) {
                     return response()->json([
                         'success' => false,
                         'message' => 'Batch cancellation is locked. One or more appointments in this batch have already been approved or processed.'
@@ -1084,7 +1095,7 @@ class AppointmentController extends Controller
                 ->get();
 
             if ($cancelableApps->isEmpty()) {
-                if ($request->expectsJson()) {
+                if ($request->expectsJson() && ! $request->acceptsHtml()) {
                     return response()->json([
                         'success' => false,
                         'message' => 'No eligible pending appointments in this batch can be canceled.'
@@ -1096,17 +1107,17 @@ class AppointmentController extends Controller
             foreach ($cancelableApps as $app) {
                 $appPaymentStatus = $app->payment_status === 'paid' ? 'paid' : 'unpaid';
                 $app->update([
-                    'status'              => 'canceled',
-                    'payment_status'      => $appPaymentStatus,
+                    'status' => 'canceled',
+                    'payment_status' => $appPaymentStatus,
                     'cancellation_reason' => $reason,
-                    'return_reason'       => $reason
+                    'return_reason' => $reason
                 ]);
                 ActivityLog::record('CANCELED', "Batch appointment canceled. Reason: {$reason}", $app->patient_name, $app->id);
             }
 
             event(new QueueUpdated());
 
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() && ! $request->acceptsHtml()) {
                 return response()->json([
                     'success' => true,
                     'message' => 'All eligible pending appointments in this batch have been successfully canceled.'
@@ -1116,9 +1127,9 @@ class AppointmentController extends Controller
             return back()->with('success', 'All eligible pending appointments in this batch have been successfully canceled.');
         }
 
-        // 3. Single Appointment Cancellation Handling: UP TO PENDING ONLY (DO NOT COVER APPROVED)
+        // 3. Single Appointment Cancellation Handling
         if ($appointment->status === 'approved') {
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() && ! $request->acceptsHtml()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Approved appointments cannot be canceled. Please contact clinic staff for assistance.'
@@ -1128,7 +1139,7 @@ class AppointmentController extends Controller
         }
 
         if (!in_array($appointment->status, ['pending', 'returned'])) {
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() && ! $request->acceptsHtml()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Only pending appointments can be canceled.'
@@ -1138,16 +1149,17 @@ class AppointmentController extends Controller
         }
 
         $appointment->update([
-            'status'              => 'canceled',
-            'payment_status'      => $paymentStatus,
+            'status' => 'canceled',
+            'payment_status' => $paymentStatus,
             'cancellation_reason' => $reason,
-            'return_reason'       => $reason
+            'return_reason' => $reason
         ]);
 
         ActivityLog::record('CANCELED', "Appointment canceled. Reason: {$reason}", $appointment->patient_name, $appointment->id);
+
         event(new QueueUpdated());
 
-        if ($request->expectsJson()) {
+        if ($request->expectsJson() && ! $request->acceptsHtml()) {
             return response()->json([
                 'success' => true,
                 'message' => 'Appointment successfully canceled.'
@@ -1160,8 +1172,9 @@ class AppointmentController extends Controller
     public function markPaymentInvalid(Request $request, Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
+
         $request->validate([
-            'reason'        => 'required',
+            'reason' => 'required',
             'custom_reason' => 'required_if:reason,Others'
         ]);
 
@@ -1169,13 +1182,14 @@ class AppointmentController extends Controller
 
         $appointment->update([
             'payment_status' => 'invalid',
-            'return_reason'  => 'Invalid Payment: ' . $invalidReason
+            'return_reason' => 'Invalid Payment: ' . $invalidReason
         ]);
 
         ActivityLog::record('INVALID PAYMENT', 'Payment flagged as invalid: ' . $invalidReason, $appointment->patient_name, $appointment->id);
+
         event(new QueueUpdated());
 
-        if ($request->expectsJson()) {
+        if ($request->expectsJson() && ! $request->acceptsHtml()) {
             return response()->json([
                 'success' => true,
                 'message' => 'Payment flagged as invalid.'
@@ -1188,6 +1202,7 @@ class AppointmentController extends Controller
     public function confirmRefund(Request $request, Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
+
         $staffName = Auth::user()->name;
         $staffRole = strtoupper(Auth::user()->role);
         $timestamp = now()->format('M d, Y | h:i A');
@@ -1195,13 +1210,14 @@ class AppointmentController extends Controller
 
         $appointment->update([
             'payment_status' => 'refunded',
-            'return_reason'  => $logMessage
+            'return_reason' => $logMessage
         ]);
 
         ActivityLog::record('REFUNDED', "Refund manually confirmed for {$appointment->patient_name}. Processed by: {$staffName} ({$staffRole})", $appointment->patient_name, $appointment->id);
+
         event(new QueueUpdated());
 
-        if ($request->expectsJson()) {
+        if ($request->expectsJson() && ! $request->acceptsHtml()) {
             return response()->json([
                 'success' => true,
                 'message' => 'Refund confirmed successfully.'
@@ -1220,7 +1236,7 @@ class AppointmentController extends Controller
         if (!$isOwner) abort(403);
 
         if (!$appointment->canBeDeletedByPatient()) {
-            if (request()->expectsJson()) {
+            if (request()->expectsJson() && ! request()->acceptsHtml()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Paid or active appointments cannot be deleted.'
@@ -1230,10 +1246,12 @@ class AppointmentController extends Controller
         }
 
         $appointment->update(['deleted_by_patient' => true]);
+
         ActivityLog::record('SOFT DELETED', 'Patient soft-deleted expired appointment', $appointment->patient_name, $appointment->id);
+
         event(new QueueUpdated());
 
-        if (request()->expectsJson()) {
+        if (request()->expectsJson() && ! request()->acceptsHtml()) {
             return response()->json([
                 'success' => true,
                 'message' => 'Appointment removed from your dashboard.'
@@ -1246,6 +1264,7 @@ class AppointmentController extends Controller
     public function confirmPayment(Request $request, Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
+
         $request->validate([
             'payment_status' => 'required|in:unpaid,paid'
         ]);
@@ -1257,10 +1276,12 @@ class AppointmentController extends Controller
         }
 
         $statusLabel = strtoupper($request->payment_status);
+
         ActivityLog::record('PAYMENT UPDATE', "Staff flagged appointment payment as {$statusLabel}", $appointment->patient_name, $appointment->id);
+
         event(new QueueUpdated());
 
-        if ($request->expectsJson()) {
+        if ($request->expectsJson() && ! $request->acceptsHtml()) {
             return response()->json([
                 'success' => true,
                 'message' => "Payment status updated to {$statusLabel}."

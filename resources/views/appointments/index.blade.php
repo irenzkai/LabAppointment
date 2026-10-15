@@ -49,7 +49,7 @@
                                     <i class="bi bi-search"></i>
                                 </span>
                                 <input type="text" name="search" id="queueSearchInput" class="form-control border-0 shadow-none py-2" style="background-color: var(--bg-card); color: var(--text-main);" placeholder="Search patient, ID, or batch..." value="{{ request('search') }}" oninput="debounceQueueSearch()">
-                                <button type="button" class="btn btn-link text-muted p-1 pe-2 d-none" id="clearSearchBtn" onclick="clearQueueSearch()" style="background-color: var(--bg-card);">
+                                <button type="button" class="btn btn-link text-muted p-1 pe-2 {{ request('search') ? '' : 'd-none' }}" id="clearSearchBtn" onclick="clearQueueSearch()" style="background-color: var(--bg-card);">
                                     <i class="bi bi-x-circle-fill"></i>
                                 </button>
                             </div>
@@ -197,300 +197,301 @@
 {{-- MULTI-FORMAT LIGHTBOX OVERLAY --}}
 @include('layouts.partials.lightbox-overlay')
 
-{{-- 5. THEME-ADAPTIVE MODALS LOOP --}}
-@foreach($allApps as $app)
-    @php
-        $isExpired = $app->isExpired();
-    @endphp
+{{-- 5. THEME-ADAPTIVE MODALS WRAPPER (Dynamically reloaded on filter/page changes) --}}
+<div id="queue-modals-container">
+    @foreach($allApps as $app)
+        @php
+            $isExpired = $app->isExpired();
+        @endphp
 
-    {{-- A. DELETE EXPIRED APPOINTMENT MODAL --}}
-    @if(Auth::id() == $app->user_id)
-        <div class="modal fade" id="deleteExpiredModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-            <div class="modal-dialog modal-sm modal-dialog-centered">
-                <div class="modal-content border-danger bg-card shadow-lg text-center p-4" style="background-color: var(--bg-card); border-color: #ff4d4d !important; color: var(--text-main);">
-                    <div class="mb-3">
-                        <i class="bi bi-trash text-danger display-4 d-block"></i>
-                    </div>
-                    <h5 class="text-main fw-bold mb-1 uppercase" style="color: var(--text-main) !important;">Delete Expired Record?</h5>
-                    <p class="text-muted small mb-4" style="color: var(--text-muted) !important;">Are you sure you want to remove this expired appointment from your dashboard? This action will hide the record from your view.</p>
-                    <div class="d-grid gap-2">
-                        <form action="{{ route('appointments.soft-delete', $app->id) }}" method="POST" class="m-0">
-                            @csrf
-                            <button type="submit" class="btn btn-danger w-100 py-2 fw-bold uppercase text-white">DELETE RECORD</button>
-                        </form>
-                        <button type="button" class="btn btn-link text-muted text-decoration-none smaller" data-bs-dismiss="modal">Cancel</button>
+        {{-- A. DELETE EXPIRED APPOINTMENT MODAL --}}
+        @if(Auth::id() == $app->user_id)
+            <div class="modal fade" id="deleteExpiredModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+                <div class="modal-dialog modal-sm modal-dialog-centered">
+                    <div class="modal-content border-danger bg-card shadow-lg text-center p-4" style="background-color: var(--bg-card); border-color: #ff4d4d !important; color: var(--text-main);">
+                        <div class="mb-3">
+                            <i class="bi bi-trash text-danger display-4 d-block"></i>
+                        </div>
+                        <h5 class="text-main fw-bold mb-1 uppercase" style="color: var(--text-main) !important;">Delete Expired Record?</h5>
+                        <p class="text-muted small mb-4" style="color: var(--text-muted) !important;">Are you sure you want to remove this expired appointment from your dashboard? This action will hide the record from your view.</p>
+                        <div class="d-grid gap-2">
+                            <form action="{{ route('appointments.soft-delete', $app->id) }}" method="POST" class="m-0">
+                                @csrf
+                                <button type="submit" class="btn btn-danger w-100 py-2 fw-bold uppercase text-white">DELETE RECORD</button>
+                            </form>
+                            <button type="button" class="btn btn-link text-muted text-decoration-none smaller" data-bs-dismiss="modal">Cancel</button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    @endif
+        @endif
 
-    {{-- B. CANCEL APPOINTMENT MODAL --}}
-    @if(Auth::id() == $app->user_id)
-        <div class="modal fade" id="cancelAppointmentModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-            <div class="modal-dialog modal-dialog-centered" style="max-width: 460px;">
-                <form action="{{ route('appointments.cancel', $app->id) }}" method="POST" class="modal-content shadow-lg cancel-appointment-form" data-app-id="{{ $app->id }}" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-                    @csrf
-                    <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
-                        <h5 class="text-danger fw-bold uppercase small m-0 d-flex align-items-center gap-2">
-                            <i class="bi bi-x-circle-fill fs-5"></i>
-                            <span>Cancel Appointment?</span>
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body p-4 text-start">
-                        <p class="small mb-3" style="color: var(--text-main) !important;">Are you sure you want to cancel this appointment?</p>
-                        @php
-                            $scheduledAt = \Carbon\Carbon::parse($app->appointment_date->format('Y-m-d') . ' ' . $app->time_slot);
-                            $hoursUntil = \Carbon\Carbon::now()->diffInHours($scheduledAt, false);
-                            $isWithin24Hours = ($hoursUntil >= 0 && $hoursUntil < 24);
-                            $isPaid = ($app->payment_status === 'paid');
-                        @endphp
-                        @if($app->payment_method === 'Cashless')
-                            @if($isPaid)
-                                @if($isWithin24Hours)
-                                    <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-3 smaller">
-                                        <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
-                                            <i class="bi bi-patch-check-fill text-success"></i>
-                                            <span>Payment Status: Confirmed Paid</span>
+        {{-- B. CANCEL APPOINTMENT MODAL --}}
+        @if(Auth::id() == $app->user_id)
+            <div class="modal fade" id="cancelAppointmentModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+                <div class="modal-dialog modal-dialog-centered" style="max-width: 460px;">
+                    <form action="{{ route('appointments.cancel', $app->id) }}" method="POST" class="modal-content shadow-lg cancel-appointment-form" data-app-id="{{ $app->id }}" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                        @csrf
+                        <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
+                            <h5 class="text-danger fw-bold uppercase small m-0 d-flex align-items-center gap-2">
+                                <i class="bi bi-x-circle-fill fs-5"></i>
+                                <span>Cancel Appointment?</span>
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-4 text-start">
+                            <p class="small mb-3" style="color: var(--text-main) !important;">Are you sure you want to cancel this appointment?</p>
+                            @php
+                                $scheduledAt = \Carbon\Carbon::parse($app->appointment_date->format('Y-m-d') . ' ' . $app->time_slot);
+                                $hoursUntil = \Carbon\Carbon::now()->diffInHours($scheduledAt, false);
+                                $isWithin24Hours = ($hoursUntil >= 0 && $hoursUntil < 24);
+                                $isPaid = ($app->payment_status === 'paid');
+                            @endphp
+                            @if($app->payment_method === 'Cashless')
+                                @if($isPaid)
+                                    @if($isWithin24Hours)
+                                        <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-3 smaller">
+                                            <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
+                                                <i class="bi bi-patch-check-fill text-success"></i>
+                                                <span>Payment Status: Confirmed Paid</span>
+                                            </div>
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                            <strong>50% Fee Applies:</strong> Because cancellation is requested within 24 hours of your slot ({{ $scheduledAt->format('M d, Y h:i A') }}), a <strong>50% administrative cancellation fee</strong> applies. 50% will be refunded to your account.
                                         </div>
-                                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                                        <strong>50% Fee Applies:</strong> Because cancellation is requested within 24 hours of your slot ({{ $scheduledAt->format('M d, Y h:i A') }}), a <strong>50% administrative cancellation fee</strong> applies. 50% will be refunded to your account.
-                                    </div>
+                                    @else
+                                        <div class="alert alert-clinical border-success bg-success bg-opacity-10 text-success p-3 rounded-3 mb-3 smaller">
+                                            <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
+                                                <i class="bi bi-patch-check-fill text-success"></i>
+                                                <span>Payment Status: Confirmed Paid</span>
+                                            </div>
+                                            <i class="bi bi-check-circle-fill me-1"></i>
+                                            <strong>100% Full Refund Eligible:</strong> You are canceling more than 24 hours in advance. Your paid cashless transaction is eligible for a <strong>100% full refund</strong>.
+                                        </div>
+                                    @endif
                                 @else
-                                    <div class="alert alert-clinical border-success bg-success bg-opacity-10 text-success p-3 rounded-3 mb-3 smaller">
-                                        <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
-                                            <i class="bi bi-patch-check-fill text-success"></i>
-                                            <span>Payment Status: Confirmed Paid</span>
+                                    @if($isWithin24Hours)
+                                        <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-3 smaller">
+                                            <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
+                                                <i class="bi bi-clock-history text-warning"></i>
+                                                <span>Payment Status: Not Confirmed Yet (Pending Verification)</span>
+                                            </div>
+                                            <i class="bi bi-info-circle-fill me-1"></i>
+                                            <span>Your uploaded payment receipt has not been confirmed yet. Since you are canceling within 24 hours of your slot ({{ $scheduledAt->format('M d, Y h:i A') }}), a <strong>50% administrative cancellation fee</strong> applies. 50% will be refunded upon confirmation.</span>
                                         </div>
-                                        <i class="bi bi-check-circle-fill me-1"></i>
-                                        <strong>100% Full Refund Eligible:</strong> You are canceling more than 24 hours in advance. Your paid cashless transaction is eligible for a <strong>100% full refund</strong>.
-                                    </div>
+                                    @else
+                                        <div class="alert alert-clinical border-info bg-info bg-opacity-10 text-info p-3 rounded-3 mb-3 smaller">
+                                            <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
+                                                <i class="bi bi-clock-history text-info"></i>
+                                                <span>Payment Status: Not Confirmed Yet (Pending Verification)</span>
+                                            </div>
+                                            <i class="bi bi-info-circle-fill me-1"></i>
+                                            <span>Your uploaded payment receipt has not been confirmed yet. Since you are canceling more than 24 hours in advance, the booking will be canceled with no charge.</span>
+                                        </div>
+                                    @endif
                                 @endif
                             @else
                                 @if($isWithin24Hours)
                                     <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-3 smaller">
-                                        <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
-                                            <i class="bi bi-clock-history text-warning"></i>
-                                            <span>Payment Status: Not Confirmed Yet (Pending Verification)</span>
-                                        </div>
-                                        <i class="bi bi-info-circle-fill me-1"></i>
-                                        <span>Your uploaded payment receipt has not been confirmed yet. Since you are canceling within 24 hours of your slot ({{ $scheduledAt->format('M d, Y h:i A') }}), a <strong>50% administrative cancellation fee</strong> applies. 50% will be refunded upon confirmation.</span>
+                                        <i class="bi bi-exclamation-triangle-fill me-1.5"></i>
+                                        <strong>Notice:</strong> Canceling within 24 hours of your scheduled appointment time ({{ $scheduledAt->format('M d, Y h:i A') }}).
                                     </div>
                                 @else
-                                    <div class="alert alert-clinical border-info bg-info bg-opacity-10 text-info p-3 rounded-3 mb-3 smaller">
-                                        <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
-                                            <i class="bi bi-clock-history text-info"></i>
-                                            <span>Payment Status: Not Confirmed Yet (Pending Verification)</span>
-                                        </div>
-                                        <i class="bi bi-info-circle-fill me-1"></i>
-                                        <span>Your uploaded payment receipt has not been confirmed yet. Since you are canceling more than 24 hours in advance, the booking will be canceled with no charge.</span>
+                                    <div class="alert alert-clinical border-secondary bg-secondary bg-opacity-10 text-secondary p-3 rounded-3 mb-3 smaller">
+                                        <i class="bi bi-info-circle-fill me-1.5"></i>
+                                        <span>Free cancellation available for this cash booking (more than 24 hours in advance).</span>
                                     </div>
                                 @endif
                             @endif
-                        @else
-                            @if($isWithin24Hours)
-                                <div class="alert alert-clinical border-warning bg-warning bg-opacity-10 text-warning p-3 rounded-3 mb-3 smaller">
-                                    <i class="bi bi-exclamation-triangle-fill me-1.5"></i>
-                                    <strong>Notice:</strong> Canceling within 24 hours of your scheduled appointment time ({{ $scheduledAt->format('M d, Y h:i A') }}).
-                                </div>
-                            @else
-                                <div class="alert alert-clinical border-secondary bg-secondary bg-opacity-10 text-secondary p-3 rounded-3 mb-3 smaller">
-                                    <i class="bi bi-info-circle-fill me-1.5"></i>
-                                    <span>Free cancellation available for this cash booking (more than 24 hours in advance).</span>
-                                </div>
-                            @endif
-                        @endif
 
-                        {{-- Cancellation Reason Dropdown --}}
-                        <div class="mb-3">
-                            <label for="cancel_reason_select_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Reason for Cancellation</label>
-                            <select id="cancel_reason_select_{{$app->id}}" name="cancellation_reason" class="form-select shadow-none cancel-reason-select" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" onchange="window.toggleCancelReasonField('{{ $app->id }}', this)" required>
-                                <option value="" disabled selected>-- Select a cancellation reason --</option>
-                                <option value="Change of schedule / Unforeseen personal conflict">Change of schedule / Unforeseen personal conflict</option>
-                                <option value="Doctor advised to postpone or cancel test">Doctor advised to postpone or cancel test</option>
-                                <option value="Patient feeling unwell / Unable to visit clinic">Patient feeling unwell / Unable to visit clinic</option>
-                                <option value="Found alternative clinic / duplicate booking">Found alternative clinic / duplicate booking</option>
-                                <option value="Financial or budget constraints">Financial or budget constraints</option>
-                                <option value="Others">Others (Specify below)</option>
-                            </select>
+                            {{-- Cancellation Reason Dropdown --}}
+                            <div class="mb-3">
+                                <label for="cancel_reason_select_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Reason for Cancellation</label>
+                                <select id="cancel_reason_select_{{$app->id}}" name="cancellation_reason" class="form-select shadow-none cancel-reason-select" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" onchange="window.toggleCancelReasonField('{{ $app->id }}', this)" required>
+                                    <option value="" disabled selected>-- Select a cancellation reason --</option>
+                                    <option value="Change of schedule / Unforeseen personal conflict">Change of schedule / Unforeseen personal conflict</option>
+                                    <option value="Doctor advised to postpone or cancel test">Doctor advised to postpone or cancel test</option>
+                                    <option value="Patient feeling unwell / Unable to visit clinic">Patient feeling unwell / Unable to visit clinic</option>
+                                    <option value="Found alternative clinic / duplicate booking">Found alternative clinic / duplicate booking</option>
+                                    <option value="Financial or budget constraints">Financial or budget constraints</option>
+                                    <option value="Others">Others (Specify below)</option>
+                                </select>
+                            </div>
+
+                            {{-- Dynamic Custom Reason Input for Others --}}
+                            <div id="custom_cancel_reason_wrapper_{{$app->id}}" class="mb-3 d-none">
+                                <label for="custom_cancel_reason_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Specify Custom Reason</label>
+                                <textarea id="custom_cancel_reason_{{$app->id}}" class="form-control shadow-none cancel-reason-textarea" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" rows="3" placeholder="Provide details regarding the cancellation..."></textarea>
+                                <div class="mt-1"><small class="text-muted smaller italic">Minimum 5 characters required for validation.</small></div>
+                            </div>
+
+                            <input type="hidden" name="reason" id="cancel_reason_hidden_{{$app->id}}" value="">
                         </div>
-
-                        {{-- Dynamic Custom Reason Input for Others --}}
-                        <div id="custom_cancel_reason_wrapper_{{$app->id}}" class="mb-3 d-none">
-                            <label for="custom_cancel_reason_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Specify Custom Reason</label>
-                            <textarea id="custom_cancel_reason_{{$app->id}}" class="form-control shadow-none cancel-reason-textarea" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" rows="3" placeholder="Provide details regarding the cancellation..."></textarea>
-                            <div class="mt-1"><small class="text-muted smaller italic">Minimum 5 characters required for validation.</small></div>
+                        <div class="modal-footer p-3 border-top d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                            <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Go Back</button>
+                            <button type="submit" class="btn-custom btn-danger-custom py-2 px-4 fw-bold">Cancel Appointment</button>
                         </div>
-
-                        <input type="hidden" name="reason" id="cancel_reason_hidden_{{$app->id}}" value="">
-                    </div>
-                    <div class="modal-footer p-3 border-top d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card); border-color: var(--border-color) !important;">
-                        <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Go Back</button>
-                        <button type="submit" class="btn-custom btn-danger-custom py-2 px-4 fw-bold">Cancel Appointment</button>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </div>
-        </div>
-    @endif
+        @endif
 
-    {{-- C. STAFF/ADMIN CLINICAL CONTROLS WORKFLOW MODALS --}}
-    @if($is_staff && auth()->check() && auth()->user()->isEmployee())
-        {{-- Return to Patient Modal --}}
-        <div class="modal fade" id="retModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-            <div class="modal-dialog modal-dialog-centered">
-                <form action="{{ route('appointments.status', $app->id) }}" id="returnForm{{$app->id}}" method="POST" class="modal-content shadow-lg return-form-element" data-app-id="{{$app->id}}" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-                    @csrf
-                    @method('PATCH')
-                    <input type="hidden" name="status" value="returned">
-                    <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
-                        <h5 class="modal-title text-danger fw-bold uppercase small m-0">Return to Patient</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body p-4 text-start">
-                        <div class="mb-3">
-                            <label for="return_reason_select_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Reason for Return</label>
-                            <select id="return_reason_select_{{$app->id}}" class="form-select shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" required>
-                                <option value="" disabled selected>-- Select a return reason --</option>
-                                <option value="Mismatched identification documents">Mismatched identification documents</option>
-                                <option value="Incorrect or incomplete personal details">Incorrect or incomplete personal details</option>
-                                <option value="No payment received / pending verification">No payment received / pending verification</option>
-                                <option value="Invalid test selection for patient demographics">Invalid test selection for patient demographics</option>
-                                <option value="Discrepancy in schedule / date selection">Discrepancy in schedule / date selection</option>
-                                <option value="Others">Others (Specify details below)</option>
-                            </select>
+        {{-- C. STAFF/ADMIN CLINICAL CONTROLS WORKFLOW MODALS --}}
+        @if($is_staff && auth()->check() && auth()->user()->isEmployee())
+            {{-- Return to Patient Modal --}}
+            <div class="modal fade" id="retModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+                <div class="modal-dialog modal-dialog-centered">
+                    <form action="{{ route('appointments.status', $app->id) }}" id="returnForm{{$app->id}}" method="POST" class="modal-content shadow-lg return-form-element" data-app-id="{{$app->id}}" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                        @csrf
+                        @method('PATCH')
+                        <input type="hidden" name="status" value="returned">
+                        <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
+                            <h5 class="modal-title text-danger fw-bold uppercase small m-0">Return to Patient</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
-                        <div id="custom_return_reason_wrapper_{{$app->id}}" class="mb-3 d-none">
-                            <label for="return_reason_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Specify Custom Reason</label>
-                            <textarea name="return_reason" id="return_reason_{{$app->id}}" class="form-control shadow-none return-reason-textarea" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" rows="4" placeholder="Identify the specific correction needed..."></textarea>
+                        <div class="modal-body p-4 text-start">
+                            <div class="mb-3">
+                                <label for="return_reason_select_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Reason for Return</label>
+                                <select id="return_reason_select_{{$app->id}}" class="form-select shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" required>
+                                    <option value="" disabled selected>-- Select a return reason --</option>
+                                    <option value="Mismatched identification documents">Mismatched identification documents</option>
+                                    <option value="Incorrect or incomplete personal details">Incorrect or incomplete personal details</option>
+                                    <option value="No payment received / pending verification">No payment received / pending verification</option>
+                                    <option value="Invalid test selection for patient demographics">Invalid test selection for patient demographics</option>
+                                    <option value="Discrepancy in schedule / date selection">Discrepancy in schedule / date selection</option>
+                                    <option value="Others">Others (Specify details below)</option>
+                                </select>
+                            </div>
+                            <div id="custom_return_reason_wrapper_{{$app->id}}" class="mb-3 d-none">
+                                <label for="return_reason_{{$app->id}}" class="smaller fw-bold mb-2 uppercase d-block" style="color: var(--text-muted);">Specify Custom Reason</label>
+                                <textarea name="return_reason" id="return_reason_{{$app->id}}" class="form-control shadow-none return-reason-textarea" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" rows="4" placeholder="Identify the specific correction needed..."></textarea>
+                            </div>
+                            <div class="mt-2"><small class="text-muted smaller italic">Minimum 5 characters required for validation.</small></div>
                         </div>
-                        <div class="mt-2"><small class="text-muted smaller italic">Minimum 5 characters required for validation.</small></div>
-                    </div>
-                    <div class="modal-footer p-0" style="background-color: var(--bg-card); border-top: 1px solid var(--border-color);">
-                        <div class="d-flex w-100">
-                            <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Send Return</button>
+                        <div class="modal-footer p-0" style="background-color: var(--bg-card); border-top: 1px solid var(--border-color);">
+                            <div class="d-flex w-100">
+                                <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Send Return</button>
+                            </div>
                         </div>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </div>
-        </div>
 
-        {{-- Payment Confirmation Modal --}}
-        <div class="modal fade" id="confirmPaymentModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content shadow-lg" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-                    <div class="modal-header border-bottom py-3" style="border-color: var(--border-color) !important;">
-                        <h5 class="modal-title text-accent fw-bold uppercase small m-0" style="color: var(--brand-accent) !important;">Confirm Payment Receipt?</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body p-4 text-start">
-                        <p class="small mb-0" style="color: var(--text-main) !important;">
-                            Are you sure you want to flag this appointment as <strong class="fw-bold text-success">PAID</strong>? This will confirm manual receipt of funds for patient <strong class="fw-bold" style="color: var(--text-main) !important;">{{ $app->patient_name }}</strong>.
-                        </p>
-                    </div>
-                    <div class="modal-footer p-0" style="border-top: 1px solid var(--border-color);">
-                        <div class="d-flex w-100">
-                            <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
-                            <form action="{{ route('appointments.confirm-payment', $app->id) }}" method="POST" class="w-50 m-0">
-                                @csrf
-                                <input type="hidden" name="payment_status" value="paid">
-                                <button type="submit" class="btn btn-link text-decoration-none w-100 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Yes, Confirm</button>
-                            </form>
+            {{-- Payment Confirmation Modal --}}
+            <div class="modal fade" id="confirmPaymentModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content shadow-lg" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                        <div class="modal-header border-bottom py-3" style="border-color: var(--border-color) !important;">
+                            <h5 class="modal-title text-accent fw-bold uppercase small m-0" style="color: var(--brand-accent) !important;">Confirm Payment Receipt?</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-4 text-start">
+                            <p class="small mb-0" style="color: var(--text-main) !important;">
+                                Are you sure you want to flag this appointment as <strong class="fw-bold text-success">PAID</strong>? This will confirm manual receipt of funds for patient <strong class="fw-bold" style="color: var(--text-main) !important;">{{ $app->patient_name }}</strong>.
+                            </p>
+                        </div>
+                        <div class="modal-footer p-0" style="border-top: 1px solid var(--border-color);">
+                            <div class="d-flex w-100">
+                                <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
+                                <form action="{{ route('appointments.confirm-payment', $app->id) }}" method="POST" class="w-50 m-0">
+                                    @csrf
+                                    <input type="hidden" name="payment_status" value="paid">
+                                    <button type="submit" class="btn btn-link text-decoration-none w-100 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Yes, Confirm</button>
+                                </form>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        {{-- Revoke Payment Modal --}}
-        <div class="modal fade" id="revokePaymentModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content shadow-lg" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-                    <div class="modal-header border-bottom py-3 border-danger" style="border-color: #ff4d4d !important;">
-                        <h5 class="modal-title text-danger fw-bold uppercase small m-0">Revoke Payment Status?</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body p-4 text-start">
-                        <p class="small mb-0" style="color: var(--text-main) !important;">
-                            Are you sure you want to revert this appointment's payment status to <strong class="text-danger fw-bold">UNPAID</strong>? This will rollback confirmation details for patient <strong style="color: var(--text-main) !important;">{{ $app->patient_name }}</strong>.
-                        </p>
-                    </div>
-                    <div class="modal-footer p-0" style="border-top: 1px solid var(--border-color);">
-                        <div class="d-flex w-100">
-                            <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
-                            <form action="{{ route('appointments.confirm-payment', $app->id) }}" method="POST" class="w-50 m-0">
-                                @csrf
-                                <input type="hidden" name="payment_status" value="unpaid">
-                                <button type="submit" class="btn btn-link text-decoration-none w-100 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Yes, Revoke</button>
-                            </form>
+            {{-- Revoke Payment Modal --}}
+            <div class="modal fade" id="revokePaymentModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content shadow-lg" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                        <div class="modal-header border-bottom py-3 border-danger" style="border-color: #ff4d4d !important;">
+                            <h5 class="modal-title text-danger fw-bold uppercase small m-0">Revoke Payment Status?</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-4 text-start">
+                            <p class="small mb-0" style="color: var(--text-main) !important;">
+                                Are you sure you want to revert this appointment's payment status to <strong class="text-danger fw-bold">UNPAID</strong>? This will rollback confirmation details for patient <strong style="color: var(--text-main) !important;">{{ $app->patient_name }}</strong>.
+                            </p>
+                        </div>
+                        <div class="modal-footer p-0" style="border-top: 1px solid var(--border-color);">
+                            <div class="d-flex w-100">
+                                <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
+                                <form action="{{ route('appointments.confirm-payment', $app->id) }}" method="POST" class="w-50 m-0">
+                                    @csrf
+                                    <input type="hidden" name="payment_status" value="unpaid">
+                                    <button type="submit" class="btn btn-link text-decoration-none w-100 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Yes, Revoke</button>
+                                </form>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        {{-- Mark Payment as Invalid Modal --}}
-        <div class="modal fade" id="invalidPaymentModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-            <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
-                <form action="{{ route('appointments.invalid-payment', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-                    @csrf
-                    <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
-                        <h5 class="modal-title text-danger fw-bold uppercase small m-0">Flag Payment as Invalid?</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body p-4 text-start">
-                        <p class="small text-muted mb-3">Flag this uploaded proof of payment receipt as invalid. Select a justification:</p>
-                        <div class="mb-3">
-                            <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Reason for Invalidating</label>
-                            <select name="reason" id="invalid_reason_select_{{ $app->id }}" class="form-select py-2.5 shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" onchange="window.toggleInvalidReasonField('{{ $app->id }}', this)" required>
-                                <option value="" disabled selected>-- Select an invalidation reason --</option>
-                                <option value="Receipt image is blurry / unreadable">Receipt image is blurry / unreadable</option>
-                                <option value="Reference number mismatch / Fake receipt">Reference number mismatch / Fake receipt</option>
-                                <option value="Incorrect amount sent">Incorrect amount sent</option>
-                                <option value="Others">Others (Specify below)</option>
-                            </select>
+            {{-- Mark Payment as Invalid Modal --}}
+            <div class="modal fade" id="invalidPaymentModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+                <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+                    <form action="{{ route('appointments.invalid-payment', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                        @csrf
+                        <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
+                            <h5 class="modal-title text-danger fw-bold uppercase small m-0">Flag Payment as Invalid?</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
-                        <div id="invalid_custom_reason_wrapper_{{ $app->id }}" class="mb-3 d-none">
-                            <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Specify Custom Reason</label>
-                            <textarea name="custom_reason" id="invalid_custom_reason_{{ $app->id }}" class="form-control" rows="3" placeholder="Provide details regarding the invalid payment..."></textarea>
+                        <div class="modal-body p-4 text-start">
+                            <p class="small text-muted mb-3">Flag this uploaded proof of payment receipt as invalid. Select a justification:</p>
+                            <div class="mb-3">
+                                <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Reason for Invalidating</label>
+                                <select name="reason" id="invalid_reason_select_{{ $app->id }}" class="form-select py-2.5 shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" onchange="window.toggleInvalidReasonField('{{ $app->id }}', this)" required>
+                                    <option value="" disabled selected>-- Select an invalidation reason --</option>
+                                    <option value="Receipt image is blurry / unreadable">Receipt image is blurry / unreadable</option>
+                                    <option value="Reference number mismatch / Fake receipt">Reference number mismatch / Fake receipt</option>
+                                    <option value="Incorrect amount sent">Incorrect amount sent</option>
+                                    <option value="Others">Others (Specify below)</option>
+                                </select>
+                            </div>
+                            <div id="invalid_custom_reason_wrapper_{{ $app->id }}" class="mb-3 d-none">
+                                <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Specify Custom Reason</label>
+                                <textarea name="custom_reason" id="invalid_custom_reason_{{ $app->id }}" class="form-control" rows="3" placeholder="Provide details regarding the invalid payment..."></textarea>
+                            </div>
                         </div>
-                    </div>
-                    <div class="modal-footer p-3 border-top d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card); border-color: var(--border-color) !important;">
-                        <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn-custom btn-danger-custom py-2 px-4 fw-bold">Flag as Invalid</button>
-                    </div>
-                </form>
+                        <div class="modal-footer p-3 border-top d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                            <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn-custom btn-danger-custom py-2 px-4 fw-bold">Flag as Invalid</button>
+                        </div>
+                    </form>
+                </div>
             </div>
-        </div>
 
-        {{-- Confirm Refund Modal --}}
-        <div class="modal fade" id="confirmRefundModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-            <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
-                <form action="{{ route('appointments.refund', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-                    @csrf
-                    <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
-                        <h5 class="modal-title text-success fw-bold uppercase small m-0">Confirm Refund?</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body p-4 text-start">
-                        <p class="small text-muted mb-0">Confirm that the refund for this canceled appointment has been manually processed and completed. This action will log your name and the current timestamp as the official processor.</p>
-                    </div>
-                    <div class="modal-footer p-3 border-top d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card); border-color: var(--border-color) !important;">
-                        <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn-custom btn-accent btn-success py-2 px-4 fw-bold">Confirm Refund</button>
-                    </div>
-                </form>
+            {{-- Confirm Refund Modal --}}
+            <div class="modal fade" id="confirmRefundModal{{$app->id}}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+                <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+                    <form action="{{ route('appointments.refund', $app->id) }}" method="POST" class="modal-content shadow-lg border-0" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                        @csrf
+                        <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
+                            <h5 class="modal-title text-success fw-bold uppercase small m-0">Confirm Refund?</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-4 text-start">
+                            <p class="small text-muted mb-0">Confirm that the refund for this canceled appointment has been manually processed and completed. This action will log your name and the current timestamp as the official processor.</p>
+                        </div>
+                        <div class="modal-footer p-3 border-top d-flex gap-2 text-center justify-content-center" style="background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                            <button type="button" class="btn-custom btn-outline-secondary py-2" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn-custom btn-accent btn-success py-2 px-4 fw-bold">Confirm Refund</button>
+                        </div>
+                    </form>
+                </div>
             </div>
-        </div>
-    @endif
-@endforeach
+        @endif
+    @endforeach
+</div>
 @endsection
 
 @push('scripts')
 <script src="https://js.pusher.com/8.0.1/pusher.min.js"></script>
 <script>
-let activeRowIdx = null;
 let searchDebounceTimer = null;
 
 /**
@@ -512,7 +513,7 @@ function showAppointmentDetails(appId) {
         listCard.classList.add('border-accent', 'shadow-neon');
     }
 
-    // Mobile: Show back button and smoothly scroll into workspace view
+    // Mobile view scroll handling
     if (window.innerWidth < 992) {
         const backBtn = document.getElementById('mobile-back-to-queue-btn');
         if (backBtn) backBtn.classList.remove('d-none');
@@ -552,19 +553,61 @@ async function fetchQueueWithParams(urlOverride = null) {
         url = urlOverride;
     } else if (form) {
         const formData = new FormData(form);
-        const searchParams = new URLSearchParams(formData);
+        const searchParams = new URLSearchParams();
+        
+        // Force view=queue
+        searchParams.set('view', 'queue');
+        
+        for (const [key, value] of formData.entries()) {
+            if (value && value.toString().trim() !== '' && key !== 'staff_page') {
+                searchParams.set(key, value.toString().trim());
+            }
+        }
         url = form.action + '?' + searchParams.toString();
     } else {
         url = "{{ route('appointments.index', ['view' => 'queue']) }}";
     }
 
+    const parsedUrl = new URL(url, window.location.origin);
+    @if($is_staff)
+        parsedUrl.searchParams.set('view', 'queue');
+    @endif
+    const finalUrl = parsedUrl.toString();
+
+    // Immediate visual feedback (dim queue list during loading)
+    const listContent = document.getElementById('listContent');
+    if (listContent) {
+        listContent.style.transition = 'opacity 0.15s ease-out';
+        listContent.style.opacity = '0.35';
+        listContent.style.pointerEvents = 'none';
+    }
+
     try {
-        const response = await fetch(url, {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        // Explicitly accept text/html to prevent Laravel expectsJson() from intercepting as JSON
+        const response = await fetch(finalUrl, {
+            headers: {
+                'Accept': 'text/html, application/xhtml+xml',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
         });
-        if (!response.ok) return;
+
+        if (!response.ok) {
+            if (listContent) {
+                listContent.style.opacity = '1';
+                listContent.style.pointerEvents = 'auto';
+            }
+            return;
+        }
 
         const html = await response.text();
+
+        // Safety fallback if response is somehow JSON
+        if (html.trim().startsWith('{') || html.trim().startsWith('[')) {
+            console.warn("Received JSON response. Retrying with full page navigation.");
+            window.location.href = finalUrl;
+            return;
+        }
+
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
 
@@ -576,13 +619,9 @@ async function fetchQueueWithParams(urlOverride = null) {
         const newContent = doc.getElementById('listContent');
         const oldContent = document.getElementById('listContent');
         if (newContent && oldContent) {
-            oldContent.style.transition = 'opacity 0.15s ease-out';
-            oldContent.style.opacity = '0.3';
-            setTimeout(() => {
-                oldContent.innerHTML = newContent.innerHTML;
-                oldContent.style.opacity = '1';
-                rebindQueueEvents();
-            }, 150);
+            oldContent.innerHTML = newContent.innerHTML;
+            oldContent.style.opacity = '1';
+            oldContent.style.pointerEvents = 'auto';
         }
 
         // 2. Morph Workspace Detail Panels
@@ -590,23 +629,78 @@ async function fetchQueueWithParams(urlOverride = null) {
         const oldWorkspace = document.getElementById('workspace-container');
         if (newWorkspace && oldWorkspace) {
             oldWorkspace.innerHTML = newWorkspace.innerHTML;
-            if (activeId) {
-                const placeholder = document.getElementById('details-placeholder');
-                if (placeholder) placeholder.classList.add('d-none');
-                const restoredPane = document.getElementById(activeId);
-                if (restoredPane) restoredPane.classList.remove('d-none');
-                const recordId = activeId.split('-')[1];
-                const listCard = document.getElementById(`card-${recordId}`);
-                if (listCard) listCard.classList.add('border-accent', 'shadow-neon');
+        }
+
+        // 3. Morph Modal Windows to keep dynamic actions functional
+        const newModals = doc.getElementById('queue-modals-container');
+        const oldModals = document.getElementById('queue-modals-container');
+        if (newModals && oldModals) {
+            oldModals.innerHTML = newModals.innerHTML;
+        }
+
+        // 4. Update browser URL history without reload
+        window.history.pushState({ path: finalUrl }, '', finalUrl);
+
+        // 5. Synchronize Form Inputs with new URL state
+        syncFormWithUrl(parsedUrl);
+
+        // 6. Rebind events on dynamic elements
+        rebindQueueEvents();
+        initModalListeners();
+
+        // 7. Select appropriate appointment card
+        let restored = false;
+        if (activeId) {
+            const recordId = activeId.replace('details-', '');
+            const cardEl = document.getElementById(`card-${recordId}`);
+            const paneEl = document.getElementById(activeId);
+            if (cardEl && paneEl) {
+                showAppointmentDetails(recordId);
+                restored = true;
             }
         }
 
-        // Update browser URL without reloading
-        if (!urlOverride && form) {
-            window.history.pushState(null, '', url);
+        // If previously selected card no longer exists in current page/filter, select the first card
+        if (!restored) {
+            const firstCard = document.querySelector('#staff-queue-deck .app-list-card, #listContent .tab-pane.active .app-list-card');
+            if (firstCard && firstCard.id) {
+                const firstId = firstCard.id.replace('card-', '');
+                showAppointmentDetails(firstId);
+            } else {
+                resetActiveDetail();
+            }
         }
+
     } catch (err) {
         console.error("Dynamic Queue Fetch failed:", err);
+        if (listContent) {
+            listContent.style.opacity = '1';
+            listContent.style.pointerEvents = 'auto';
+        }
+    }
+}
+
+function syncFormWithUrl(urlObj) {
+    const searchInput = document.getElementById('queueSearchInput');
+    const statusSelect = document.getElementById('filterStatusSelect');
+    const sortBySelect = document.getElementById('filterSortBySelect');
+    const orderSelect = document.getElementById('filterOrderSelect');
+    const clearBtn = document.getElementById('clearSearchBtn');
+
+    if (searchInput) {
+        searchInput.value = urlObj.searchParams.get('search') || '';
+        if (clearBtn) {
+            clearBtn.classList.toggle('d-none', !searchInput.value);
+        }
+    }
+    if (statusSelect) {
+        statusSelect.value = urlObj.searchParams.get('status') || '';
+    }
+    if (sortBySelect) {
+        sortBySelect.value = urlObj.searchParams.get('sort_by') || 'date';
+    }
+    if (orderSelect) {
+        orderSelect.value = urlObj.searchParams.get('order') || 'desc';
     }
 }
 
@@ -623,7 +717,7 @@ function debounceQueueSearch() {
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
         triggerDynamicQueueFilter();
-    }, 350);
+    }, 300);
 }
 
 function clearQueueSearch() {
@@ -644,42 +738,26 @@ function syncMasterQueue() {
  * 3. REBIND EVENT LISTENERS ON DYNAMICALLY INJECTED CONTENT
  */
 function rebindQueueEvents() {
-    // Pagination AJAX interceptor
-    document.querySelectorAll('#listContent .pagination a').forEach(link => {
+    // Intercept pagination clicks dynamically
+    document.querySelectorAll('#listContent .pagination a, #staff-pagination-wrapper .pagination a').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
-            fetchQueueWithParams(link.href);
+            if (link.href && link.href !== '#' && !link.closest('.disabled')) {
+                fetchQueueWithParams(link.href);
+            }
         });
     });
 }
 
 /**
- * 4. DOM DOCUMENT INITIALIZER & REAL-TIME WEBSOCKETS
+ * 4. INITIALIZE MODAL EVENT LISTENERS
  */
-document.addEventListener('DOMContentLoaded', () => {
-    rebindQueueEvents();
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const selectId = urlParams.get('id');
-    if (selectId) {
-        const card = document.getElementById(`card-${selectId}`);
-        if (card) {
-            const tabPane = card.closest('.tab-pane');
-            if (tabPane) {
-                const tabId = tabPane.id;
-                const tabButton = document.querySelector(`[data-bs-target="#${tabId}"]`);
-                if (tabButton) {
-                    const tab = bootstrap.Tab.getInstance(tabButton) || new bootstrap.Tab(tabButton);
-                    tab.show();
-                }
-            }
-            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            showAppointmentDetails(selectId);
-        }
-    }
-
+function initModalListeners() {
     // Return to Patient form reason listeners
     document.querySelectorAll('.return-form-element').forEach(form => {
+        if (form.dataset.bound === 'true') return;
+        form.dataset.bound = 'true';
+
         const appId = form.dataset.appId;
         const select = document.getElementById(`return_reason_select_${appId}`);
         const wrapper = document.getElementById(`custom_return_reason_wrapper_${appId}`);
@@ -708,6 +786,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Patient Cancellation form reason listeners
     document.querySelectorAll('.cancel-appointment-form').forEach(form => {
+        if (form.dataset.bound === 'true') return;
+        form.dataset.bound = 'true';
+
         const appId = form.dataset.appId;
         const select = document.getElementById(`cancel_reason_select_${appId}`);
         const textarea = document.getElementById(`custom_cancel_reason_${appId}`);
@@ -733,6 +814,45 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     });
+}
+
+/**
+ * 5. DOM DOCUMENT INITIALIZER & REAL-TIME WEBSOCKETS
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    rebindQueueEvents();
+    initModalListeners();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const selectId = urlParams.get('id');
+    if (selectId) {
+        const card = document.getElementById(`card-${selectId}`);
+        if (card) {
+            const tabPane = card.closest('.tab-pane');
+            if (tabPane) {
+                const tabId = tabPane.id;
+                const tabButton = document.querySelector(`[data-bs-target="#${tabId}"]`);
+                if (tabButton) {
+                    const tab = bootstrap.Tab.getInstance(tabButton) || new bootstrap.Tab(tabButton);
+                    tab.show();
+                }
+            }
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            showAppointmentDetails(selectId);
+        }
+    } else {
+        // Auto-select first card on desktop initial load
+        const firstCard = document.querySelector('#staff-queue-deck .app-list-card, #listContent .tab-pane.active .app-list-card');
+        if (firstCard && firstCard.id && window.innerWidth >= 992) {
+            const firstId = firstCard.id.replace('card-', '');
+            showAppointmentDetails(firstId);
+        }
+    }
+
+    // Support browser Back/Forward navigation smoothly
+    window.addEventListener('popstate', () => {
+        fetchQueueWithParams(window.location.href);
+    });
 
     // WebSockets Real-time Auto Refresh (Staff & Patients)
     if (typeof Pusher !== 'undefined') {
@@ -751,7 +871,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Polling fallback every 30 seconds
+    // Background polling fallback
     setInterval(syncMasterQueue, 30000);
 });
 

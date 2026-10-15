@@ -17,14 +17,31 @@ $isHistoryView = !empty($isHistory);
 $isBulkBatchWorkspace = ($app->batch_id && !$isHistoryView && ($isStaff || (auth()->check() && auth()->id() === $app->user_id)));
 
 if ($isBulkBatchWorkspace) {
-    $batchAppsQuery = \App\Models\Appointment::where('batch_id', $app->batch_id);
+    $batchAppointmentsQuery = \App\Models\Appointment::with(['services', 'result', 'user'])
+        ->where('batch_id', $app->batch_id);
+
     if (auth()->check() && auth()->user()->isPatient()) {
-        $batchAppsQuery->where('deleted_by_patient', false);
+        $batchAppointmentsQuery->where('deleted_by_patient', false);
     }
-    $batchApps = $batchAppsQuery->get();
+
+    $batchAppointments = $batchAppointmentsQuery->get()
+        ->sortBy(function($appointment) {
+            return match($appointment->status) {
+                'returned' => 1,
+                'pending' => 2,
+                'approved' => 3,
+                'retest' => 4,
+                'tested' => 5,
+                'encoded' => 6,
+                'released' => 7,
+                default => 8
+            };
+        });
+
     $lowestPriority = 999;
     $lowestStatus = $app->status;
-    foreach ($batchApps as $subApp) {
+
+    foreach ($batchAppointments as $subApp) {
         $effStatus = $subApp->isExpired() ? 'expired' : $subApp->status;
         $priority = $statusPriority[$effStatus] ?? 99;
         if ($priority < $lowestPriority) {
@@ -32,8 +49,15 @@ if ($isBulkBatchWorkspace) {
             $lowestStatus = $effStatus;
         }
     }
+
     $isExpired = ($lowestStatus === 'expired');
     $finalStatus = $lowestStatus;
+    $batchTotal = $batchAppointments->sum(fn($a) => $a->totalPrice());
+    $anyApproved = $batchAppointments->contains(fn($appointment) => in_array($appointment->status, ['approved', 'retest', 'tested', 'encoded', 'released']));
+
+    // Cancel entire batch is only permitted if pending/returned AND no patient has progressed to approved/retest/tested/encoded/released
+    $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['pending', 'returned'])) 
+        && !$batchAppointments->contains(fn($a) => in_array($a->status, ['approved', 'retest', 'tested', 'encoded', 'released']));
 } else {
     $isExpired = $app->isExpired();
     $finalStatus = $isExpired ? 'expired' : $app->status;
@@ -52,40 +76,13 @@ $statusColor = match($finalStatus) {
     default => 'secondary'
 };
 $statusLabel = strtoupper($finalStatus);
+$formattedDate = $app->appointment_date ? \Carbon\Carbon::parse($app->appointment_date)->format('M d, Y') : 'N/A';
 @endphp
 
 @if($isBulkBatchWorkspace)
 {{-- =========================================================================
      A. BULK BATCH WORKSPACE (Visible only to Batch Creator & Clinic Staff)
 ========================================================================= --}}
-@php
-$batchAppointmentsQuery = \App\Models\Appointment::with(['services', 'result', 'user'])
-    ->where('batch_id', $app->batch_id);
-if (auth()->check() && auth()->user()->isPatient()) {
-    $batchAppointmentsQuery->where('deleted_by_patient', false);
-}
-$batchAppointments = $batchAppointmentsQuery->get()
-    ->sortBy(function($appointment) {
-        return match($appointment->status) {
-            'returned' => 1,
-            'pending' => 2,
-            'approved' => 3,
-            'retest' => 4,
-            'tested' => 5,
-            'encoded' => 6,
-            'released' => 7,
-            default => 8
-        };
-    });
-$batchTotal = $batchAppointments->sum(fn($a) => $a->totalPrice());
-$paymentProviders = $paymentProviders ?? \App\Models\PaymentProvider::where('is_active', true)->get();
-$anyApproved = $batchAppointments->contains(fn($appointment) => in_array($appointment->status, ['approved', 'retest', 'tested', 'encoded', 'released']));
-
-// Cancel entire batch is only permitted if pending/returned AND no patient has progressed to approved/retest/tested/encoded/released
-$canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['pending', 'returned'])) 
-    && !$batchAppointments->contains(fn($a) => in_array($a->status, ['approved', 'retest', 'tested', 'encoded', 'released']));
-@endphp
-
 <div id="details-{{ $app->id }}" class="appointment-detail-pane card border bg-card p-4 d-none animate-page" style="background-color: var(--bg-card); border-color: var(--border-color) !important; color: var(--text-main); border-radius: 14px;">
     {{-- Batch Header --}}
     <div class="border-bottom pb-3 mb-4 text-start" style="border-color: var(--border-color) !important;">
@@ -96,7 +93,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                 </h4>
                 <div class="smaller fw-bold uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px; color: var(--text-muted) !important;">
                     Batch ID: #{{ $app->batch_id }} <span class="mx-2">&bull;</span> 
-                    Schedule: {{ $app->appointment_date ? $app->appointment_date->format('M d, Y') : 'N/A' }} <span class="mx-2">&bull;</span> 
+                    Schedule: {{ $formattedDate }} <span class="mx-2">&bull;</span> 
                     Total PAX: {{ $batchAppointments->count() }}
                 </div>
             </div>
@@ -149,7 +146,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                         </div>
                         @if($app->payment_receipt)
                             @php $batchPayExt = pathinfo($app->payment_receipt, PATHINFO_EXTENSION); @endphp
-                            <div class="d-flex align-items-center gap-3 bg-white p-2 rounded mb-1 border cursor-pointer" style="cursor: pointer; max-width: 280px; border-color: var(--border-color) !important;" onclick="openFilePreview('{{ Storage::url($app->payment_receipt) }}', 'Batch Proof of Payment')" title="Click to view full screen">
+                            <div class="d-flex align-items-center gap-3 bg-white p-2 rounded mb-1 border cursor-pointer" style="cursor: pointer; max-width: 280px; border-color: var(--border-color) !important;" onclick="if(typeof openFilePreview === 'function'){ openFilePreview('{{ Storage::url($app->payment_receipt) }}', 'Batch Proof of Payment'); }" title="Click to view full screen">
                                 <i class="bi bi-file-earmark-image-fill text-accent display-6" style="color: var(--brand-accent) !important;"></i>
                                 <div class="text-start">
                                     <div class="fw-bold small text-dark text-truncate" style="max-width: 190px;">Batch_Proof_of_Payment{{ $batchPayExt ? '.'.strtolower($batchPayExt) : '' }}</div>
@@ -258,7 +255,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="small text-muted d-flex align-items-center gap-1.5" style="font-size: 0.72rem; color: var(--text-muted) !important;">
                         <i class="bi bi-clock-history text-accent" style="color: var(--brand-accent) !important;"></i>
-                        <span>{{ $subApp->appointment_date ? $subApp->appointment_date->format('M d, Y') : 'N/A' }} | {{ $subApp->time_slot ? date('h:i A', strtotime($subApp->time_slot)) : '--' }}</span>
+                        <span>{{ $subApp->appointment_date ? \Carbon\Carbon::parse($subApp->appointment_date)->format('M d, Y') : 'N/A' }} | {{ $subApp->time_slot ? date('h:i A', strtotime($subApp->time_slot)) : '--' }}</span>
                     </div>
                     <div class="bulk-actions-container">
                         @if($subApp->status == 'released')
@@ -273,7 +270,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                             @else
                                 <div class="d-flex gap-2 align-items-center">
                                     @if($isStaff)
-                                        <button type="button" class="btn btn-sm btn-outline-accent py-1 px-2.5 fw-bold d-inline-flex align-items-center gap-1.5" onclick="promptAccess('{{ $subApp->id }}', 'hub', 'edit')" style="font-size: 0.72rem;">
+                                        <button type="button" class="btn btn-sm btn-outline-accent py-1 px-2.5 fw-bold d-inline-flex align-items-center gap-1.5" onclick="if(typeof promptAccess === 'function'){ promptAccess('{{ $subApp->id }}', 'hub', 'edit'); }" style="font-size: 0.72rem;">
                                             <i class="bi bi-shield-lock-fill"></i>
                                             <span>VIEW RESULTS HUB</span>
                                         </button>
@@ -622,7 +619,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
             {{-- Released Clinical Results Links (Patient View) --}}
             @if($app->status == 'released' && $app->result && !$isStaff)
                 <div class="mt-4 border-top pt-3 text-start animate-page" style="border-color: var(--border-color) !important;">
-                    <h6 class="text-accent small fw-bold uppercase mb-3 d-flex align-items-center gap-2" style="color: var(--brand-accent) !important;">
+                    <h6 class="text-accent small fw-bold uppercase mb-3 d-flex align-items-center gap-2" style="font-size: 0.8rem; letter-spacing: 0.5px; color: var(--brand-accent) !important;">
                         <i class="bi bi-file-earmark-medical-fill fs-5"></i>
                         <span>Released Clinical Results</span>
                     </h6>
@@ -689,7 +686,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                 <div class="mb-3">
                     <small class="text-muted fw-bold d-block mb-1 uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px; color: var(--text-muted) !important;">Schedule Date & Time:</small>
                     <div class="small fw-semibold" style="color: var(--text-main) !important;">
-                        <i class="bi bi-calendar-event text-accent me-2"></i>{{ $app->appointment_date ? $app->appointment_date->format('M d, Y') : 'N/A' }}<br>
+                        <i class="bi bi-calendar-event text-accent me-2"></i>{{ $formattedDate }}<br>
                         <i class="bi bi-clock text-accent me-2"></i>{{ $app->time_slot ? date('h:i A', strtotime($app->time_slot)) : '--' }}
                     </div>
                 </div>
@@ -716,7 +713,7 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
                 {{-- Prominent Review & Forward Buttons for Staff (Master Queue Only) --}}
                 @if($isStaff && $app->status === 'released')
                     <div class="mt-3 d-flex gap-2">
-                        <button type="button" class="btn btn-sm btn-accent flex-grow-1 py-2 fw-bold uppercase d-inline-flex align-items-center justify-content-center gap-2" onclick="promptAccess('{{ $app->id }}', 'hub', 'edit')">
+                        <button type="button" class="btn btn-sm btn-accent flex-grow-1 py-2 fw-bold uppercase d-inline-flex align-items-center justify-content-center gap-2" onclick="if(typeof promptAccess === 'function'){ promptAccess('{{ $app->id }}', 'hub', 'edit'); }">
                             <i class="bi bi-shield-check"></i>
                             <span>Review / Edit Results Hub</span>
                         </button>
@@ -820,91 +817,123 @@ $canCancelBatch = $batchAppointments->contains(fn($a) => in_array($a->status, ['
 @endif
 
 <script>
-window.toggleForwardEmailEdit = window.toggleForwardEmailEdit || function(id) {
-    const section = document.getElementById(`forward_email_edit_section_${id}`);
-    const input = document.getElementById(`target_email_${id}`);
-    const select = document.getElementById(`forward_reason_select_${id}`);
-    if (section) {
-        const isHidden = section.classList.contains('d-none');
-        section.classList.toggle('d-none', !isHidden);
-        if (input && select) {
-            if (isHidden) {
-                input.setAttribute('required', 'required');
-                select.setAttribute('required', 'required');
-                input.focus();
-            } else {
-                input.removeAttribute('required');
-                select.removeAttribute('required');
+if (!window.toggleForwardEmailEdit) {
+    window.toggleForwardEmailEdit = function(id) {
+        const section = document.getElementById(`forward_email_edit_section_${id}`);
+        const input = document.getElementById(`target_email_${id}`);
+        const select = document.getElementById(`forward_reason_select_${id}`);
+        if (section) {
+            const isHidden = section.classList.contains('d-none');
+            section.classList.toggle('d-none', !isHidden);
+            if (input && select) {
+                if (isHidden) {
+                    input.setAttribute('required', 'required');
+                    select.setAttribute('required', 'required');
+                    input.focus();
+                } else {
+                    input.removeAttribute('required');
+                    select.removeAttribute('required');
+                }
             }
         }
-    }
-};
+    };
+}
 
-window.toggleForwardReason = window.toggleForwardReason || function(id, val) {
-    const wrapper = document.getElementById(`forward_custom_reason_wrapper_${id}`);
-    const textarea = document.getElementById(`forward_custom_reason_${id}`);
-    if (wrapper && textarea) {
-        if (val === 'Others') {
-            wrapper.classList.remove('d-none');
-            textarea.setAttribute('required', 'required');
-            textarea.focus();
-        } else {
-            wrapper.classList.add('d-none');
-            textarea.removeAttribute('required');
-            textarea.value = '';
+if (!window.toggleForwardReason) {
+    window.toggleForwardReason = function(id, val) {
+        const wrapper = document.getElementById(`forward_custom_reason_wrapper_${id}`);
+        const textarea = document.getElementById(`forward_custom_reason_${id}`);
+        if (wrapper && textarea) {
+            if (val === 'Others') {
+                wrapper.classList.remove('d-none');
+                textarea.setAttribute('required', 'required');
+                textarea.focus();
+            } else {
+                wrapper.classList.add('d-none');
+                textarea.removeAttribute('required');
+                textarea.value = '';
+            }
         }
-    }
-};
+    };
+}
 
-window.toggleCancelBatchReasonField = window.toggleCancelBatchReasonField || function(appId, select) {
-    const wrapper = document.getElementById(`custom_cancel_batch_reason_wrapper_${appId}`);
-    const textarea = document.getElementById(`custom_cancel_batch_reason_${appId}`);
-    const hiddenReason = document.getElementById(`cancel_batch_reason_hidden_${appId}`);
-    if (wrapper && textarea) {
-        if (select.value === 'Others') {
-            wrapper.classList.remove('d-none');
-            textarea.setAttribute('required', 'required');
-            textarea.setAttribute('name', 'cancellation_reason');
-            select.removeAttribute('name');
-            textarea.focus();
-        } else {
-            wrapper.classList.add('d-none');
-            textarea.removeAttribute('required');
-            textarea.removeAttribute('name');
-            select.setAttribute('name', 'cancellation_reason');
-            textarea.value = '';
-        }
-        if (hiddenReason) {
-            hiddenReason.value = (select.value === 'Others' ? textarea.value.trim() : select.value) || '';
-        }
-    }
-};
-
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.cancel-batch-form').forEach(form => {
-        const appId = form.dataset.appId;
-        const select = document.getElementById(`cancel_batch_reason_select_${appId}`);
+if (!window.toggleCancelBatchReasonField) {
+    window.toggleCancelBatchReasonField = function(appId, select) {
+        const wrapper = document.getElementById(`custom_cancel_batch_reason_wrapper_${appId}`);
         const textarea = document.getElementById(`custom_cancel_batch_reason_${appId}`);
         const hiddenReason = document.getElementById(`cancel_batch_reason_hidden_${appId}`);
-        if (textarea) {
-            textarea.addEventListener('input', function() {
-                if (hiddenReason) hiddenReason.value = this.value.trim();
-            });
+        if (wrapper && textarea) {
+            if (select.value === 'Others') {
+                wrapper.classList.remove('d-none');
+                textarea.setAttribute('required', 'required');
+                textarea.setAttribute('name', 'cancellation_reason');
+                select.removeAttribute('name');
+                textarea.focus();
+            } else {
+                wrapper.classList.add('d-none');
+                textarea.removeAttribute('required');
+                textarea.removeAttribute('name');
+                select.setAttribute('name', 'cancellation_reason');
+                textarea.value = '';
+            }
+            if (hiddenReason) {
+                hiddenReason.value = (select.value === 'Others' ? textarea.value.trim() : select.value) || '';
+            }
         }
-        if (select) {
-            form.addEventListener('submit', function(e) {
-                const activeVal = select.value === 'Others' ? textarea : select;
-                if (!activeVal || !activeVal.value || activeVal.value.trim().length < 5) {
-                    e.preventDefault();
-                    alert('Please select or specify a valid batch cancellation reason of at least 5 characters.');
-                    if (activeVal) activeVal.focus();
-                    return false;
-                }
-                if (hiddenReason) {
-                    hiddenReason.value = activeVal.value.trim();
-                }
-            });
-        }
-    });
-});
+    };
+}
+
+if (!window.filterBatchPatients) {
+    window.filterBatchPatients = function(batchId, query) {
+        const q = (query || '').toLowerCase().trim();
+        const rows = document.querySelectorAll(`.bulk-patient-row-${batchId}`);
+        rows.forEach(row => {
+            const name = (row.dataset.name || '').toLowerCase();
+            if (!q || name.includes(q)) {
+                row.classList.remove('d-none');
+            } else {
+                row.classList.add('d-none');
+            }
+        });
+    };
+}
+
+if (!window.initCancelBatchForms) {
+    window.initCancelBatchForms = function() {
+        document.querySelectorAll('.cancel-batch-form').forEach(form => {
+            if (form.dataset.bound === 'true') return;
+            form.dataset.bound = 'true';
+
+            const appId = form.dataset.appId;
+            const select = document.getElementById(`cancel_batch_reason_select_${appId}`);
+            const textarea = document.getElementById(`custom_cancel_batch_reason_${appId}`);
+            const hiddenReason = document.getElementById(`cancel_batch_reason_hidden_${appId}`);
+
+            if (textarea) {
+                textarea.addEventListener('input', function() {
+                    if (hiddenReason) hiddenReason.value = this.value.trim();
+                });
+            }
+            if (select) {
+                form.addEventListener('submit', function(e) {
+                    const activeVal = select.value === 'Others' ? textarea : select;
+                    if (!activeVal || !activeVal.value || activeVal.value.trim().length < 5) {
+                        e.preventDefault();
+                        alert('Please select or specify a valid batch cancellation reason of at least 5 characters.');
+                        if (activeVal) activeVal.focus();
+                        return false;
+                    }
+                    if (hiddenReason) {
+                        hiddenReason.value = activeVal.value.trim();
+                    }
+                });
+            }
+        });
+    };
+}
+
+// Bind batch forms immediately
+if (typeof window.initCancelBatchForms === 'function') {
+    window.initCancelBatchForms();
+}
 </script>

@@ -19,6 +19,7 @@ echo "Running Seeders..."
 php artisan db:seed --class=AdminSeeder --force
 php artisan db:seed --class=ServiceSeeder --force
 php artisan db:seed --class=PaymentProviderSeeder --force
+php artisan db:seed --class=AppointmentSeeder --force
 
 echo "Starting Apache..."
 exec apache2-foreground

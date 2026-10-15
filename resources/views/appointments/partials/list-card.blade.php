@@ -20,8 +20,10 @@ $isHistoryView = !empty($isHistory);
 // and the user is either Staff or the Creator/Maker of that bulk batch.
 $isBulkCard = ($app->batch_id && !$isHistoryView && ($isStaff || (auth()->check() && auth()->id() === $app->user_id)));
 
+$batchApps = null;
+
 if ($isBulkCard) {
-    $batchAppsQuery = \App\Models\Appointment::where('batch_id', $app->batch_id);
+    $batchAppsQuery = \App\Models\Appointment::with(['result.audits'])->where('batch_id', $app->batch_id);
     if (auth()->check() && auth()->user()->isPatient()) {
         $batchAppsQuery->where('deleted_by_patient', false);
     }
@@ -29,6 +31,7 @@ if ($isBulkCard) {
     $groupCount = $batchApps->count();
     $lowestPriority = 999;
     $lowestStatus = $app->status;
+
     foreach ($batchApps as $subApp) {
         $effStatus = $subApp->isExpired() ? 'expired' : $subApp->status;
         $priority = $statusPriority[$effStatus] ?? 99;
@@ -60,10 +63,9 @@ $statusLabel = strtoupper($finalStatus);
 
 // Determine the latest card edit timestamp in the queue list (ONLY if edited after clinical release)
 $latestCardEditTimestamp = null;
-if ($isBulkCard) {
-    $groupedApps = \App\Models\Appointment::where('batch_id', $app->batch_id)->get();
-    foreach ($groupedApps as $groupedApp) {
-        if ($groupedApp->results_released_at && $groupedApp->result && $groupedApp->result->audits->isNotEmpty()) {
+if ($isBulkCard && $batchApps) {
+    foreach ($batchApps as $groupedApp) {
+        if ($groupedApp->results_released_at && $groupedApp->result && $groupedApp->result->audits && $groupedApp->result->audits->isNotEmpty()) {
             foreach ($groupedApp->result->audits as $audit) {
                 if (\Carbon\Carbon::parse($audit->updated_at)->gt(\Carbon\Carbon::parse($groupedApp->results_released_at))) {
                     if (!$latestCardEditTimestamp || \Carbon\Carbon::parse($audit->updated_at)->gt($latestCardEditTimestamp)) {
@@ -74,7 +76,7 @@ if ($isBulkCard) {
         }
     }
 } else {
-    if ($app->results_released_at && $app->result && $app->result->audits->isNotEmpty()) {
+    if ($app->results_released_at && $app->result && $app->result->audits && $app->result->audits->isNotEmpty()) {
         foreach ($app->result->audits as $audit) {
             if (\Carbon\Carbon::parse($audit->updated_at)->gt(\Carbon\Carbon::parse($app->results_released_at))) {
                 if (!$latestCardEditTimestamp || \Carbon\Carbon::parse($audit->updated_at)->gt($latestCardEditTimestamp)) {
@@ -84,13 +86,21 @@ if ($isBulkCard) {
         }
     }
 }
+
+$formattedDate = $app->appointment_date ? \Carbon\Carbon::parse($app->appointment_date)->format('M d, Y') : 'N/A';
+$formattedTime = $app->time_slot ? date('h:i A', strtotime($app->time_slot)) : 'N/A';
 @endphp
 
-<div class="card app-list-card bg-card border-secondary border-opacity-50 p-3 text-start" id="card-{{ $app->id }}" onclick="showAppointmentDetails('{{ $app->id }}')">
+<div class="card app-list-card bg-card border-secondary border-opacity-50 p-3 text-start" 
+     id="card-{{ $app->id }}" 
+     data-app-id="{{ $app->id }}"
+     @if($app->batch_id) data-batch-id="{{ $app->batch_id }}" @endif
+     onclick="showAppointmentDetails('{{ $app->id }}')">
+
     {{-- Card Header: Patient Name & Status Badge --}}
     <div class="d-flex justify-content-between align-items-center mb-2">
         <div class="fw-bold text-main fs-6 text-truncate" style="max-width: 180px;">
-            {{ ($isBulkCard && $groupCount > 1) ? $app->organization_name : $app->patient_name }}
+            {{ ($isBulkCard && $groupCount > 1) ? ($app->organization_name ?: $app->patient_name) : $app->patient_name }}
         </div>
         <span class="badge border border-{{ $statusColor }} text-{{ $statusColor }} uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">
             {{ $statusLabel }}
@@ -100,8 +110,8 @@ if ($isBulkCard) {
     {{-- Card Body: Date, Time Slot, and Account Type Badge --}}
     <div class="d-flex justify-content-between align-items-end mt-1 text-muted" style="font-size: 0.75rem;">
         <div>
-            <div><i class="bi bi-calendar2 me-1"></i> {{ $app->appointment_date->format('M d, Y') }}</div>
-            <div class="text-accent mt-0.5"><i class="bi bi-clock me-1"></i> {{ date('h:i A', strtotime($app->time_slot)) }}</div>
+            <div><i class="bi bi-calendar2 me-1"></i> {{ $formattedDate }}</div>
+            <div class="text-accent mt-0.5"><i class="bi bi-clock me-1"></i> {{ $formattedTime }}</div>
             @if($latestCardEditTimestamp)
                 <div class="text-warning fw-bold mt-0.5" style="font-size: 0.7rem;">
                     <i class="bi bi-pencil-square me-1"></i>Edited: {{ $latestCardEditTimestamp->format('M d, Y | h:i A') }}

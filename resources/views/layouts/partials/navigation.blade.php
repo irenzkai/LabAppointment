@@ -123,11 +123,11 @@
             <!-- Desktop Right Side Actions -->
             <div class="d-flex align-items-center gap-3">
                 @guest
-                    <a href="{{ route('login') }}" class="btn-custom btn-outline-accent d-inline-flex align-items-center gap-1.5 py-2 px-3">
+                    <a href="{{ route('login') }}" class="btn-custom btn-outline-accent d-inline-flex align-items-center gap-2 py-2 px-3">
                         <i class="bi bi-box-arrow-in-right"></i>
                         <span>LOGIN</span>
                     </a>
-                    <a href="{{ route('register') }}" class="btn-custom btn-accent d-inline-flex align-items-center gap-1.5 py-2 px-3">
+                    <a href="{{ route('register') }}" class="btn-custom btn-accent d-inline-flex align-items-center gap-2 py-2 px-3">
                         <i class="bi bi-person-plus-fill"></i>
                         <span>REGISTER</span>
                     </a>
