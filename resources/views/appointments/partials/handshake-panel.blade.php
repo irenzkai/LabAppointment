@@ -15,6 +15,7 @@
         <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Historical Data Connection</h5>
         
         @if($isPatientView)
+            {{-- Patients and staff viewing their own archive --}}
             <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
                 Your physical clinic records have not been digitized yet. Submit a request to have our laboratory team initialize your archival folder.
             </p>
@@ -25,6 +26,7 @@
                 </button>
             </form>
         @else
+            {{-- Staff viewing another patient's archive --}}
             <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
                 This patient has not requested a historical data import yet. Clinical protocol requires patient consent before historical physical records can be digitized. Send an authorization request to the patient's portal.
             </p>
@@ -45,7 +47,7 @@
         </div>
         
         @if(Auth::user()->isEmployee() && !$isSelf)
-            {{-- Staff viewing another patient's request --}}
+            {{-- Staff reviewing ANOTHER patient's request --}}
             <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Import Request Received</h5>
             <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
                 The patient has authorized and requested to have their physical laboratory history digitized. You may now initialize and open the manual entry compilation tool.
@@ -56,25 +58,8 @@
                     <i class="bi bi-check-circle-fill me-1.5"></i> ACCEPT & OPEN IMPORT TOOL
                 </button>
             </form>
-        @elseif($isSelf && Auth::user()->isEmployee())
-            {{-- Staff viewing their own personal request --}}
-            <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Awaiting Laboratory Review</h5>
-            <p class="text-muted small mb-3 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
-                Your request was successfully dispatched. As a clinical team member, you may also proceed directly to initialize your own records.
-            </p>
-            <div class="d-flex flex-column align-items-center gap-2">
-                <div class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 py-2 px-3 uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
-                    <i class="bi bi-hourglass-split me-1"></i> STATUS: PENDING CLINICAL REVIEW
-                </div>
-                <form action="{{ route('history.accept', ['user' => $targetUserId]) }}" method="POST" class="m-0 mt-2">
-                    @csrf
-                    <button type="submit" class="btn-custom btn-outline-accent py-2 px-4 fw-bold uppercase shadow-sm" style="font-size: 0.78rem;">
-                        <i class="bi bi-check-circle-fill me-1.5"></i> INITIALIZE & OPEN IMPORT TOOL
-                    </button>
-                </form>
-            </div>
         @else
-            {{-- Patient viewing their own pending request --}}
+            {{-- Patient or Staff viewing THEIR OWN request (Strictly awaiting another team member) --}}
             <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Awaiting Laboratory Review</h5>
             <p class="text-muted small mb-3 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
                 Your request was successfully dispatched. Please wait while a laboratory technologist reviews and initializes your profile archive.

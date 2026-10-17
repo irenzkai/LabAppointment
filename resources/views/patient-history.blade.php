@@ -124,13 +124,14 @@ $isPatientView = Auth::user()->isPatient() || $isSelf;
                 <div class="row g-4">
                     {{-- Left Side: Historical Records List --}}
                     <div class="col-lg-5 col-xl-4">
-                        @if(Auth::user()->isEmployee())
+                        {{-- Staff can only ADD RECORD on OTHER patients, NOT on themselves --}}
+                        @if(Auth::user()->isEmployee() && !$isSelf)
                             <button type="button" class="btn-custom btn-accent w-100 py-2.5 mb-2 fw-bold uppercase shadow-sm" onclick="showAddRecordForm()">
                                 <i class="bi bi-plus-lg me-1"></i> ADD RECORD
                             </button>
                         @endif
 
-                        {{-- "Notify Patient" action button for staff inside the sidebar (hidden if looking at own profile) --}}
+                        {{-- "Notify Patient" action button for staff (strictly on other patients) --}}
                         @if(Auth::user()->isEmployee() && count($existingRecords) > 0 && !$isSelf)
                             <form action="{{ route('history.notify-encoded', $targetUser->id) }}" method="POST" class="mb-3">
                                 @csrf
@@ -179,8 +180,8 @@ $isPatientView = Auth::user()->isPatient() || $isSelf;
                                 <p class="text-muted small mb-0" style="max-width: 380px; font-size: 0.83rem;">Select a digitized laboratory record from the left-hand sidebar directory to review files and download reports.</p>
                             </div>
 
-                            {{-- Digitize New Record Form Panel --}}
-                            @if(Auth::user()->isEmployee())
+                            {{-- Digitize New Record Form Panel (Strictly for staff viewing ANOTHER patient) --}}
+                            @if(Auth::user()->isEmployee() && !$isSelf)
                                 <div id="add-record-panel" class="d-none animate-page">
                                     @include('appointments.partials.digitize-records')
                                 </div>
