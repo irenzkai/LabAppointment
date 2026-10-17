@@ -2,36 +2,51 @@
 @section('title', 'Laboratory Historical Archive')
 @section('content')
 @php
-// SECURITY GUARD: Automatically fetch active services if a controller forgot to pass them
+// Automatically fetch active services if a controller forgot to pass them
 if (!isset($availableServices)) {
     $availableServices = \App\Models\Service::where('is_available', true)->orderBy('category')->orderBy('name')->get();
 }
 
-// Protect controller-passed $existingRecords from being clobbered by empty dynamic_data array
 $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? array_reverse($labHistory->dynamic_data) : []);
 $status = $labHistory->permission_status ?? 'none';
 
-// Check if the current user is looking at their own personal clinical archive
+// Check if viewing self
 $isSelf = (Auth::id() == $targetUser->id);
-// When viewing one's own archive, treat it as a patient function even for staff or admins
 $isPatientView = Auth::user()->isPatient() || $isSelf;
+$isStaffViewingPatient = (Auth::user()->isEmployee() && !$isSelf);
 
-// Server-Side Active Tab Determination (Eliminates post-load JavaScript layout shifting & blinking)
-$activeTab = 'app';
-if (session('success') || session('error') || session('info') || request('tab') === 'lab' || request('tab') === 'lab-history') {
-    $activeTab = 'lab';
-} elseif ($status !== 'granted' && $appointments->isEmpty()) {
-    $activeTab = 'lab';
-} elseif ($appointments->isEmpty() && count($existingRecords) > 0) {
+// Server-Side Active Tab Determination
+$requestedTab = request('tab');
+$activeTab = ($requestedTab === 'lab' || $requestedTab === 'lab-history' || session('success') || session('error')) ? 'lab' : 'app';
+
+if ($activeTab === 'app' && $status !== 'granted' && $appointments->isEmpty() && count($existingRecords) > 0) {
     $activeTab = 'lab';
 }
 
-// Determine if Add Record form should be open immediately for staff
-$isStaffViewingPatient = (Auth::user()->isEmployee() && !$isSelf);
-$shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient && count($existingRecords) === 0);
+// Preserve Add Record form state on reload
+$requestedAction = request('action');
+$shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient && ($requestedAction === 'add' || count($existingRecords) === 0));
 @endphp
 
-<div class="text-start animate-page" id="patient-archive-page">
+{{-- CRITICAL ANTI-FOUC SHIELD (Blocks unstyled flash before CSS is evaluated) --}}
+<style>
+    #patient-archive-page {
+        visibility: hidden;
+        opacity: 0;
+        transition: opacity 0.12s ease-in;
+    }
+    #patient-archive-page.fouc-ready {
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+</style>
+<noscript>
+    <style>
+        #patient-archive-page { visibility: visible !important; opacity: 1 !important; }
+    </style>
+</noscript>
+
+<div class="text-start" id="patient-archive-page" style="max-width: 1240px; margin: 0 auto; padding-top: 1.5rem; padding-bottom: 2rem;">
     {{-- Page Header --}}
     <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3 page-header-archive" style="border-color: var(--border-color) !important;">
         <div>
@@ -43,7 +58,7 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
         </a>
     </div>
 
-    {{-- Top-Level Notification Alerts (Single Unified Position at the TOP) --}}
+    {{-- Top-Level Notification Alerts --}}
     @if(session('success'))
         <div class="alert alert-clinical alert-dismissible fade show d-flex align-items-center mb-4 shadow-sm" role="alert" style="background-color: rgba(25, 211, 140, 0.08); border-left: 4px solid var(--brand-accent) !important; border-radius: 8px;">
             <i class="bi bi-check-circle-fill me-3 fs-4 text-accent"></i>
@@ -83,27 +98,27 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
         </div>
     @endif
 
-    {{-- Nav Tabs --}}
+    {{-- Nav Tabs (Instant Rendering) --}}
     <ul class="nav nav-pills mb-4 border-bottom pb-3 gap-2" id="historyTabs" role="tablist" style="border-color: var(--border-color) !important;">
         <li class="nav-item">
-            <button class="nav-link {{ $activeTab === 'app' ? 'active' : '' }} fw-bold px-4" id="tab-btn-app-history" data-bs-toggle="pill" data-bs-target="#app-history" onclick="resetActiveDetail()">APPOINTMENT HISTORY</button>
+            <button class="nav-link {{ $activeTab === 'app' ? 'active' : '' }} fw-bold px-4" id="tab-btn-app-history" data-bs-toggle="pill" data-bs-target="#app-history" onclick="switchArchiveTab('app')">APPOINTMENT HISTORY</button>
         </li>
         <li class="nav-item">
-            <button class="nav-link {{ $activeTab === 'lab' ? 'active' : '' }} fw-bold px-4" id="tab-btn-lab-history" data-bs-toggle="pill" data-bs-target="#lab-history" onclick="resetActiveDetail()">LABORATORY RECORDS</button>
+            <button class="nav-link {{ $activeTab === 'lab' ? 'active' : '' }} fw-bold px-4" id="tab-btn-lab-history" data-bs-toggle="pill" data-bs-target="#lab-history" onclick="switchArchiveTab('lab')">LABORATORY RECORDS</button>
         </li>
     </ul>
 
     <div class="tab-content">
         {{-- TAB 1: APPOINTMENT HISTORY (Split-Pane Grid Layout) --}}
-        <div class="tab-pane fade {{ $activeTab === 'app' ? 'show active' : '' }}" id="app-history">
-            <div class="row g-4">
+        <div class="tab-pane {{ $activeTab === 'app' ? 'show active' : '' }}" id="app-history">
+            <div class="row g-4 align-items-start">
                 {{-- Left Side: Historical Appointment Deck --}}
                 <div class="col-lg-5 col-xl-4">
-                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 540px;">
-                        @forelse($appointments as $index => $app)
+                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 520px;">
+                        @forelse($appointments as $app)
                             @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1, 'isHistory' => true])
                         @empty
-                            <div class="card p-4 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
+                            <div class="card p-4 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 260px; background-color: var(--bg-card); border-radius: 14px;">
                                 <i class="bi bi-calendar-x text-accent fs-2 mb-2 opacity-75"></i>
                                 <p class="small mb-0">No past bookings found.</p>
                             </div>
@@ -113,19 +128,19 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
 
                 {{-- Right Side: Selected Archive Detail Workspace --}}
                 <div class="col-lg-7 col-xl-8">
-                    <div id="workspace-container" class="h-100">
-                        {{-- Default Empty State Placeholder --}}
-                        <div id="details-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100 placeholder-compact {{ $appointments->count() > 0 ? 'd-none' : '' }}" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
-                            <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                    <div id="workspace-container">
+                        {{-- Default Empty State Placeholder (Always visible when none is selected) --}}
+                        <div id="details-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center placeholder-compact" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
+                            <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-inline-flex align-items-center justify-content-center" style="width: 58px; height: 58px;">
                                 <i class="bi bi-clipboard2-pulse-fill fs-2 text-accent"></i>
                             </div>
-                            <h5 class="text-main fw-bold mb-1 uppercase">Archive Workspace</h5>
+                            <h5 class="text-main fw-bold mb-1 uppercase" style="font-size: 1.15rem;">Archive Workspace</h5>
                             <p class="text-muted small mb-0" style="max-width: 380px; font-size: 0.83rem;">Select any clinical entry from the left-hand panel to review its test breakdowns, billing summaries, and context actions.</p>
                         </div>
 
-                        {{-- Detail Panels (First one is visible by default server-side) --}}
-                        @foreach($appointments as $index => $app)
-                            @include('appointments.partials.detail-card', ['app' => $app, 'is_staff' => false, 'isHistory' => true, 'isDefaultActive' => ($index === 0)])
+                        {{-- Hidden Detail Panels --}}
+                        @foreach($appointments as $app)
+                            @include('appointments.partials.detail-card', ['app' => $app, 'is_staff' => false, 'isHistory' => true])
                         @endforeach
                     </div>
                 </div>
@@ -133,19 +148,19 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
         </div>
 
         {{-- TAB 2: LABORATORY RECORDS (Full-Width Workspace with Split-Pane Layout) --}}
-        <div class="tab-pane fade {{ $activeTab === 'lab' ? 'show active' : '' }}" id="lab-history">
-            @if($status == 'granted')
-                <div class="row g-4">
+        <div class="tab-pane {{ $activeTab === 'lab' ? 'show active' : '' }}" id="lab-history">
+            @if($status == 'granted' || $isStaffViewingPatient)
+                <div class="row g-4 align-items-start">
                     {{-- Left Side: Historical Records List --}}
                     <div class="col-lg-5 col-xl-4">
-                        {{-- Staff can only ADD RECORD on OTHER patients, NOT on themselves --}}
+                        {{-- Staff can ADD RECORD on other patients --}}
                         @if($isStaffViewingPatient)
                             <button type="button" class="btn-custom btn-accent w-100 py-2.5 mb-2 fw-bold uppercase shadow-sm" onclick="showAddRecordForm()">
                                 <i class="bi bi-plus-lg me-1"></i> ADD RECORD
                             </button>
                         @endif
 
-                        {{-- "Notify Patient" action button for staff (strictly on other patients) --}}
+                        {{-- "Notify Patient" action button for staff --}}
                         @if($isStaffViewingPatient && count($existingRecords) > 0)
                             <form action="{{ route('history.notify-encoded', $targetUser->id) }}" method="POST" class="mb-3">
                                 @csrf
@@ -156,8 +171,8 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                         @endif
 
                         <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 520px;">
-                            @forelse($existingRecords as $recordIdx => $record)
-                                <div class="card app-list-card bg-card border-secondary p-3 text-start mb-2 {{ ($recordIdx === 0 && !$shouldOpenAddRecordByDefault) ? 'border-accent shadow-neon' : '' }}" id="record-card-{{ $record['id'] }}" onclick="showRecordDetails('{{ $record['id'] }}')">
+                            @forelse($existingRecords as $record)
+                                <div class="card app-list-card bg-card border-secondary p-3 text-start mb-2" id="record-card-{{ $record['id'] }}" onclick="showRecordDetails('{{ $record['id'] }}')">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
                                         <div class="fw-bold text-main fs-6 text-truncate" style="max-width: 180px; color: var(--text-main) !important;">
                                             {{ $record['requested_by'] ?? 'INDIVIDUAL' }}
@@ -174,7 +189,7 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                                     </div>
                                 </div>
                             @empty
-                                <div class="card p-4 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
+                                <div class="card p-4 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 260px; background-color: var(--bg-card); border-radius: 14px;">
                                     <i class="bi bi-file-earmark-lock2 fs-2 mb-2 opacity-50"></i>
                                     <p class="small mb-0">No historical records digitized yet.</p>
                                 </div>
@@ -184,41 +199,24 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
 
                     {{-- Right Side: Active Workspace --}}
                     <div class="col-lg-7 col-xl-8">
-                        <div id="lab-workspace-container" class="h-100">
-                            {{-- Default Placeholder --}}
-                            <div id="record-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100 placeholder-compact {{ (count($existingRecords) > 0 || $shouldOpenAddRecordByDefault) ? 'd-none' : '' }}" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
-                                <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                        <div id="lab-workspace-container">
+                            {{-- Default Placeholder (Visible if no record is selected and not adding record) --}}
+                            <div id="record-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center placeholder-compact {{ $shouldOpenAddRecordByDefault ? 'd-none' : '' }}" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
+                                <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-inline-flex align-items-center justify-content-center" style="width: 58px; height: 58px;">
                                     <i class="bi bi-file-earmark-medical fs-2 text-accent"></i>
                                 </div>
-                                <h5 class="text-main fw-bold mb-1 uppercase">Laboratory Records Workspace</h5>
+                                <h5 class="text-main fw-bold mb-1 uppercase" style="font-size: 1.15rem;">Laboratory Records Workspace</h5>
                                 <p class="text-muted small mb-0" style="max-width: 380px; font-size: 0.83rem;">Select a digitized laboratory record from the left-hand sidebar directory to review files and download reports.</p>
                             </div>
 
-                            {{-- Digitize New Record Form Panel (Visible by default if 0 records, otherwise toggled by ADD RECORD button) --}}
+                            {{-- Digitize New Record Form Panel (Staff only) --}}
                             @if($isStaffViewingPatient)
-                                <div id="add-record-panel" class="card border-secondary bg-card p-4 {{ $shouldOpenAddRecordByDefault ? '' : 'd-none' }} animate-page" style="background-color: var(--bg-card); color: var(--text-main); border-radius: 14px;">
-                                    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom border-secondary border-opacity-25 pb-3">
-                                        <div>
-                                            <h4 class="text-main fw-bold mb-0 uppercase tracking-tighter" style="font-size: 1.35rem; color: var(--text-main) !important;">
-                                                <i class="bi bi-file-earmark-plus text-accent me-1.5"></i> Digitize Physical Record
-                                            </h4>
-                                            <small class="text-secondary small">Compile and scan archival laboratory report into patient timeline</small>
-                                        </div>
-                                        @if(count($existingRecords) > 0)
-                                            <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1 fw-bold text-uppercase" onclick="hideAddRecordForm()">
-                                                <i class="bi bi-x-lg me-1"></i> Cancel
-                                            </button>
-                                        @endif
-                                    </div>
-
-                                    @include('appointments.partials.digitize-records')
-                                </div>
+                                @include('appointments.partials.digitize-records', ['isOpen' => $shouldOpenAddRecordByDefault])
                             @endif
 
                             {{-- Records Detail Workspace --}}
-                            @foreach($existingRecords as $recordIdx => $record)
-                                <div id="record-details-{{ $record['id'] }}" class="record-detail-pane card border-secondary bg-card p-4 {{ ($recordIdx === 0 && !$shouldOpenAddRecordByDefault) ? '' : 'd-none' }} animate-page" style="background-color: var(--bg-card); color: var(--text-main); border-radius: 14px;">
-                                    {{-- Document Title --}}
+                            @foreach($existingRecords as $record)
+                                <div id="record-details-{{ $record['id'] }}" class="record-detail-pane card border-secondary bg-card p-4 d-none" style="background-color: var(--bg-card); color: var(--text-main); border-radius: 14px;">
                                     <div class="border-bottom border-secondary border-opacity-25 pb-3 mb-4 text-start">
                                         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
                                             <div>
@@ -233,9 +231,7 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                                         </div>
                                     </div>
 
-                                    {{-- Form Layout --}}
                                     <div class="row g-4 text-start">
-                                        {{-- Profile --}}
                                         <div class="col-md-6 border-end border-secondary border-opacity-25">
                                             <h6 class="text-accent small fw-bold uppercase mb-3"><i class="bi bi-person-bounding-box me-1"></i> Patient Demographics</h6>
                                             <div class="mb-2"><strong>Patient Name:</strong> {{ $record['patient_name'] }}</div>
@@ -250,7 +246,6 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                                             </div>
                                         </div>
 
-                                        {{-- Attached Files with Certificate Number Badge Per File --}}
                                         <div class="col-md-6">
                                             <h6 class="text-accent small fw-bold uppercase mb-3"><i class="bi bi-file-earmark-pdf-fill me-1"></i> Attached Scanned Reports</h6>
                                             <div class="d-flex flex-column gap-2 mb-3">
@@ -283,7 +278,6 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                                             </div>
                                         </div>
 
-                                        {{-- Embedded Document Preview --}}
                                         <div class="col-12 border-top border-secondary border-opacity-25 pt-4 d-none" id="preview-area-{{ $record['id'] }}">
                                             <div class="bg-warning text-dark p-2 px-3 fw-bold small uppercase rounded-top d-flex justify-content-between align-items-center">
                                                 <span><i class="bi bi-eye-fill me-2"></i>PREVIEWING ATTACHED FILE: <span id="preview-title-{{ $record['id'] }}"></span></span>
@@ -292,7 +286,6 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                                                 </button>
                                             </div>
                                             <div class="card border-warning border-top-0 rounded-0 rounded-bottom overflow-hidden bg-card p-4 d-flex justify-content-center align-items-center" style="min-height: 480px; background-color: var(--bg-card);">
-                                                {{-- Image Preview Container --}}
                                                 <div id="image-container-{{ $record['id'] }}" class="position-relative d-inline-block image-preview-wrapper d-none" style="cursor: zoom-in;" onclick="window.zoomQR(this.dataset.url)">
                                                     <img id="image-img-{{ $record['id'] }}" src="" class="img-fluid rounded shadow-sm mx-auto d-block" style="max-height: 500px; object-fit: contain; border: 1px solid var(--border-color);">
                                                     <div class="position-absolute top-50 start-50 translate-middle zoom-overlay d-flex flex-column align-items-center justify-content-center text-white">
@@ -301,7 +294,6 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                                                     </div>
                                                 </div>
 
-                                                {{-- PDF / Document Preview Container --}}
                                                 <div id="pdf-container-{{ $record['id'] }}" class="w-100 h-100 d-none d-flex justify-content-center align-items-center">
                                                     <iframe id="pdf-iframe-{{ $record['id'] }}" class="w-100 rounded mx-auto" style="min-height: 480px; border: none;"></iframe>
                                                 </div>
@@ -320,59 +312,32 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                         @if(view()->exists('appointments.partials.handshake-panel'))
                             @include('appointments.partials.handshake-panel', ['isSelf' => $isSelf, 'isPatientView' => $isPatientView])
                         @else
-                            {{-- Resilient Fallback Request Box --}}
                             <div class="card p-4 p-md-5 text-center border-secondary shadow-sm w-100" style="background-color: var(--bg-card); border-radius: 16px;">
                                 <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 p-2.5 text-accent mx-auto" style="background-color: rgba(25, 211, 140, 0.08); width: 58px; height: 58px;">
                                     <i class="bi bi-shield-lock-fill fs-2 text-accent"></i>
                                 </div>
                                 <h5 class="text-main fw-bold mb-2 uppercase" style="font-size: 1.25rem;">Historical Data Connection</h5>
                                 <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
-                                    @if($isPatientView)
-                                        Your physical clinic records have not been digitized yet. Submit a request to have our laboratory team initialize your archival folder.
-                                    @else
-                                        This patient has not requested a historical data import yet. Clinical protocol requires patient consent before historical physical records can be digitized. Send an authorization request to the patient's portal.
-                                    @endif
+                                    Your physical clinic records have not been digitized yet. Submit a request to have our laboratory team initialize your archival folder.
                                 </p>
-                                @if($isPatientView)
-                                    @if($status === 'pending_staff')
-                                        <div class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 py-2 px-3 uppercase fw-bold" style="font-size: 0.72rem;">
-                                            <i class="bi bi-hourglass-split me-1"></i> Status: Pending Clinical Review
-                                        </div>
-                                    @elseif($status === 'pending_patient')
-                                        <form action="{{ route('history.accept', ['user' => $targetUser->id]) }}" method="POST" class="m-0">
-                                            @csrf
-                                            <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
-                                                <i class="bi bi-check-circle-fill me-1.5"></i> Allow Digitization
-                                            </button>
-                                        </form>
-                                    @else
-                                        <form action="{{ route('history.request') }}" method="POST" class="m-0">
-                                            @csrf
-                                            <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
-                                                <i class="bi bi-send-fill me-1.5"></i> Request Data Import
-                                            </button>
-                                        </form>
-                                    @endif
+                                @if($status === 'pending_staff')
+                                    <div class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 py-2 px-3 uppercase fw-bold" style="font-size: 0.72rem;">
+                                        <i class="bi bi-hourglass-split me-1"></i> Status: Pending Clinical Review
+                                    </div>
+                                @elseif($status === 'pending_patient')
+                                    <form action="{{ route('history.accept', ['user' => $targetUser->id]) }}" method="POST" class="m-0">
+                                        @csrf
+                                        <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
+                                            <i class="bi bi-check-circle-fill me-1.5"></i> Allow Digitization
+                                        </button>
+                                    </form>
                                 @else
-                                    @if($status === 'pending_patient')
-                                        <div class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-2 px-3 uppercase fw-bold" style="font-size: 0.72rem;">
-                                            <i class="bi bi-clock-history me-1"></i> Status: Awaiting User Consent
-                                        </div>
-                                    @elseif($status === 'pending_staff')
-                                        <form action="{{ route('history.accept', ['user' => $targetUser->id]) }}" method="POST" class="m-0">
-                                            @csrf
-                                            <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
-                                                <i class="bi bi-check-circle-fill me-1.5"></i> Accept & Open Import Tool
-                                            </button>
-                                        </form>
-                                    @else
-                                        <form action="{{ route('history.staff-trigger', $targetUser->id) }}" method="POST" class="m-0">
-                                            @csrf
-                                            <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
-                                                <i class="bi bi-envelope-paper-fill me-1.5"></i> Ask Patient for Permission
-                                            </button>
-                                        </form>
-                                    @endif
+                                    <form action="{{ route('history.request') }}" method="POST" class="m-0">
+                                        @csrf
+                                        <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
+                                            <i class="bi bi-send-fill me-1.5"></i> Request Data Import
+                                        </button>
+                                    </form>
                                 @endif
                             </div>
                         @endif
@@ -382,9 +347,9 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
         </div>
     </div>
 
-    {{-- MULTI-FORMAT LIGHTBOX OVERLAY WITH SECURE PREVIEW GATES --}}
-    <div id="qr_lightbox" class="d-none fixed inset-0 w-100 h-100 d-flex align-items-center justify-content-center" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 3000; background-color: rgba(0, 0, 0, 0.85); cursor: zoom-out;" onclick="closeQRLightbox(event)">
-        <div class="text-center p-3 animate-fade-in w-100 h-100 d-flex flex-column align-items-center justify-content-center" style="max-width: 95vw; max-height: 95vh;">
+    {{-- MULTI-FORMAT LIGHTBOX OVERLAY --}}
+    <div id="qr_lightbox" class="d-none fixed inset-0 w-100 h-100 align-items-center justify-content-center" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 3000; background-color: rgba(0, 0, 0, 0.85); cursor: zoom-out;" onclick="closeQRLightbox(event)">
+        <div class="text-center p-3 w-100 h-100 d-flex flex-column align-items-center justify-content-center" style="max-width: 95vw; max-height: 95vh;">
             <div id="lightbox_viewer_container" class="position-relative d-flex align-items-center justify-content-center bg-white rounded p-2 border border-secondary shadow-lg" style="max-width: 85vw; max-height: 80vh; overflow: auto; min-width: 300px; min-height: 300px;">
                 <img src="" id="lightbox_qr_img" alt="Zoomed Asset" class="img-fluid rounded transition-all" style="max-height: 75vh; max-width: 80vw; object-fit: contain; transform: scale(1); transform-origin: center; cursor: grab;">
                 <iframe id="lightbox_pdf_viewer" class="d-none rounded" style="width: 80vw; height: 75vh; border: none;"></iframe>
@@ -426,26 +391,44 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
     @endforeach
 </div>
 
+{{-- INSTANT ANTI-FOUC HYDRATION TRIGGER --}}
+<script>
+    (function() {
+        const root = document.getElementById('patient-archive-page');
+        if (root) {
+            root.classList.add('fouc-ready');
+        }
+    })();
+</script>
+
 @push('scripts')
 <script>
 // --- GLOBAL WORKSPACE HANDLERS ---
+
+function switchArchiveTab(tabKey) {
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', tabKey);
+        history.replaceState(null, null, url.toString());
+        sessionStorage.setItem("archive_tab_{{ $targetUser->id }}", tabKey);
+    } catch (e) {}
+}
 
 function showAppointmentDetails(appId) {
     const placeholder = document.getElementById('details-placeholder');
     if (placeholder) {
         placeholder.classList.add('d-none');
-        placeholder.style.display = 'none';
     }
     document.querySelectorAll('.appointment-detail-pane').forEach(el => {
         el.classList.add('d-none');
-        el.style.display = 'none';
     });
-    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+    document.querySelectorAll('.app-list-card').forEach(el => {
+        el.classList.remove('border-accent', 'shadow-neon');
+    });
 
     const detailPanel = document.getElementById(`details-${appId}`);
     if (detailPanel) {
         detailPanel.classList.remove('d-none');
-        detailPanel.style.display = 'block';
     }
     const listCard = document.getElementById(`card-${appId}`);
     if (listCard) {
@@ -457,69 +440,83 @@ function showRecordDetails(recordId) {
     const recordPlaceholder = document.getElementById('record-placeholder');
     if (recordPlaceholder) {
         recordPlaceholder.classList.add('d-none');
-        recordPlaceholder.style.display = 'none';
     }
     document.querySelectorAll('.record-detail-pane').forEach(el => {
         el.classList.add('d-none');
-        el.style.display = 'none';
     });
-    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+    document.querySelectorAll('.app-list-card').forEach(el => {
+        el.classList.remove('border-accent', 'shadow-neon');
+    });
 
     const addRecordPanel = document.getElementById('add-record-panel');
     if (addRecordPanel) {
         addRecordPanel.classList.add('d-none');
-        addRecordPanel.style.display = 'none';
     }
     const detailPanel = document.getElementById(`record-details-${recordId}`);
     if (detailPanel) {
         detailPanel.classList.remove('d-none');
-        detailPanel.style.display = 'block';
     }
     const listCard = document.getElementById(`record-card-${recordId}`);
     if (listCard) {
         listCard.classList.add('border-accent', 'shadow-neon');
     }
+
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('action');
+        history.replaceState(null, null, url.toString());
+        sessionStorage.removeItem("archive_action_{{ $targetUser->id }}");
+    } catch (e) {}
 }
 
 function showAddRecordForm() {
     const recordPlaceholder = document.getElementById('record-placeholder');
     if (recordPlaceholder) {
         recordPlaceholder.classList.add('d-none');
-        recordPlaceholder.style.display = 'none';
     }
     document.querySelectorAll('.record-detail-pane').forEach(el => {
         el.classList.add('d-none');
-        el.style.display = 'none';
     });
-    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+    document.querySelectorAll('.app-list-card').forEach(el => {
+        el.classList.remove('border-accent', 'shadow-neon');
+    });
 
     const addRecordPanel = document.getElementById('add-record-panel');
     if (addRecordPanel) {
         addRecordPanel.classList.remove('d-none');
-        addRecordPanel.style.display = 'block';
+        if (typeof initializeDigAddress === 'function') {
+            initializeDigAddress();
+        }
     }
+
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'lab');
+        url.searchParams.set('action', 'add');
+        history.replaceState(null, null, url.toString());
+        sessionStorage.setItem("archive_action_{{ $targetUser->id }}", "add");
+    } catch (e) {}
 }
 
 function hideAddRecordForm() {
     const addRecordPanel = document.getElementById('add-record-panel');
     if (addRecordPanel) {
         addRecordPanel.classList.add('d-none');
-        addRecordPanel.style.display = 'none';
     }
-    @if(count($existingRecords) > 0)
-        showRecordDetails("{{ $existingRecords[0]['id'] }}");
-    @else
-        const recordPlaceholder = document.getElementById('record-placeholder');
-        if (recordPlaceholder) {
-            recordPlaceholder.classList.remove('d-none');
-            recordPlaceholder.style.display = 'flex';
-        }
-    @endif
+    const recordPlaceholder = document.getElementById('record-placeholder');
+    if (recordPlaceholder) {
+        recordPlaceholder.classList.remove('d-none');
+    }
+
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('action');
+        history.replaceState(null, null, url.toString());
+        sessionStorage.removeItem("archive_action_{{ $targetUser->id }}");
+    } catch (e) {}
 }
 
-function resetActiveDetail() {
-    // Left unforced on tab change to let server-side pre-rendered states persist cleanly
-}
+function resetActiveDetail() {}
 
 function closeHistPreview(recordId) {
     const previewArea = document.getElementById(`preview-area-${recordId}`);
@@ -669,6 +666,7 @@ function toggleFullscreen(event) {
 }
 
 // Hoist functions to window
+window.switchArchiveTab = switchArchiveTab;
 window.showAppointmentDetails = showAppointmentDetails;
 window.showRecordDetails = showRecordDetails;
 window.showAddRecordForm = showAddRecordForm;
@@ -682,29 +680,14 @@ window.zoomQR = zoomFile;
 window.closeQRLightbox = closeQRLightbox;
 window.toggleFullscreen = toggleFullscreen;
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Persist user tab changes without jumping
-    document.querySelectorAll('#historyTabs button[data-bs-toggle="pill"]').forEach(btn => {
-        btn.addEventListener('shown.bs.tab', (e) => {
-            const target = e.target.getAttribute('data-bs-target');
-            if (history.replaceState) {
-                history.replaceState(null, null, target);
-            }
-        });
-    });
-
-    document.addEventListener('fullscreenchange', () => {
-        const icon = document.getElementById('fullscreen_icon');
-        if (icon) {
-            if (document.fullscreenElement) {
-                icon.classList.remove('bi-fullscreen');
-                icon.classList.add('bi-fullscreen-exit');
-            } else {
-                icon.classList.remove('bi-fullscreen-exit');
-                icon.classList.add('bi-fullscreen');
-            }
+// Check stored tab and action on restore
+window.addEventListener('load', () => {
+    try {
+        const storedAction = sessionStorage.getItem("archive_action_{{ $targetUser->id }}");
+        if (storedAction === 'add') {
+            showAddRecordForm();
         }
-    });
+    } catch (e) {}
 
     const lightbox = document.getElementById('qr_lightbox');
     const container = document.getElementById('lightbox_viewer_container');
@@ -723,32 +706,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
 @push('styles')
 <style>
-/* 1. Proportional desktop container constraint (prevents extreme edge-to-edge stretching) */
-#patient-archive-page {
-    max-width: 1240px;
-    margin: 0 auto;
-    padding-top: 1.5rem !important;
-    padding-bottom: 1rem !important;
+/* 1. Prevent parent flex from stretching page and pushing footer artificially */
+main,
+main.container,
+body:has(#patient-archive-page) main,
+div:has(> #patient-archive-page) {
+    flex-grow: 0 !important;
+    flex: none !important;
+    min-height: auto !important;
 }
 
-/* 2. Standard spacing between page header and content below */
+#patient-archive-page {
+    margin-bottom: 2rem !important;
+}
+
+/* 2. Standard Spacing */
 .page-header-archive {
     margin-bottom: 1.5rem !important;
 }
-
-/* 3. Space between navigation tabs and workspace cards */
 #historyTabs {
     margin-bottom: 1.75rem !important;
 }
 
-/* 4. Top clearance from header navbar to PATIENT ARCHIVE */
-main.container {
-    min-height: auto !important;
-    padding-top: 3.25rem !important;
-    padding-bottom: 1.5rem !important;
-}
-
-/* 5. High-Contrast Back to Appointments Button */
+/* 3. High-Contrast Back to Appointments Button */
 .btn-back-appointments {
     color: var(--text-main) !important;
     border: 1.5px solid var(--border-color) !important;
@@ -766,13 +746,13 @@ main.container {
     box-shadow: 0 4px 10px rgba(25, 211, 140, 0.2) !important;
 }
 
-/* 6. Compact Empty State Placeholders */
+/* 4. Compact Empty State Placeholders */
 .placeholder-compact {
     padding: 2.25rem 1.5rem !important;
     border-radius: 14px !important;
 }
 
-/* 7. Nav Tabs & Cards */
+/* 5. Nav Tabs & Cards */
 #historyTabs .nav-link {
     color: var(--text-muted) !important;
     border: 1px solid var(--border-color);
@@ -793,7 +773,7 @@ main.container {
 .app-list-card { transition: all 0.2s ease; cursor: pointer; }
 .app-list-card:hover { border-color: var(--brand-accent) !important; transform: translateX(2px); }
 
-/* 8. Handshake Box Container */
+/* 6. Handshake Box Container */
 #handshake-box-container {
     width: 100% !important;
     padding: 0.5rem 0 !important;
@@ -809,7 +789,7 @@ main.container {
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04) !important;
 }
 
-/* 9. Custom zoom elements wrapper overrides */
+/* 7. Custom zoom elements wrapper overrides */
 .image-preview-wrapper {
     position: relative;
 }

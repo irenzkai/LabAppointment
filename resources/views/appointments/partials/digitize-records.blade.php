@@ -1,4 +1,4 @@
-<div class="card p-4 border-secondary shadow-lg animate-page" style="background-color: var(--bg-card); color: var(--text-main); border-radius: 16px;">
+<div id="add-record-panel" class="card p-4 border-secondary shadow-lg {{ ($isOpen ?? false) ? '' : 'd-none' }}" style="background-color: var(--bg-card); color: var(--text-main); border-radius: 16px;">
     {{-- Header Section --}}
     <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
         <div>
@@ -150,7 +150,7 @@
 
                     {{-- Live Compiled Address Preview Container --}}
                     <div class="col-12 mt-2">
-                        <div id="dig_compiled_address_container" class="alert alert-clinical p-2.5 d-none text-start animate-page" style="background-color: rgba(25, 211, 140, 0.03);">
+                        <div id="dig_compiled_address_container" class="alert alert-clinical p-2.5 d-none text-start" style="background-color: rgba(25, 211, 140, 0.03);">
                             <small class="text-accent fw-bold uppercase d-block mb-1" style="font-size: 0.65rem;">Compiled Address Preview</small>
                             <div id="dig_compiled_address_text" class="text-main small font-monospace"></div>
                         </div>
@@ -234,22 +234,6 @@
                 </div>
             </div>
 
-            {{-- In-Panel Bottom Confirmation Banner for Staff Record Creation --}}
-            @if(session('success') && (str_contains(strtolower(session('success')), 'compiled') || str_contains(strtolower(session('success')), 'record') || str_contains(strtolower(session('success')), 'archived')))
-                <div class="col-12 mt-3">
-                    <div class="alert alert-clinical alert-dismissible fade show d-flex align-items-center p-3 shadow-sm border-accent" style="background-color: rgba(25, 211, 140, 0.08); border-left: 4px solid var(--brand-accent) !important; border-radius: 8px;">
-                        <i class="bi bi-check-circle-fill me-2 fs-5 text-accent"></i>
-                        <div class="text-start">
-                            <div class="fw-800 uppercase fs-x-small text-accent" style="font-size: 0.72rem; letter-spacing: 0.5px;">Record Operation Completed</div>
-                            <div class="small fw-bold text-main" style="color: var(--text-main) !important; font-size: 0.85rem;">
-                                {{ session('success') }}
-                            </div>
-                        </div>
-                        <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                </div>
-            @endif
-
             {{-- 5. SUBMIT ACTIONS --}}
             <div class="col-12 d-flex flex-wrap gap-2 mt-4 border-top border-secondary border-opacity-10 pt-3">
                 <button type="submit" class="btn-custom btn-accent flex-grow-1 py-2.5 fw-bold uppercase shadow-sm">
@@ -299,17 +283,71 @@
 </style>
 @endpush
 
+@push('scripts')
 <script>
 const digProvinceVal = "{{ $targetUser->province }}";
 const digCityVal = "{{ $targetUser->city }}";
 const digBrgyVal = "{{ $targetUser->barangay }}";
+const draftStorageKey = "medscreen_digitize_draft_{{ $targetUser->id }}";
 
 let scanRowIdx = 0;
 const selectedProcedures = new Set();
+let digAddressInitialized = false;
 
-// PSGC Address API for Digitizer Panel
+// --- DRAFT AUTOSAVE & RESTORE ---
+function saveDigitizeDraft() {
+    const draft = {
+        date_of_record: document.getElementById('dig_date_of_record')?.value || '',
+        requested_by: document.getElementById('dig_requested_by')?.value || '',
+        first_name: document.getElementById('dig_first_name')?.value || '',
+        middle_name: document.getElementById('dig_middle_name')?.value || '',
+        last_name: document.getElementById('dig_last_name')?.value || '',
+        suffix: document.getElementById('dig_suffix')?.value || '',
+        age: document.getElementById('dig_age')?.value || '',
+        sex: document.getElementById('dig_sex')?.value || '',
+        street: document.getElementById('dig_street')?.value || '',
+        procedures: Array.from(selectedProcedures)
+    };
+    try {
+        sessionStorage.setItem(draftStorageKey, JSON.stringify(draft));
+    } catch (e) {}
+}
+
+function restoreDigitizeDraft() {
+    try {
+        const raw = sessionStorage.getItem(draftStorageKey);
+        if (!raw) return;
+        const draft = JSON.parse(raw);
+        if (draft.date_of_record) document.getElementById('dig_date_of_record').value = draft.date_of_record;
+        if (draft.requested_by) document.getElementById('dig_requested_by').value = draft.requested_by;
+        if (draft.first_name) document.getElementById('dig_first_name').value = draft.first_name;
+        if (draft.middle_name) document.getElementById('dig_middle_name').value = draft.middle_name;
+        if (draft.last_name) document.getElementById('dig_last_name').value = draft.last_name;
+        if (draft.suffix) document.getElementById('dig_suffix').value = draft.suffix;
+        if (draft.age) document.getElementById('dig_age').value = draft.age;
+        if (draft.sex) document.getElementById('dig_sex').value = draft.sex;
+        if (draft.street) document.getElementById('dig_street').value = draft.street;
+
+        if (Array.isArray(draft.procedures)) {
+            draft.procedures.forEach(p => {
+                if (!selectedProcedures.has(p)) {
+                    addProcedureBadgeByName(p);
+                }
+            });
+        }
+    } catch (e) {}
+}
+
+function clearDigitizeDraft() {
+    try {
+        sessionStorage.removeItem(draftStorageKey);
+    } catch (e) {}
+}
+
+// PSGC Address API for Digitizer Panel (Lazy loaded on form demand)
 async function fetchDigProvinces() {
     const sel = document.getElementById('dig_province');
+    if (!sel || sel.options.length > 1) return;
     try {
         const res = await fetch(`https://psgc.gitlab.io/api/provinces/`);
         if (!res.ok) throw new Error('Network error');
@@ -319,8 +357,7 @@ async function fetchDigProvinces() {
             sel.innerHTML += `<option value="${p.code}">${p.name}</option>`;
         });
     } catch (e) {
-        console.warn("Provinces API unavailable, using user defaults.");
-        if (digProvinceVal) {
+        if (digProvinceVal && sel) {
             sel.innerHTML = `<option value="${digProvinceVal}" selected>${digProvinceVal}</option>`;
         }
     }
@@ -330,6 +367,7 @@ async function fetchDigCities(provCode) {
     if (!provCode) return;
     const citySel = document.getElementById('dig_city');
     const brgySel = document.getElementById('dig_brgy');
+    if (!citySel || !brgySel) return;
     citySel.disabled = true;
     brgySel.disabled = true;
     citySel.innerHTML = '<option value="">Loading Cities...</option>';
@@ -349,11 +387,13 @@ async function fetchDigCities(provCode) {
         }
     }
     updateDigCompiledAddress();
+    saveDigitizeDraft();
 }
 
 async function fetchDigBarangays(cityCode) {
     if (!cityCode) return;
     const brgySel = document.getElementById('dig_brgy');
+    if (!brgySel) return;
     brgySel.disabled = true;
     brgySel.innerHTML = '<option value="">Loading Barangays...</option>';
     try {
@@ -372,14 +412,18 @@ async function fetchDigBarangays(cityCode) {
         }
     }
     updateDigCompiledAddress();
+    saveDigitizeDraft();
 }
 
 function updateDigCompiledAddress() {
-    const street = document.getElementById('dig_street').value.trim();
+    const streetInput = document.getElementById('dig_street');
     const brgy = document.getElementById('dig_brgy');
     const city = document.getElementById('dig_city');
     const prov = document.getElementById('dig_province');
 
+    if (!streetInput || !brgy || !city || !prov) return;
+
+    const street = streetInput.value.trim();
     const brgyName = brgy.options[brgy.selectedIndex]?.text || '';
     const cityName = city.options[city.selectedIndex]?.text || '';
     const provName = prov.options[prov.selectedIndex]?.text || '';
@@ -392,10 +436,10 @@ function updateDigCompiledAddress() {
         if (provName && !provName.includes('Select') && !provName.includes('Loading')) parts.push(provName);
 
         const compiled = parts.join(', ').toUpperCase();
-        document.getElementById('dig_compiled_address_text').innerText = compiled;
-        document.getElementById('dig_compiled_address_container').classList.remove('d-none');
-    } else {
-        document.getElementById('dig_compiled_address_container').classList.add('d-none');
+        const textEl = document.getElementById('dig_compiled_address_text');
+        const contEl = document.getElementById('dig_compiled_address_container');
+        if (textEl) textEl.innerText = compiled;
+        if (contEl) contEl.classList.remove('d-none');
     }
 }
 
@@ -404,9 +448,9 @@ function compileDigAddress() {
     const city = document.getElementById('dig_city');
     const prov = document.getElementById('dig_province');
 
-    const brgyName = brgy.options[brgy.selectedIndex]?.text || '';
-    const cityName = city.options[city.selectedIndex]?.text || '';
-    const provName = prov.options[prov.selectedIndex]?.text || '';
+    const brgyName = brgy ? (brgy.options[brgy.selectedIndex]?.text || '') : '';
+    const cityName = city ? (city.options[city.selectedIndex]?.text || '') : '';
+    const provName = prov ? (prov.options[prov.selectedIndex]?.text || '') : '';
 
     if (brgyName && !brgyName.includes('Select') && cityName && !cityName.includes('Select') && provName && !provName.includes('Select')) {
         document.getElementById('dig_province_hidden').value = provName;
@@ -416,48 +460,45 @@ function compileDigAddress() {
 }
 
 async function initializeDigAddress() {
+    if (digAddressInitialized) return;
+    digAddressInitialized = true;
     await fetchDigProvinces();
     if (digProvinceVal) {
         const provSel = document.getElementById('dig_province');
-        let provOpt = Array.from(provSel.options).find(opt => opt.text.toUpperCase() === digProvinceVal.toUpperCase());
-        if (provOpt) {
-            provSel.value = provOpt.value;
-            await fetchDigCities(provSel.value);
+        if (provSel) {
+            let provOpt = Array.from(provSel.options).find(opt => opt.text.toUpperCase() === digProvinceVal.toUpperCase());
+            if (provOpt) {
+                provSel.value = provOpt.value;
+                await fetchDigCities(provSel.value);
 
-            const citySel = document.getElementById('dig_city');
-            let cityOpt = Array.from(citySel.options).find(opt => opt.text.toUpperCase() === digCityVal.toUpperCase());
-            if (cityOpt) {
-                citySel.value = cityOpt.value;
-                await fetchDigBarangays(citySel.value);
+                const citySel = document.getElementById('dig_city');
+                if (citySel) {
+                    let cityOpt = Array.from(citySel.options).find(opt => opt.text.toUpperCase() === digCityVal.toUpperCase());
+                    if (cityOpt) {
+                        citySel.value = cityOpt.value;
+                        await fetchDigBarangays(citySel.value);
 
-                const brgySel = document.getElementById('dig_brgy');
-                let brgyOpt = Array.from(brgySel.options).find(opt => opt.text.toUpperCase() === digBrgyVal.toUpperCase());
-                if (brgyOpt) {
-                    brgySel.value = brgyOpt.value;
+                        const brgySel = document.getElementById('dig_brgy');
+                        if (brgySel) {
+                            let brgyOpt = Array.from(brgySel.options).find(opt => opt.text.toUpperCase() === digBrgyVal.toUpperCase());
+                            if (brgyOpt) {
+                                brgySel.value = brgyOpt.value;
+                            }
+                        }
+                    }
                 }
             }
         }
     }
     updateDigCompiledAddress();
 }
+window.initializeDigAddress = initializeDigAddress;
 
-function addProcedureBadge() {
-    const dropdown = document.getElementById('test_dropdown');
-    const customInput = document.getElementById('custom_test_input');
+function addProcedureBadgeByName(testName) {
+    if (!testName || selectedProcedures.has(testName)) return;
     const container = document.getElementById('badges_container');
     const placeholder = document.getElementById('badges-placeholder');
-
-    let testName = customInput.value.trim();
-    if (!testName && dropdown.value !== '') {
-        testName = dropdown.value;
-    }
-
-    if (!testName) return;
-
-    if (selectedProcedures.has(testName)) {
-        alert('This procedure has already been added to the list.');
-        return;
-    }
+    if (!container) return;
 
     if (placeholder) placeholder.classList.add('d-none');
     selectedProcedures.add(testName);
@@ -472,9 +513,27 @@ function addProcedureBadge() {
     `;
 
     container.insertAdjacentHTML('beforeend', badgeHtml);
-    dropdown.value = '';
-    customInput.value = '';
-    clearDigFieldError(document.getElementById('badges_container'));
+    clearDigFieldError(container);
+    saveDigitizeDraft();
+}
+
+function addProcedureBadge() {
+    const dropdown = document.getElementById('test_dropdown');
+    const customInput = document.getElementById('custom_test_input');
+    let testName = customInput?.value.trim() || '';
+    if (!testName && dropdown && dropdown.value !== '') {
+        testName = dropdown.value;
+    }
+    if (!testName) return;
+
+    if (selectedProcedures.has(testName)) {
+        alert('This procedure has already been added to the list.');
+        return;
+    }
+
+    addProcedureBadgeByName(testName);
+    if (dropdown) dropdown.value = '';
+    if (customInput) customInput.value = '';
 }
 
 function removeProcedureBadge(badgeId, testName) {
@@ -488,14 +547,18 @@ function removeProcedureBadge(badgeId, testName) {
         const placeholder = document.getElementById('badges-placeholder');
         if (placeholder) placeholder.classList.remove('d-none');
     }
+    saveDigitizeDraft();
 }
 
 function addScanUploadRow() {
-    const template = document.getElementById('scanRowTemplate').innerHTML;
-    document.getElementById('scansTableBody').insertAdjacentHTML('beforeend', template);
+    const template = document.getElementById('scanRowTemplate');
+    const body = document.getElementById('scansTableBody');
+    if (!template || !body) return;
+    body.insertAdjacentHTML('beforeend', template.innerHTML);
     scanRowIdx++;
-    clearDigFieldError(document.getElementById('scansTableBody'));
+    clearDigFieldError(body);
 }
+window.addScanUploadRow = addScanUploadRow;
 
 function resetDigitizerForm() {
     if (confirm('Reset this digitizer form to default state?')) {
@@ -504,7 +567,9 @@ function resetDigitizerForm() {
         document.getElementById('badges_container').innerHTML = '<span class="text-muted small italic" id="badges-placeholder">No procedures selected yet. Select or type above.</span>';
         selectedProcedures.clear();
         scanRowIdx = 0;
+        clearDigitizeDraft();
         addScanUploadRow();
+        digAddressInitialized = false;
         initializeDigAddress();
         
         document.querySelectorAll('#historicalImportForm .is-invalid').forEach(el => el.classList.remove('is-invalid'));
@@ -525,6 +590,13 @@ function cancelDigitizerForm() {
     if (recordPlaceholder) {
         recordPlaceholder.classList.remove('d-none');
     }
+    clearDigitizeDraft();
+    try {
+        sessionStorage.removeItem("archive_action_{{ $targetUser->id }}");
+        const url = new URL(window.location.href);
+        url.searchParams.delete('action');
+        history.replaceState(null, null, url.toString());
+    } catch (e) {}
 }
 window.cancelDigitizerForm = cancelDigitizerForm;
 
@@ -555,7 +627,6 @@ function validateDigitizerForm(e) {
     let isValid = true;
     let firstInvalidInput = null;
 
-    // Flush previous error states
     document.querySelectorAll('#historicalImportForm .is-invalid').forEach(el => el.classList.remove('is-invalid'));
     document.querySelectorAll('#historicalImportForm .invalid-feedback').forEach(el => {
         el.innerText = '';
@@ -569,14 +640,12 @@ function validateDigitizerForm(e) {
         if (!firstInvalidInput) firstInvalidInput = input;
     }
 
-    // 1. Record Parameters
     const dateRecord = document.getElementById('dig_date_of_record');
     if (!dateRecord || !dateRecord.value) markInvalid(dateRecord, 'err_date_of_record', 'Date of Original Record is required.');
 
     const requestedBy = document.getElementById('dig_requested_by');
     if (!requestedBy || !requestedBy.value.trim()) markInvalid(requestedBy, 'err_requested_by', 'Requested By field is required.');
 
-    // 2. Patient Identity
     const fName = document.getElementById('dig_first_name');
     if (!fName || !fName.value.trim()) markInvalid(fName, 'err_patient_first_name', 'First Name is required.');
 
@@ -596,7 +665,6 @@ function validateDigitizerForm(e) {
     const sex = document.getElementById('dig_sex');
     if (!sex || !sex.value) markInvalid(sex, 'err_sex', 'Sex selection is required.');
 
-    // 3. Address
     const prov = document.getElementById('dig_province');
     const city = document.getElementById('dig_city');
     const brgy = document.getElementById('dig_brgy');
@@ -607,13 +675,11 @@ function validateDigitizerForm(e) {
     if (!brgy || !brgy.value) markInvalid(brgy, 'err_dig_brgy', 'Barangay selection is required.');
     if (!street || !street.value.trim()) markInvalid(street, 'err_dig_street', 'Street address is required.');
 
-    // 4. Procedures / Tests
     if (selectedProcedures.size === 0) {
         const badgeContainer = document.getElementById('badges_container');
         markInvalid(badgeContainer, 'err_tests_requested', 'At least one procedure/test must be selected.');
     }
 
-    // 5. Scans (File, Label, and Certificate Number required)
     const rows = document.querySelectorAll('#scansTableBody tr');
     if (rows.length === 0) {
         const scansTable = document.getElementById('scansTableBody');
@@ -646,20 +712,31 @@ function validateDigitizerForm(e) {
         return false;
     }
 
+    clearDigitizeDraft();
     compileDigAddress();
     return true;
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
+// Ensure execution waits until scripts stack runs
+window.addEventListener('load', () => {
     if (document.querySelectorAll('#scansTableBody tr').length === 0) {
         addScanUploadRow();
     }
-    await initializeDigAddress();
 
-    // Attach real-time error dismissal listeners
+    // Restore draft if saved
+    restoreDigitizeDraft();
+
+    // Attach real-time error dismissal and auto-save listeners
     document.querySelectorAll('#historicalImportForm input, #historicalImportForm select').forEach(input => {
-        input.addEventListener('input', () => clearDigFieldError(input));
-        input.addEventListener('change', () => clearDigFieldError(input));
+        input.addEventListener('input', () => {
+            clearDigFieldError(input);
+            saveDigitizeDraft();
+        });
+        input.addEventListener('change', () => {
+            clearDigFieldError(input);
+            saveDigitizeDraft();
+        });
     });
 });
 </script>
+@endpush
