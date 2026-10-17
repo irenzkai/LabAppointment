@@ -8,27 +8,56 @@ $phoneVerifiedElsewhere = !empty($user->phone) && \App\Models\User::where('id', 
     ->where('phone', trim($user->phone))
     ->whereNotNull('phone_verified_at')
     ->exists();
+
+$cleanPhoneSuffix = '';
+if (!empty($user->phone)) {
+    $rawPhone = trim($user->phone);
+    if (str_starts_with($rawPhone, '+639') && strlen($rawPhone) === 13) {
+        $cleanPhoneSuffix = substr($rawPhone, 4);
+    } elseif (str_starts_with($rawPhone, '639') && strlen($rawPhone) === 12) {
+        $cleanPhoneSuffix = substr($rawPhone, 3);
+    } elseif (str_starts_with($rawPhone, '09') && strlen($rawPhone) === 11) {
+        $cleanPhoneSuffix = substr($rawPhone, 2);
+    } elseif (str_starts_with($rawPhone, '9') && strlen($rawPhone) === 10) {
+        $cleanPhoneSuffix = substr($rawPhone, 1);
+    } else {
+        $cleanPhoneSuffix = $rawPhone;
+    }
+}
 @endphp
 
-<div class="card p-4 p-md-5 border-secondary shadow-lg animate-page">
+<div class="card p-4 p-md-5 border-secondary shadow-lg">
     <h5 class="text-main fw-bold mb-4 border-bottom border-secondary border-opacity-25 pb-2 uppercase" style="letter-spacing: 1px;">Personal Information</h5>
 
     {{-- Active Address on File --}}
     <div class="alert alert-clinical p-3 mb-4 text-start">
         <div class="text-accent fw-bold fs-x-small uppercase tracking-wider mb-1" style="font-size: 0.65rem;">Registered Address on File:</div>
-        <div class="text-main small">{{ $user->address }}</div>
+        <div class="text-main small" id="profile_address_on_file">{{ $user->address }}</div>
+    </div>
+
+    {{-- Notification Toast for In-Place Email/Phone Updates --}}
+    <div id="contact_update_alert" class="alert alert-clinical alert-dismissible fade show d-none align-items-center mb-4 shadow-sm" style="background-color: rgba(25, 211, 140, 0.08); border-left: 4px solid var(--brand-accent) !important; border-radius: 8px;">
+        <i class="bi bi-check-circle-fill me-3 fs-5 text-accent"></i>
+        <div class="text-start">
+            <div class="fw-800 uppercase fs-x-small text-accent" style="font-size: 0.72rem; letter-spacing: 0.5px;">Update Successful</div>
+            <div class="small text-main" id="contact_update_alert_msg" style="color: var(--text-main) !important; font-size: 0.85rem;"></div>
+        </div>
+        <button type="button" class="btn-close ms-auto" onclick="document.getElementById('contact_update_alert').classList.add('d-none')"></button>
     </div>
 
     <form method="post" action="{{ route('profile.update') }}" onsubmit="return validateProfileForm(event)" novalidate id="profileUpdateForm">
         @csrf
         @method('patch')
 
+        {{-- Hidden fields keep email, phone, and address populated to satisfy ProfileUpdateRequest without dirty changes --}}
+        <input type="hidden" name="email" id="profile_email_hidden" value="{{ $user->email }}">
+        <input type="hidden" name="phone" id="profile_phone_hidden" value="{{ $user->phone }}">
         <input type="hidden" name="address" id="profile_address_hidden" value="{{ $user->address }}">
 
         <div class="row g-3 text-start">
             {{-- Name Separation --}}
             <div class="col-md-3">
-                <label class="smaller text-secondary fw-bold mb-1 uppercase">First Name</label>
+                <label class="smaller text-secondary fw-bold mb-1 uppercase">First Name <span class="text-danger">*</span></label>
                 <input type="text" name="first_name" class="form-control uppercase" value="{{ old('first_name', $user->first_name) }}" oninput="this.value = this.value.replace(/[^a-zA-ZñÑ\s.\'-]/g, '')" required>
             </div>
 
@@ -44,7 +73,7 @@ $phoneVerifiedElsewhere = !empty($user->phone) && \App\Models\User::where('id', 
             </div>
 
             <div class="col-md-3">
-                <label class="smaller text-secondary fw-bold mb-1 uppercase">Last Name</label>
+                <label class="smaller text-secondary fw-bold mb-1 uppercase">Last Name <span class="text-danger">*</span></label>
                 <input type="text" name="last_name" class="form-control uppercase" value="{{ old('last_name', $user->last_name) }}" oninput="this.value = this.value.replace(/[^a-zA-ZñÑ\s.\'-]/g, '')" required>
             </div>
 
@@ -61,91 +90,102 @@ $phoneVerifiedElsewhere = !empty($user->phone) && \App\Models\User::where('id', 
                 </datalist>
             </div>
 
-            {{-- Clinical re-verification helper alert --}}
-            <div class="col-12 mt-2">
-                <div class="alert alert-clinical p-2 border-warning border-opacity-10" style="background-color: rgba(25, 211, 140, 0.03);">
-                    <i class="bi bi-shield-exclamation text-warning me-1.5"></i>
-                    <small class="text-muted"><strong>Safety Notice:</strong> Modifying your registered email or phone number will automatically reset its verification status and require re-verification. Each credential can only be verified on one active account for login security.</small>
-                </div>
-            </div>
-
-            {{-- Contact Information with Verification Badges and triggers --}}
-            <div class="col-md-6">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <label class="smaller text-secondary fw-bold mb-0 uppercase">Email Address</label>
-                    <div id="email_badge_container">
-                        @if($user->email_verified_at)
-                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
-                                <i class="bi bi-patch-check-fill"></i> Verified
-                            </span>
-                        @elseif($emailVerifiedElsewhere)
-                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
-                                <i class="bi bi-exclamation-octagon-fill"></i> In Use on Another Account
-                            </span>
-                        @else
-                            <div class="d-flex align-items-center">
-                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
-                                    <i class="bi bi-exclamation-triangle-fill"></i> Unverified
-                                </span>
-                                <button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal('email')" style="font-size:0.7rem;">Verify Now</button>
-                            </div>
-                        @endif
-                    </div>
-                </div>
-                <input type="email" name="email" id="prof_email" class="form-control" value="{{ old('email', $user->email) }}" oninput="handleProfileEmailInput()" required>
-                @if(!$user->email_verified_at && $emailVerifiedElsewhere)
-                    <div id="email_conflict_notice" class="text-danger small mt-1 fw-bold" style="font-size: 0.72rem;">
-                        <i class="bi bi-exclamation-circle me-1"></i>This email has already been verified on another account. You cannot verify it here. Please update your email address or deactivate this profile.
-                    </div>
-                @endif
-            </div>
-
-            <div class="col-md-6">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <label class="smaller text-secondary fw-bold mb-0 uppercase">Phone Number</label>
-                    <div id="phone_badge_container">
-                        @if($user->phone_verified_at)
-                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
-                                <i class="bi bi-patch-check-fill"></i> Verified
-                            </span>
-                        @elseif($phoneVerifiedElsewhere)
-                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
-                                <i class="bi bi-exclamation-octagon-fill"></i> In Use on Another Account
-                            </span>
-                        @else
-                            <div class="d-flex align-items-center">
-                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
-                                    <i class="bi bi-exclamation-triangle-fill"></i> Unverified
-                                </span>
-                                <button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal('phone')" style="font-size:0.7rem;">Verify Now</button>
-                            </div>
-                        @endif
-                    </div>
-                </div>
-                <div class="input-group">
-                    <span class="input-group-text border-secondary bg-secondary bg-opacity-25 text-main fw-bold">09</span>
-                    <input type="text" id="phone_display" class="form-control" placeholder="171234567" maxlength="9" oninput="this.value = this.value.replace(/[^0-9]/g, ''); syncProfilePhoneNumber()" required>
-                </div>
-                <input type="hidden" name="phone" id="phone_hidden" value="{{ old('phone', $user->phone) }}">
-                @if(!$user->phone_verified_at && $phoneVerifiedElsewhere)
-                    <div id="phone_conflict_notice" class="text-danger small mt-1 fw-bold" style="font-size: 0.72rem;">
-                        <i class="bi bi-exclamation-circle me-1"></i>This phone number has already been verified on another account. You cannot verify it here. Please update your phone number.
-                    </div>
-                @endif
-            </div>
-
             {{-- Demographics --}}
             <div class="col-md-6">
-                <label class="smaller text-secondary fw-bold mb-1 uppercase">Birthdate</label>
+                <label class="smaller text-secondary fw-bold mb-1 uppercase">Birthdate <span class="text-danger">*</span></label>
                 <input type="date" name="birthdate" class="form-control" value="{{ $user->birthdate ? $user->birthdate->format('Y-m-d') : '' }}" required max="{{ now()->subYears(18)->format('Y-m-d') }}">
             </div>
 
             <div class="col-md-6">
-                <label class="smaller text-secondary fw-bold mb-1 uppercase">Sex</label>
+                <label class="smaller text-secondary fw-bold mb-1 uppercase">Sex <span class="text-danger">*</span></label>
                 <select name="sex" class="form-select" required>
                     <option value="Male" {{ old('sex', $user->sex) == 'Male' ? 'selected' : '' }}>Male</option>
                     <option value="Female" {{ old('sex', $user->sex) == 'Female' ? 'selected' : '' }}>Female</option>
                 </select>
+            </div>
+
+            {{-- SEPARATED CONTACT INFORMATION (Readonly in Save Details, Modified independently via Modal) --}}
+            <div class="col-12 mt-4">
+                <div class="d-flex justify-content-between align-items-center border-top border-secondary border-opacity-10 pt-3 mb-2">
+                    <h6 class="text-accent smaller fw-bold mb-0 uppercase tracking-wider">Account Credentials & Verification</h6>
+                    <small class="text-secondary" style="font-size: 0.7rem;"><i class="bi bi-shield-check text-accent me-1"></i>Verified credentials grant portal access</small>
+                </div>
+            </div>
+
+            {{-- Readonly Email Field --}}
+            <div class="col-md-6">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="smaller text-secondary fw-bold mb-0 uppercase">Email Address</label>
+                    <div id="email_badge_container" class="d-flex align-items-center gap-1.5">
+                        @if($user->email_verified_at)
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                                <i class="bi bi-patch-check-fill"></i> Verified
+                            </span>
+                            <button type="button" class="btn btn-sm btn-outline-accent py-0.5 px-2 fw-bold text-uppercase ms-1" onclick="openChangeEmailModal()" style="font-size:0.68rem;">
+                                <i class="bi bi-pencil-square me-1"></i> Change
+                            </button>
+                        @elseif($emailVerifiedElsewhere)
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                                <i class="bi bi-exclamation-octagon-fill"></i> In Use Elsewhere
+                            </span>
+                            <button type="button" class="btn btn-sm btn-accent py-0.5 px-2 text-dark fw-bold text-uppercase ms-1" onclick="openChangeEmailModal()" style="font-size:0.68rem;">
+                                Update
+                            </button>
+                        @else
+                            <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                                <i class="bi bi-exclamation-triangle-fill"></i> Unverified
+                            </span>
+                            <button type="button" class="btn btn-sm btn-accent py-0.5 px-2 text-dark fw-bold text-uppercase ms-1" onclick="openVerifyCurrentEmailModal()" style="font-size:0.68rem;">
+                                Verify Now
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-accent py-0.5 px-2 fw-bold text-uppercase ms-1" onclick="openChangeEmailModal()" style="font-size:0.68rem;">
+                                Change
+                            </button>
+                        @endif
+                    </div>
+                </div>
+                <div class="input-group">
+                    <span class="input-group-text border-secondary bg-secondary bg-opacity-10 text-secondary"><i class="bi bi-envelope-fill"></i></span>
+                    <input type="email" id="prof_email_display" class="form-control" value="{{ $user->email }}" readonly style="background-color: rgba(0, 0, 0, 0.03); cursor: default;">
+                </div>
+            </div>
+
+            {{-- Readonly Phone Field --}}
+            <div class="col-md-6">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="smaller text-secondary fw-bold mb-0 uppercase">Mobile Phone</label>
+                    <div id="phone_badge_container" class="d-flex align-items-center gap-1.5">
+                        @if($user->phone_verified_at)
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                                <i class="bi bi-patch-check-fill"></i> Verified
+                            </span>
+                            <button type="button" class="btn btn-sm btn-outline-accent py-0.5 px-2 fw-bold text-uppercase ms-1" onclick="openChangePhoneModal()" style="font-size:0.68rem;">
+                                <i class="bi bi-pencil-square me-1"></i> Change
+                            </button>
+                        @elseif($phoneVerifiedElsewhere)
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                                <i class="bi bi-exclamation-octagon-fill"></i> In Use Elsewhere
+                            </span>
+                            <button type="button" class="btn btn-sm btn-accent py-0.5 px-2 text-dark fw-bold text-uppercase ms-1" onclick="openChangePhoneModal()" style="font-size:0.68rem;">
+                                Update
+                            </button>
+                        @else
+                            <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                                <i class="bi bi-exclamation-triangle-fill"></i> Unverified
+                            </span>
+                            <button type="button" class="btn btn-sm btn-accent py-0.5 px-2 text-dark fw-bold text-uppercase ms-1" onclick="openVerifyCurrentPhoneModal()" style="font-size:0.68rem;">
+                                Verify Now
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-accent py-0.5 px-2 fw-bold text-uppercase ms-1" onclick="openChangePhoneModal()" style="font-size:0.68rem;">
+                                Change
+                            </button>
+                        @endif
+                    </div>
+                </div>
+                <div class="input-group">
+                    <span class="input-group-text border-secondary bg-secondary bg-opacity-10 text-secondary fw-bold">09</span>
+                    <input type="text" id="phone_display_readonly" class="form-control" value="{{ $cleanPhoneSuffix }}" readonly style="background-color: rgba(0, 0, 0, 0.03); cursor: default;">
+                </div>
             </div>
 
             {{-- Interactive Address Selection --}}
@@ -153,48 +193,50 @@ $phoneVerifiedElsewhere = !empty($user->phone) && \App\Models\User::where('id', 
                 <h6 class="text-accent smaller fw-bold mb-3 uppercase">Update Home Address</h6>
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <label class="smaller text-secondary fw-bold mb-1 uppercase">Province</label>
+                        <label class="smaller text-secondary fw-bold mb-1 uppercase">Province <span class="text-danger">*</span></label>
                         <select id="addr_province" name="province" class="form-select" onchange="fetchCities(this.value)" required>
-                            <option value="">Loading Provinces...</option>
+                            <option value="">Select Province</option>
                         </select>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="smaller text-secondary fw-bold mb-1 uppercase">City / Municipality</label>
+                        <label class="smaller text-secondary fw-bold mb-1 uppercase">City / Municipality <span class="text-danger">*</span></label>
                         <select id="addr_city" name="city" class="form-select" onchange="fetchBarangays(this.value)" disabled required>
                             <option value="">Select Province First</option>
                         </select>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="smaller text-secondary fw-bold mb-1 uppercase">Barangay</label>
+                        <label class="smaller text-secondary fw-bold mb-1 uppercase">Barangay <span class="text-danger">*</span></label>
                         <select id="addr_brgy" name="barangay" class="form-select" disabled required>
                             <option value="">Select City First</option>
                         </select>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="smaller text-secondary fw-bold mb-1 uppercase">Street / House No.</label>
+                        <label class="smaller text-secondary fw-bold mb-1 uppercase">Street / House No. <span class="text-danger">*</span></label>
                         <input type="text" id="addr_street" name="street" class="form-control uppercase" value="{{ old('street', $user->street) }}" required>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="d-flex align-items-center mt-4">
-            <button type="submit" class="btn-custom btn-accent px-4 uppercase fw-bold">SAVE DETAILS</button>
+        <div class="d-flex align-items-center mt-4 pt-2">
+            <button type="submit" class="btn-custom btn-accent px-4 uppercase fw-bold shadow-sm">SAVE DETAILS</button>
             <button type="reset" class="btn-custom btn-outline-secondary px-4 uppercase fw-bold ms-2" onclick="resetProfileForm(event)">RESET</button>
         </div>
     </form>
 </div>
 
-<!-- CONFIRM PROFILE UPDATE MODAL -->
-<div class="modal fade" id="confirmUpdateProfileModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="false" style="z-index: 1050;">
-    <div class="modal-dialog modal-dialog-centered" style="max-width: 450px;">
+<!-- =========================================================================
+     MODAL 1: CONFIRM SAVE PERSONAL DETAILS
+     ========================================================================= -->
+<div class="modal fade" id="confirmUpdateProfileModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
         <div class="modal-content border-secondary bg-card text-start shadow-lg" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main); border-radius: 14px;">
             <div class="modal-header border-secondary border-opacity-15 bg-secondary bg-opacity-10 py-3">
                 <h5 class="modal-title text-accent fw-bold uppercase small m-0">
-                    <i class="bi bi-shield-lock-fill me-2 fs-5"></i>Confirm Profile Update
+                    <i class="bi bi-shield-lock-fill me-2 fs-5"></i>Confirm Details Update
                 </h5>
                 <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -205,11 +247,11 @@ $phoneVerifiedElsewhere = !empty($user->phone) && \App\Models\User::where('id', 
                     </div>
                     <div>
                         <h6 class="text-main fw-bold mb-1 uppercase" style="font-size: 0.95rem;">Save Personal Information?</h6>
-                        <p class="text-muted small mb-0" style="font-size: 0.8rem;">Are you sure you want to save these updates to your clinical profile?</p>
+                        <p class="text-muted small mb-0" style="font-size: 0.8rem;">Update your name, birthdate, sex, and residential address details.</p>
                     </div>
                 </div>
                 <p class="text-muted small mb-0" style="font-size: 0.82rem; line-height: 1.5;">
-                    Your revised name, demographics, and registered address will be synchronized across your diagnostic examination orders and patient records.
+                    Your revised demographics will be synchronized with your active appointment orders and future test files.
                 </p>
             </div>
             <div class="modal-footer border-secondary border-opacity-15 p-3 d-flex gap-2">
@@ -220,166 +262,504 @@ $phoneVerifiedElsewhere = !empty($user->phone) && \App\Models\User::where('id', 
     </div>
 </div>
 
-<!-- EMAIL OTP MODAL -->
-<div class="modal fade" id="profileEmailVerifyModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="false" style="z-index: 1050;">
-    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
-        <div class="modal-content border-secondary bg-card text-start" style="background-color: var(--bg-card); color: var(--text-main);">
+<!-- =========================================================================
+     MODAL 2: DEDICATED CHANGE & VERIFY EMAIL MODAL (IN-PLACE OTP)
+     ========================================================================= -->
+<div class="modal fade" id="profileEmailVerifyModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 450px;">
+        <div class="modal-content border-secondary bg-card text-start shadow-lg" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color); border-radius: 14px;">
             <div class="modal-header border-secondary bg-secondary bg-opacity-10 py-3">
-                <h5 class="modal-title text-accent fw-bold uppercase small m-0">
-                    <i class="bi bi-shield-check-fill me-2 fs-5"></i>Email Verification Code
+                <h5 class="modal-title text-accent fw-bold uppercase small m-0" id="emailModalTitle">
+                    <i class="bi bi-envelope-check-fill me-2 fs-5"></i>Change & Verify Email
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
-                <form onsubmit="submitProfileOtpCode(event)">
-                    <div class="mb-3 text-center">
-                        <label class="small text-muted fw-bold mb-1 uppercase d-block text-start">Enter 6-Digit Email Code</label>
-                        <div class="d-flex justify-content-between gap-2 my-3 mx-auto" style="max-width: 350px;">
-                            @for($i = 0; $i < 6; $i++)
-                                <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="{{ $i }}" oninput="handleOtpInput(this, event)" onkeydown="handleOtpKeydown(this, event)">
-                            @endfor
-                        </div>
-                        <input type="hidden" name="otp" id="otp_hidden">
-                        <div id="otp_error_msg" class="text-danger small mt-2 d-none fw-bold text-center"></div>
+                <div class="mb-3">
+                    <label class="smaller text-secondary fw-bold mb-1 uppercase d-block text-start">Email Address</label>
+                    <div class="input-group">
+                        <input type="email" id="modal_email_input" class="form-control" placeholder="new.email@example.com" value="{{ $user->email }}">
+                        <button type="button" id="modal_email_send_btn" class="btn btn-outline-accent fw-bold uppercase px-3" onclick="sendModalEmailOtp()" style="font-size: 0.75rem;">
+                            SEND CODE
+                        </button>
                     </div>
-                    <button type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm uppercase">SUBMIT CODE</button>
-                </form>
-                <div class="col-12 mt-3 text-center">
-                    <form onsubmit="sendProfileOtpCode(event)">
-                        <span class="small text-muted">Didn't receive the email code?</span>
-                        <button id="otp-resend-btn" type="submit" class="btn btn-link text-accent fw-bold text-decoration-none p-0 small ms-1 align-baseline" style="font-size:0.85rem;">SEND CODE</button>
-                    </form>
+                    <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">Enter your email and click Send Code to receive a 6-digit verification OTP.</small>
+                </div>
+
+                {{-- OTP Input Area --}}
+                <div id="modal_email_otp_section" class="mt-4 pt-3 border-top border-secondary border-opacity-15 text-center">
+                    <label class="small text-muted fw-bold mb-1 uppercase d-block text-start">Enter 6-Digit Email Code</label>
+                    <div class="d-flex justify-content-between gap-2 my-3 mx-auto" style="max-width: 350px;">
+                        @for($i = 0; $i < 6; $i++)
+                            <input type="text" class="form-control otp-box text-center fw-bold fs-3" maxlength="1" data-index="{{ $i }}" oninput="handleModalEmailOtpInput(this)" onkeydown="handleModalEmailOtpKeydown(this, event)">
+                        @endfor
+                    </div>
+                    <div id="modal_email_error" class="text-danger small mt-2 d-none fw-bold text-center"></div>
+
+                    <button type="button" id="modal_email_confirm_btn" class="btn-custom btn-accent w-100 py-2.5 fw-bold shadow-sm uppercase mt-2" onclick="submitModalEmailOtp()">
+                        VERIFY & UPDATE EMAIL
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- PHONE SMS OTP MODAL -->
-<div class="modal fade" id="profilePhoneVerifyModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="false" style="z-index: 1050;">
-    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
-        <div class="modal-content border-secondary bg-card text-start" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+<!-- =========================================================================
+     MODAL 3: DEDICATED CHANGE & VERIFY PHONE MODAL (IN-PLACE SMS OTP)
+     ========================================================================= -->
+<div class="modal fade" id="profilePhoneVerifyModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 450px;">
+        <div class="modal-content border-secondary bg-card text-start shadow-lg" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color); border-radius: 14px;">
             <div class="modal-header border-secondary bg-secondary bg-opacity-10 py-3">
-                <h5 class="modal-title text-accent fw-bold uppercase small m-0">
-                    <i class="bi bi-chat-dots-fill me-2 fs-5"></i>Phone SMS Verification
+                <h5 class="modal-title text-accent fw-bold uppercase small m-0" id="phoneModalTitle">
+                    <i class="bi bi-chat-dots-fill me-2 fs-5"></i>Change & Verify Mobile Phone
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
-                <form onsubmit="submitProfilePhoneOtpCode(event)">
-                    <div class="mb-3 text-center">
-                        <label class="small text-muted fw-bold mb-1 uppercase d-block text-start">Enter 6-Digit SMS Verification Code</label>
-                        <div class="d-flex justify-content-between gap-2 my-3 mx-auto" style="max-width: 350px;">
-                            @for($i = 0; $i < 6; $i++)
-                                <input type="text" class="form-control otp-box phone-otp-box text-center fw-bold fs-3" maxlength="1" data-index="{{ $i }}" oninput="handlePhoneOtpInput(this, event)" onkeydown="handlePhoneOtpKeydown(this, event)">
-                            @endfor
-                        </div>
-                        <input type="hidden" name="phone_otp" id="phone_otp_hidden">
-                        <div id="phone_otp_error_msg" class="text-danger small mt-2 d-none fw-bold text-center"></div>
+                <div class="mb-3">
+                    <label class="smaller text-secondary fw-bold mb-1 uppercase d-block text-start">Mobile Number</label>
+                    <div class="input-group">
+                        <span class="input-group-text border-secondary bg-secondary bg-opacity-10 text-secondary fw-bold">09</span>
+                        <input type="text" id="modal_phone_input" class="form-control" placeholder="171234567" maxlength="9" value="{{ $cleanPhoneSuffix }}" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                        <button type="button" id="modal_phone_send_btn" class="btn btn-outline-accent fw-bold uppercase px-3" onclick="sendModalPhoneOtp()" style="font-size: 0.75rem;">
+                            SEND SMS
+                        </button>
                     </div>
-                    <button type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm uppercase">VERIFY PHONE CODE</button>
-                </form>
-                <div class="col-12 mt-3 text-center">
-                    <form onsubmit="sendProfilePhoneOtpCode(event)">
-                        <span class="small text-muted">Didn't receive the SMS code?</span>
-                        <button id="phone-otp-resend-btn" type="submit" class="btn btn-link text-accent fw-bold text-decoration-none p-0 small ms-1 align-baseline" style="font-size:0.85rem;">SEND SMS CODE</button>
-                    </form>
+                    <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">Enter your 9-digit mobile number after 09 to receive an SMS verification code.</small>
+                </div>
+
+                {{-- SMS OTP Input Area --}}
+                <div id="modal_phone_otp_section" class="mt-4 pt-3 border-top border-secondary border-opacity-15 text-center">
+                    <label class="small text-muted fw-bold mb-1 uppercase d-block text-start">Enter 6-Digit SMS Code</label>
+                    <div class="d-flex justify-content-between gap-2 my-3 mx-auto" style="max-width: 350px;">
+                        @for($i = 0; $i < 6; $i++)
+                            <input type="text" class="form-control otp-box modal-phone-otp-box text-center fw-bold fs-3" maxlength="1" data-index="{{ $i }}" oninput="handleModalPhoneOtpInput(this)" onkeydown="handleModalPhoneOtpKeydown(this, event)">
+                        @endfor
+                    </div>
+                    <div id="modal_phone_error" class="text-danger small mt-2 d-none fw-bold text-center"></div>
+
+                    <button type="button" id="modal_phone_confirm_btn" class="btn-custom btn-accent w-100 py-2.5 fw-bold shadow-sm uppercase mt-2" onclick="submitModalPhoneOtp()">
+                        VERIFY & UPDATE PHONE
+                    </button>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
-
-<!-- SETTINGS OMISSIONS ERROR MODAL -->
-<div class="modal fade" id="profileValidationErrorModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="false" style="z-index: 1060;">
-    <div class="modal-dialog modal-md modal-dialog-centered">
-        <div class="modal-content border-danger bg-card text-center p-4" style="background-color: var(--bg-card); border: 1.5px solid #dc3545; color: var(--text-main);">
-            <div class="mb-3">
-                <i class="bi bi-exclamation-triangle-fill text-danger display-4 d-block animate-pulse"></i>
-            </div>
-            <h5 class="text-danger fw-bold mb-2 uppercase tracking-tighter">Omissions Found</h5>
-            <div id="profile_validation_error_msg" class="text-secondary small mb-4 text-start">Please complete all required fields correctly before saving changes.</div>
-            <button type="button" class="btn btn-danger w-100 py-2.5 uppercase fw-bold" onclick="bootstrap.Modal.getInstance(document.getElementById('profileValidationErrorModal')).hide()">Understood</button>
         </div>
     </div>
 </div>
 
 @push('scripts')
 <script>
-// --- SHIELDED STORAGE WRAPPER ---
-const safeStorage = {
-    getItem(key) {
-        try { return localStorage.getItem(key); } catch (e) { return null; }
-    },
-    setItem(key, value) {
-        try { localStorage.setItem(key, value); } catch (e) {}
-    },
-    removeItem(key) {
-        try { localStorage.removeItem(key); } catch (e) {}
-    }
-};
-
-const originalEmail = "{{ strtolower(trim($user->email)) }}";
-const originalPhone = "{{ trim($user->phone) }}";
-
-const emailVerifiedElsewhere = {{ (!$user->email_verified_at && $emailVerifiedElsewhere) ? 'true' : 'false' }};
-const phoneVerifiedElsewhere = {{ (!$user->phone_verified_at && $phoneVerifiedElsewhere) ? 'true' : 'false' }};
-
-let emailVerifiedLocally = {{ $user->email_verified_at ? 'true' : 'false' }};
-let verifiedEmailValue = originalEmail;
-
-let phoneVerifiedLocally = {{ $user->phone_verified_at ? 'true' : 'false' }};
-let verifiedPhoneValue = originalPhone;
-
-let isSubmittingForm = false;
+let currentEmail = "{{ strtolower(trim($user->email)) }}";
+let currentPhone = "{{ trim($user->phone) }}";
 let isProfileFormConfirmed = false;
 
-// --- DYNAMIC BADGE SYNCHRONIZERS ON INPUT ---
-function handleProfileEmailInput() {
-    const emailInput = document.getElementById('prof_email');
-    const badgeContainer = document.getElementById('email_badge_container');
-    const conflictNotice = document.getElementById('email_conflict_notice');
-    if (!emailInput || !badgeContainer) return;
+// Cooldown trackers
+let emailCooldownTimer = null;
+let phoneCooldownTimer = null;
 
-    const currentVal = emailInput.value.trim().toLowerCase();
-    const isVerified = emailVerifiedLocally && currentVal === verifiedEmailValue.toLowerCase();
-    const isOriginalValue = (currentVal === originalEmail.toLowerCase());
+// --- 1. OPEN MODAL TRIGGERS ---
+function openChangeEmailModal() {
+    const modalEl = document.getElementById('profileEmailVerifyModal');
+    document.getElementById('emailModalTitle').innerHTML = '<i class="bi bi-envelope-check-fill me-2 fs-5"></i>Change & Verify Email';
+    document.getElementById('modal_email_input').value = '';
+    document.getElementById('modal_email_input').readOnly = false;
+    document.getElementById('modal_email_error').classList.add('d-none');
+    clearModalEmailOtp();
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+    setTimeout(() => document.getElementById('modal_email_input').focus(), 150);
+}
 
-    if (isVerified) {
-        badgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
-        if (conflictNotice) conflictNotice.classList.add('d-none');
-    } else if (isOriginalValue && emailVerifiedElsewhere) {
-        badgeContainer.innerHTML = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-octagon-fill"></i> In Use on Another Account</span>';
-        if (conflictNotice) conflictNotice.classList.remove('d-none');
-    } else {
-        badgeContainer.innerHTML = '<div class="d-flex align-items-center"><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span><button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal(\'email\')" style="font-size:0.7rem;">Verify Now</button></div>';
-        if (conflictNotice) conflictNotice.classList.add('d-none');
+function openVerifyCurrentEmailModal() {
+    const modalEl = document.getElementById('profileEmailVerifyModal');
+    document.getElementById('emailModalTitle').innerHTML = '<i class="bi bi-patch-check-fill me-2 fs-5"></i>Verify Registered Email';
+    document.getElementById('modal_email_input').value = currentEmail;
+    document.getElementById('modal_email_input').readOnly = true;
+    document.getElementById('modal_email_error').classList.add('d-none');
+    clearModalEmailOtp();
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+    sendModalEmailOtp();
+}
+
+function openChangePhoneModal() {
+    const modalEl = document.getElementById('profilePhoneVerifyModal');
+    document.getElementById('phoneModalTitle').innerHTML = '<i class="bi bi-chat-dots-fill me-2 fs-5"></i>Change & Verify Phone';
+    document.getElementById('modal_phone_input').value = '';
+    document.getElementById('modal_phone_input').readOnly = false;
+    document.getElementById('modal_phone_error').classList.add('d-none');
+    clearModalPhoneOtp();
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+    setTimeout(() => document.getElementById('modal_phone_input').focus(), 150);
+}
+
+function openVerifyCurrentPhoneModal() {
+    const modalEl = document.getElementById('profilePhoneVerifyModal');
+    document.getElementById('phoneModalTitle').innerHTML = '<i class="bi bi-patch-check-fill me-2 fs-5"></i>Verify Registered Phone';
+    let suffix = currentPhone.startsWith('09') ? currentPhone.substring(2) : currentPhone;
+    document.getElementById('modal_phone_input').value = suffix;
+    document.getElementById('modal_phone_input').readOnly = true;
+    document.getElementById('modal_phone_error').classList.add('d-none');
+    clearModalPhoneOtp();
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+    sendModalPhoneOtp();
+}
+
+// --- 2. MODAL EMAIL OTP CONTROLLERS ---
+function clearModalEmailOtp() {
+    document.querySelectorAll('.otp-box:not(.modal-phone-otp-box)').forEach(el => el.value = '');
+}
+
+function getModalEmailOtp() {
+    let code = '';
+    document.querySelectorAll('.otp-box:not(.modal-phone-otp-box)').forEach(el => code += el.value.trim());
+    return code;
+}
+
+function handleModalEmailOtpInput(input) {
+    input.value = input.value.replace(/[^0-9]/g, '');
+    if (input.value.length === 1) {
+        const nextIndex = parseInt(input.dataset.index) + 1;
+        const next = document.querySelector(`.otp-box:not(.modal-phone-otp-box)[data-index="${nextIndex}"]`);
+        if (next) next.focus();
     }
 }
 
-function handleProfilePhoneInput() {
-    const phoneInput = document.getElementById('phone_hidden');
-    const phoneBadgeContainer = document.getElementById('phone_badge_container');
-    const phoneConflictNotice = document.getElementById('phone_conflict_notice');
-    if (!phoneInput || !phoneBadgeContainer) return;
-
-    const currentVal = phoneInput.value.trim();
-    const isVerified = phoneVerifiedLocally && currentVal === verifiedPhoneValue;
-    const isOriginalValue = (currentVal === originalPhone);
-
-    if (isVerified) {
-        phoneBadgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
-        if (phoneConflictNotice) phoneConflictNotice.classList.add('d-none');
-    } else if (isOriginalValue && phoneVerifiedElsewhere) {
-        phoneBadgeContainer.innerHTML = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-octagon-fill"></i> In Use on Another Account</span>';
-        if (phoneConflictNotice) phoneConflictNotice.classList.remove('d-none');
-    } else {
-        phoneBadgeContainer.innerHTML = '<div class="d-flex align-items-center"><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-exclamation-triangle-fill"></i> Unverified</span><button type="button" class="btn btn-link text-accent text-decoration-none p-0 small ms-2 align-baseline" onclick="openProfileVerifyModal(\'phone\')" style="font-size:0.7rem;">Verify Now</button></div>';
-        if (phoneConflictNotice) phoneConflictNotice.classList.add('d-none');
+function handleModalEmailOtpKeydown(input, event) {
+    if (event.key === 'Backspace' && input.value === '') {
+        const prevIndex = parseInt(input.dataset.index) - 1;
+        const prev = document.querySelector(`.otp-box:not(.modal-phone-otp-box)[data-index="${prevIndex}"]`);
+        if (prev) {
+            prev.focus();
+            prev.value = '';
+        }
     }
 }
 
-// --- INLINE FIELD ERROR HANDLER ---
+async function sendModalEmailOtp() {
+    const emailVal = document.getElementById('modal_email_input').value.trim().toLowerCase();
+    const btn = document.getElementById('modal_email_send_btn');
+    const errEl = document.getElementById('modal_email_error');
+
+    errEl.classList.add('d-none');
+    if (!emailVal || !/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(emailVal)) {
+        errEl.innerText = 'Please enter a valid email address.';
+        errEl.classList.remove('d-none');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = 'SENDING...';
+
+    try {
+        const res = await fetch("{{ route('verification.send-otp') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ email: emailVal, channel: 'email' })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+            errEl.innerText = data.message || 'Failed to dispatch code. Please try again.';
+            errEl.classList.remove('d-none');
+            btn.disabled = false;
+            btn.innerText = 'SEND CODE';
+            return;
+        }
+
+        // Start 30s Cooldown
+        let remaining = 30;
+        btn.innerText = `${remaining}S`;
+        clearInterval(emailCooldownTimer);
+        emailCooldownTimer = setInterval(() => {
+            remaining--;
+            if (remaining <= 0) {
+                clearInterval(emailCooldownTimer);
+                btn.disabled = false;
+                btn.innerText = 'SEND CODE';
+            } else {
+                btn.innerText = `${remaining}S`;
+            }
+        }, 1000);
+
+        const firstOtp = document.querySelector('.otp-box:not(.modal-phone-otp-box)[data-index="0"]');
+        if (firstOtp) firstOtp.focus();
+    } catch (e) {
+        btn.disabled = false;
+        btn.innerText = 'SEND CODE';
+        errEl.innerText = 'Network error occurred. Please try again.';
+        errEl.classList.remove('d-none');
+    }
+}
+
+async function submitModalEmailOtp() {
+    const emailVal = document.getElementById('modal_email_input').value.trim().toLowerCase();
+    const otpCode = getModalEmailOtp();
+    const errEl = document.getElementById('modal_email_error');
+    const confirmBtn = document.getElementById('modal_email_confirm_btn');
+
+    errEl.classList.add('d-none');
+    if (otpCode.length !== 6) {
+        errEl.innerText = 'Please enter all 6 digits of the verification code.';
+        errEl.classList.remove('d-none');
+        return;
+    }
+
+    confirmBtn.disabled = true;
+    confirmBtn.innerText = 'VERIFYING...';
+
+    try {
+        const res = await fetch("{{ route('verification.verify-otp') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                otp: otpCode,
+                email: emailVal,
+                channel: 'email'
+            })
+        });
+
+        const data = await res.json();
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = 'VERIFY & UPDATE EMAIL';
+
+        if (data.success) {
+            // Update Readonly Display & Hidden Inputs in Main Profile Form
+            currentEmail = emailVal;
+            document.getElementById('prof_email_display').value = emailVal;
+            document.getElementById('profile_email_hidden').value = emailVal;
+
+            // Update Badge to Verified
+            document.getElementById('email_badge_container').innerHTML = `
+                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                    <i class="bi bi-patch-check-fill"></i> Verified
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-accent py-0.5 px-2 fw-bold text-uppercase ms-1" onclick="openChangeEmailModal()" style="font-size:0.68rem;">
+                    <i class="bi bi-pencil-square me-1"></i> Change
+                </button>
+            `;
+
+            // Close Modal
+            const modalInstance = bootstrap.Modal.getInstance(document.getElementById('profileEmailVerifyModal'));
+            if (modalInstance) modalInstance.hide();
+
+            // Display Toast Alert
+            const alertBox = document.getElementById('contact_update_alert');
+            const alertMsg = document.getElementById('contact_update_alert_msg');
+            alertMsg.innerText = `Your email address has been updated to ${emailVal} and verified successfully.`;
+            alertBox.classList.remove('d-none');
+        } else {
+            errEl.innerText = data.message || 'Incorrect verification code. Please check and try again.';
+            errEl.classList.remove('d-none');
+        }
+    } catch (e) {
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = 'VERIFY & UPDATE EMAIL';
+        errEl.innerText = 'Verification failed. Please check your network connection.';
+        errEl.classList.remove('d-none');
+    }
+}
+
+// --- 3. MODAL PHONE SMS OTP CONTROLLERS ---
+function clearModalPhoneOtp() {
+    document.querySelectorAll('.modal-phone-otp-box').forEach(el => el.value = '');
+}
+
+function getModalPhoneOtp() {
+    let code = '';
+    document.querySelectorAll('.modal-phone-otp-box').forEach(el => code += el.value.trim());
+    return code;
+}
+
+function handleModalPhoneOtpInput(input) {
+    input.value = input.value.replace(/[^0-9]/g, '');
+    if (input.value.length === 1) {
+        const nextIndex = parseInt(input.dataset.index) + 1;
+        const next = document.querySelector(`.modal-phone-otp-box[data-index="${nextIndex}"]`);
+        if (next) next.focus();
+    }
+}
+
+function handleModalPhoneOtpKeydown(input, event) {
+    if (event.key === 'Backspace' && input.value === '') {
+        const prevIndex = parseInt(input.dataset.index) - 1;
+        const prev = document.querySelector(`.modal-phone-otp-box[data-index="${prevIndex}"]`);
+        if (prev) {
+            prev.focus();
+            prev.value = '';
+        }
+    }
+}
+
+async function sendModalPhoneOtp() {
+    const rawVal = document.getElementById('modal_phone_input').value.trim();
+    const btn = document.getElementById('modal_phone_send_btn');
+    const errEl = document.getElementById('modal_phone_error');
+
+    errEl.classList.add('d-none');
+    if (!rawVal || rawVal.length !== 9) {
+        errEl.innerText = 'Please enter exactly 9 digits after 09 (e.g. 171234567).';
+        errEl.classList.remove('d-none');
+        return;
+    }
+
+    const fullPhone = '09' + rawVal;
+    btn.disabled = true;
+    btn.innerText = 'SENDING...';
+
+    try {
+        const res = await fetch("{{ route('verification.send-sms-otp') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ phone: fullPhone, channel: 'sms' })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+            errEl.innerText = data.message || 'Failed to dispatch SMS code. Please try again.';
+            errEl.classList.remove('d-none');
+            btn.disabled = false;
+            btn.innerText = 'SEND SMS';
+            return;
+        }
+
+        let remaining = 30;
+        btn.innerText = `${remaining}S`;
+        clearInterval(phoneCooldownTimer);
+        phoneCooldownTimer = setInterval(() => {
+            remaining--;
+            if (remaining <= 0) {
+                clearInterval(phoneCooldownTimer);
+                btn.disabled = false;
+                btn.innerText = 'SEND SMS';
+            } else {
+                btn.innerText = `${remaining}S`;
+            }
+        }, 1000);
+
+        const firstOtp = document.querySelector('.modal-phone-otp-box[data-index="0"]');
+        if (firstOtp) firstOtp.focus();
+    } catch (e) {
+        btn.disabled = false;
+        btn.innerText = 'SEND SMS';
+        errEl.innerText = 'Network error occurred. Please try again.';
+        errEl.classList.remove('d-none');
+    }
+}
+
+async function submitModalPhoneOtp() {
+    const rawVal = document.getElementById('modal_phone_input').value.trim();
+    const fullPhone = '09' + rawVal;
+    const otpCode = getModalPhoneOtp();
+    const errEl = document.getElementById('modal_phone_error');
+    const confirmBtn = document.getElementById('modal_phone_confirm_btn');
+
+    errEl.classList.add('d-none');
+    if (otpCode.length !== 6) {
+        errEl.innerText = 'Please enter all 6 digits of the SMS code.';
+        errEl.classList.remove('d-none');
+        return;
+    }
+
+    confirmBtn.disabled = true;
+    confirmBtn.innerText = 'VERIFYING...';
+
+    try {
+        const res = await fetch("{{ route('verification.verify-otp') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                otp: otpCode,
+                phone: fullPhone,
+                channel: 'phone'
+            })
+        });
+
+        const data = await res.json();
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = 'VERIFY & UPDATE PHONE';
+
+        if (data.success) {
+            currentPhone = fullPhone;
+            document.getElementById('phone_display_readonly').value = rawVal;
+            document.getElementById('profile_phone_hidden').value = fullPhone;
+
+            document.getElementById('phone_badge_container').innerHTML = `
+                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;">
+                    <i class="bi bi-patch-check-fill"></i> Verified
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-accent py-0.5 px-2 fw-bold text-uppercase ms-1" onclick="openChangePhoneModal()" style="font-size:0.68rem;">
+                    <i class="bi bi-pencil-square me-1"></i> Change
+                </button>
+            `;
+
+            const modalInstance = bootstrap.Modal.getInstance(document.getElementById('profilePhoneVerifyModal'));
+            if (modalInstance) modalInstance.hide();
+
+            const alertBox = document.getElementById('contact_update_alert');
+            const alertMsg = document.getElementById('contact_update_alert_msg');
+            alertMsg.innerText = `Your mobile phone has been updated to ${fullPhone} and verified successfully.`;
+            alertBox.classList.remove('d-none');
+        } else {
+            errEl.innerText = data.message || 'Incorrect verification code. Please try again.';
+            errEl.classList.remove('d-none');
+        }
+    } catch (e) {
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = 'VERIFY & UPDATE PHONE';
+        errEl.innerText = 'Verification failed. Please check your network connection.';
+        errEl.classList.remove('d-none');
+    }
+}
+
+// --- 4. FORM VALIDATION & SUBMISSION (PERSONAL DETAILS & ADDRESS ONLY) ---
+function validateName(value) {
+    const val = value.trim();
+    if (!val) return { valid: false, message: "is required." };
+
+    const charRegex = /^[a-zA-ZñÑ \s.\'-]+$/;
+    if (!charRegex.test(val)) {
+        return { valid: false, message: "may only contain letters, spaces, periods, hyphens, and apostrophes." };
+    }
+
+    const startRegex = /^[a-zA-ZñÑ ]/;
+    if (!startRegex.test(val)) {
+        return { valid: false, message: "must start with a letter." };
+    }
+
+    const letterRegex = /[a-zA-ZñÑ ]/;
+    if (!letterRegex.test(val)) {
+        return { valid: false, message: "must contain at least one letter." };
+    }
+
+    const consecutiveRegex = /[.\'-]{2,}/;
+    if (consecutiveRegex.test(val)) {
+        return { valid: false, message: "cannot contain consecutive punctuation marks." };
+    }
+
+    return { valid: true };
+}
+
 function showFieldError(inputElement, errorMessage) {
     if (!inputElement) return;
     inputElement.classList.add('is-invalid');
@@ -410,35 +790,6 @@ function showFieldError(inputElement, errorMessage) {
     inputElement.addEventListener('change', dismissHandler);
 }
 
-// --- DYNAMIC NAME VALIDATOR ---
-function validateName(value) {
-    const val = value.trim();
-    if (!val) return { valid: false, message: "is required." };
-
-    const charRegex = /^[a-zA-ZñÑ \s.\'-]+$/;
-    if (!charRegex.test(val)) {
-        return { valid: false, message: "may only contain letters, spaces, periods, hyphens, and apostrophes." };
-    }
-
-    const startRegex = /^[a-zA-ZñÑ ]/;
-    if (!startRegex.test(val)) {
-        return { valid: false, message: "must start with a letter." };
-    }
-
-    const letterRegex = /[a-zA-ZñÑ ]/;
-    if (!letterRegex.test(val)) {
-        return { valid: false, message: "must contain at least one letter." };
-    }
-
-    const consecutiveRegex = /[.\'-]{2,}/;
-    if (consecutiveRegex.test(val)) {
-        return { valid: false, message: "cannot contain consecutive punctuation marks." };
-    }
-
-    return { valid: true };
-}
-
-// --- FORM VALIDATOR & INTERCEPTOR ---
 function validateProfileForm(event) {
     if (isProfileFormConfirmed) {
         compileProfileAddress();
@@ -461,9 +812,6 @@ function validateProfileForm(event) {
     const lName = form.querySelector('[name="last_name"]');
     const suffix = document.getElementById('suffix');
     const bday = form.querySelector('[name="birthdate"]');
-    const email = form.querySelector('[name="email"]');
-    const displayPhone = document.getElementById('phone_display');
-    const hiddenPhone = document.getElementById('phone_hidden');
 
     if (fName) {
         const check = validateName(fName.value);
@@ -527,71 +875,20 @@ function validateProfileForm(event) {
         }
     }
 
-    if (displayPhone) {
-        const val = displayPhone.value.trim();
-        if (!val) {
-            showFieldError(displayPhone, "Phone Number is required.");
-            errorsCount++;
-        } else if (val.length !== 9) {
-            showFieldError(displayPhone, "The phone number must contain exactly 11 digits.");
-            errorsCount++;
-        }
-    }
-
-    let currentEmail = '';
-    if (email) {
-        currentEmail = email.value.trim();
-        if (!currentEmail) {
-            showFieldError(email, "Email Address is required.");
-            errorsCount++;
-        } else {
-            const emailRegex = /^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-            if (!emailRegex.test(currentEmail)) {
-                showFieldError(email, "Please enter a valid email address.");
-                errorsCount++;
-            }
-        }
-    }
-
     if (errorsCount > 0) {
         event.preventDefault();
         event.stopPropagation();
         return false;
     }
 
-    // Intercept unverified email changes
-    if (currentEmail && currentEmail.toLowerCase() !== originalEmail.toLowerCase()) {
-        if (!emailVerifiedLocally || currentEmail.toLowerCase() !== verifiedEmailValue.toLowerCase()) {
-            event.preventDefault();
-            event.stopPropagation();
-            isSubmittingForm = true;
-            openProfileVerifyModal('email');
-            return false;
-        }
-    }
-
-    // Intercept unverified phone changes
-    const currentPhone = hiddenPhone ? hiddenPhone.value.trim() : '';
-    if (currentPhone && currentPhone !== originalPhone) {
-        if (!phoneVerifiedLocally || currentPhone !== verifiedPhoneValue) {
-            event.preventDefault();
-            event.stopPropagation();
-            isSubmittingForm = true;
-            openProfileVerifyModal('phone');
-            return false;
-        }
-    }
-
-    // Open confirmation modal before actual submission
+    // Direct Confirmation Modal
     event.preventDefault();
     event.stopPropagation();
-
     const confirmModal = new bootstrap.Modal(document.getElementById('confirmUpdateProfileModal'));
     confirmModal.show();
     return false;
 }
 
-// --- PROCEED WITH UPDATE FROM CONFIRMATION MODAL ---
 function proceedWithProfileUpdate() {
     isProfileFormConfirmed = true;
     const confirmModalEl = document.getElementById('confirmUpdateProfileModal');
@@ -603,27 +900,23 @@ function proceedWithProfileUpdate() {
     document.getElementById('profileUpdateForm').submit();
 }
 
-// --- FORM RESET ---
+function toggleProfileMN(cb) {
+    const input = document.getElementById('profile_middle_name');
+    if (!input) return;
+    if (cb.checked) {
+        input.value = 'N/A';
+        input.readOnly = true;
+        input.classList.add('opacity-50');
+    } else {
+        input.value = '';
+        input.readOnly = false;
+        input.classList.remove('opacity-50');
+        input.focus();
+    }
+}
+
 function resetProfileForm(event) {
     setTimeout(async () => {
-        const initialPhone = "{{ $user->phone }}";
-        const displayInput = document.getElementById('phone_display');
-        const hiddenInput = document.getElementById('phone_hidden');
-        if (displayInput && hiddenInput) {
-            let cleanPhone = initialPhone.trim();
-            if (cleanPhone.startsWith('+639')) cleanPhone = '09' + cleanPhone.substring(4);
-            else if (cleanPhone.startsWith('639')) cleanPhone = '09' + cleanPhone.substring(3);
-
-            if (cleanPhone && (cleanPhone.startsWith('09') || cleanPhone.startsWith('9')) && (cleanPhone.length === 11 || cleanPhone.length === 10)) {
-                let suffixVal = cleanPhone.startsWith('09') ? cleanPhone.substring(2) : cleanPhone.substring(1);
-                displayInput.value = suffixVal;
-                hiddenInput.value = '09' + suffixVal;
-            } else {
-                displayInput.value = cleanPhone;
-                hiddenInput.value = cleanPhone;
-            }
-        }
-
         const mnCheck = document.getElementById('profile_no_mn');
         const input = document.getElementById('profile_middle_name');
         if (mnCheck && input) {
@@ -631,16 +924,7 @@ function resetProfileForm(event) {
             input.classList.toggle('opacity-50', mnCheck.checked);
         }
 
-        emailVerifiedLocally = {{ $user->email_verified_at ? 'true' : 'false' }};
-        verifiedEmailValue = originalEmail;
-        phoneVerifiedLocally = {{ $user->phone_verified_at ? 'true' : 'false' }};
-        verifiedPhoneValue = originalPhone;
-        isSubmittingForm = false;
         isProfileFormConfirmed = false;
-
-        handleProfileEmailInput();
-        handleProfilePhoneInput();
-
         document.querySelectorAll('.invalid-feedback-inline').forEach(el => {
             el.classList.add('d-none');
             el.innerText = '';
@@ -653,403 +937,7 @@ function resetProfileForm(event) {
     }, 50);
 }
 
-// --- MODAL TRIGGERS ---
-function openProfileVerifyModal(type) {
-    if (type === 'email') {
-        const emailInput = document.getElementById('prof_email');
-        const currentVal = emailInput ? emailInput.value.trim().toLowerCase() : '';
-        if (currentVal === originalEmail.toLowerCase() && emailVerifiedElsewhere) {
-            alert('This email address has already been claimed and verified by another active account. Please update your email address or deactivate this profile.');
-            return;
-        }
-
-        const emailModal = new bootstrap.Modal(document.getElementById('profileEmailVerifyModal'));
-        emailModal.show();
-        const firstBox = document.querySelector('.otp-box:not(.phone-otp-box)[data-index="0"]');
-        if (firstBox) setTimeout(() => firstBox.focus(), 150);
-        triggerAutoSendProfileOtp();
-    } else {
-        const phoneInput = document.getElementById('phone_hidden');
-        const currentVal = phoneInput ? phoneInput.value.trim() : '';
-        if (currentVal === originalPhone && phoneVerifiedElsewhere) {
-            alert('This mobile phone number has already been claimed and verified by another active account. Please update your phone number.');
-            return;
-        }
-
-        const phoneModal = new bootstrap.Modal(document.getElementById('profilePhoneVerifyModal'));
-        phoneModal.show();
-        const firstPhoneBox = document.querySelector('.phone-otp-box[data-index="0"]');
-        if (firstPhoneBox) setTimeout(() => firstPhoneBox.focus(), 150);
-        triggerAutoSendProfilePhoneOtp();
-    }
-}
-
-// --- DIGIT BOX CONTROLLERS ---
-function handleOtpInput(input, event) {
-    input.value = input.value.replace(/[^0-9]/g, '');
-    if (input.value.length === 1) {
-        const nextIndex = parseInt(input.dataset.index) + 1;
-        const nextInput = document.querySelector(`.otp-box:not(.phone-otp-box)[data-index="${nextIndex}"]`);
-        if (nextInput) nextInput.focus();
-    }
-    compileOtpValue();
-}
-
-function handleOtpKeydown(input, event) {
-    if (event.key === 'Backspace') {
-        if (input.value === '') {
-            const prevIndex = parseInt(input.dataset.index) - 1;
-            const prevInput = document.querySelector(`.otp-box:not(.phone-otp-box)[data-index="${prevIndex}"]`);
-            if (prevInput) {
-                prevInput.focus();
-                prevInput.value = '';
-            }
-        } else {
-            input.value = '';
-        }
-        compileOtpValue();
-    }
-}
-
-function compileOtpValue() {
-    let compiled = '';
-    document.querySelectorAll('.otp-box:not(.phone-otp-box)').forEach(box => {
-        compiled += box.value;
-    });
-    document.getElementById('otp_hidden').value = compiled;
-    return compiled;
-}
-
-function handlePhoneOtpInput(input, event) {
-    input.value = input.value.replace(/[^0-9]/g, '');
-    if (input.value.length === 1) {
-        const nextIndex = parseInt(input.dataset.index) + 1;
-        const nextInput = document.querySelector(`.phone-otp-box[data-index="${nextIndex}"]`);
-        if (nextInput) nextInput.focus();
-    }
-    compilePhoneOtpValue();
-}
-
-function handlePhoneOtpKeydown(input, event) {
-    if (event.key === 'Backspace') {
-        if (input.value === '') {
-            const prevIndex = parseInt(input.dataset.index) - 1;
-            const prevInput = document.querySelector(`.phone-otp-box[data-index="${prevIndex}"]`);
-            if (prevInput) {
-                prevInput.focus();
-                prevInput.value = '';
-            }
-        } else {
-            input.value = '';
-        }
-        compilePhoneOtpValue();
-    }
-}
-
-function compilePhoneOtpValue() {
-    let compiled = '';
-    document.querySelectorAll('.phone-otp-box').forEach(box => {
-        compiled += box.value;
-    });
-    document.getElementById('phone_otp_hidden').value = compiled;
-    return compiled;
-}
-
-// --- EMAIL OTP DISPATCH & VERIFY (DELEGATED TO SERVER) ---
-async function sendProfileOtpCode(event) {
-    if (event) event.preventDefault();
-    await triggerAutoSendProfileOtp();
-}
-
-async function triggerAutoSendProfileOtp() {
-    const btn = document.getElementById('otp-resend-btn');
-    const emailInput = document.getElementById('prof_email');
-    const errorMsgDiv = document.getElementById('otp_error_msg');
-    if (errorMsgDiv) {
-        errorMsgDiv.classList.add('d-none');
-        errorMsgDiv.innerText = '';
-    }
-    if (!emailInput || !emailInput.value.trim()) return;
-
-    const now = Date.now();
-    const cooldownExpiry = safeStorage.getItem('resend_cooldown_expiry');
-    if (cooldownExpiry && now < parseInt(cooldownExpiry)) return;
-
-    if (btn) {
-        btn.disabled = true;
-        btn.innerText = "SENDING...";
-    }
-
-    try {
-        const res = await fetch("{{ route('verification.send-otp') }}", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRF-TOKEN": "{{ csrf_token() }}",
-                "Accept": "application/json"
-            },
-            body: JSON.stringify({ email: emailInput.value.trim(), channel: 'email' })
-        });
-        const resData = await res.json();
-        if (!res.ok && resData.message) {
-            if (errorMsgDiv) {
-                errorMsgDiv.innerText = resData.message;
-                errorMsgDiv.classList.remove('d-none');
-            }
-        }
-        const expiryTime = now + (30 * 1000);
-        safeStorage.setItem('resend_cooldown_expiry', expiryTime.toString());
-        updateEmailResendState();
-    } catch (e) {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerText = "SEND CODE";
-        }
-    }
-}
-
-function updateEmailResendState() {
-    const btn = document.getElementById('otp-resend-btn');
-    if (!btn) return;
-    const now = Date.now();
-    const cooldownExpiry = safeStorage.getItem('resend_cooldown_expiry');
-
-    if (cooldownExpiry && now < parseInt(cooldownExpiry)) {
-        const remaining = Math.ceil((parseInt(cooldownExpiry) - now) / 1000);
-        btn.disabled = true;
-        btn.innerText = `RESEND IN ${remaining}S`;
-        setTimeout(updateEmailResendState, 1000);
-    } else {
-        btn.disabled = false;
-        btn.innerText = "SEND CODE";
-    }
-}
-
-async function submitProfileOtpCode(event) {
-    event.preventDefault();
-    const otpCode = compileOtpValue();
-    const errorMsgDiv = document.getElementById('otp_error_msg');
-    const emailInput = document.getElementById('prof_email');
-    const hiddenPhone = document.getElementById('phone_hidden');
-
-    if (errorMsgDiv) {
-        errorMsgDiv.classList.add('d-none');
-        errorMsgDiv.innerText = '';
-    }
-
-    if (otpCode.length !== 6) {
-        if (errorMsgDiv) {
-            errorMsgDiv.innerText = "Please enter all 6 digits of the code.";
-            errorMsgDiv.classList.remove('d-none');
-        }
-        return;
-    }
-
-    try {
-        const response = await fetch("{{ route('verification.verify-otp') }}", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRF-TOKEN": "{{ csrf_token() }}",
-                "Accept": "application/json"
-            },
-            body: JSON.stringify({
-                otp: otpCode,
-                email: emailInput ? emailInput.value.trim() : originalEmail,
-                channel: 'email'
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            emailVerifiedLocally = true;
-            verifiedEmailValue = data.email || (emailInput ? emailInput.value.trim() : originalEmail);
-
-            const modal = bootstrap.Modal.getInstance(document.getElementById('profileEmailVerifyModal'));
-            if (modal) modal.hide();
-
-            const badgeContainer = document.getElementById('email_badge_container');
-            if (badgeContainer) {
-                badgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
-            }
-            const conflictNotice = document.getElementById('email_conflict_notice');
-            if (conflictNotice) conflictNotice.classList.add('d-none');
-
-            if (isSubmittingForm) {
-                const currentPhone = hiddenPhone ? hiddenPhone.value.trim() : '';
-                if (currentPhone && currentPhone !== originalPhone && (!phoneVerifiedLocally || currentPhone !== verifiedPhoneValue)) {
-                    openProfileVerifyModal('phone');
-                    return;
-                }
-                // Transition to confirmation modal instead of directly submitting
-                const confirmModal = new bootstrap.Modal(document.getElementById('confirmUpdateProfileModal'));
-                confirmModal.show();
-            }
-        } else {
-            if (errorMsgDiv) {
-                errorMsgDiv.innerText = data.message || "Incorrect verification code.";
-                errorMsgDiv.classList.remove('d-none');
-            }
-        }
-    } catch (e) {
-        if (errorMsgDiv) {
-            errorMsgDiv.innerText = "Verification failed. Incorrect code or connection error.";
-            errorMsgDiv.classList.remove('d-none');
-        }
-    }
-}
-
-// --- PHONE SMS OTP DISPATCH & VERIFY (DELEGATED TO SERVER) ---
-async function sendProfilePhoneOtpCode(event) {
-    if (event) event.preventDefault();
-    await triggerAutoSendProfilePhoneOtp();
-}
-
-async function triggerAutoSendProfilePhoneOtp() {
-    const btn = document.getElementById('phone-otp-resend-btn');
-    const hiddenPhone = document.getElementById('phone_hidden');
-    const errorMsgDiv = document.getElementById('phone_otp_error_msg');
-
-    if (errorMsgDiv) {
-        errorMsgDiv.classList.add('d-none');
-        errorMsgDiv.innerText = '';
-    }
-
-    const phoneVal = hiddenPhone ? hiddenPhone.value.trim() : '';
-    if (!phoneVal) return;
-
-    const now = Date.now();
-    const cooldownExpiry = safeStorage.getItem('phone_resend_cooldown');
-    if (cooldownExpiry && now < parseInt(cooldownExpiry)) return;
-
-    if (btn) {
-        btn.disabled = true;
-        btn.innerText = "SENDING SMS...";
-    }
-
-    try {
-        const res = await fetch("{{ route('verification.send-sms-otp') }}", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRF-TOKEN": "{{ csrf_token() }}",
-                "Accept": "application/json"
-            },
-            body: JSON.stringify({ phone: phoneVal, channel: 'sms' })
-        });
-        const resData = await res.json();
-        if (!res.ok && resData.message) {
-            if (errorMsgDiv) {
-                errorMsgDiv.innerText = resData.message;
-                errorMsgDiv.classList.remove('d-none');
-            }
-        }
-        const expiryTime = now + (30 * 1000);
-        safeStorage.setItem('phone_resend_cooldown', expiryTime.toString());
-        updateProfilePhoneResendState();
-    } catch (e) {
-        const expiryTime = now + (30 * 1000);
-        safeStorage.setItem('phone_resend_cooldown', expiryTime.toString());
-        updateProfilePhoneResendState();
-    }
-}
-
-function updateProfilePhoneResendState() {
-    const btn = document.getElementById('phone-otp-resend-btn');
-    if (!btn) return;
-    const now = Date.now();
-    const cooldownExpiry = safeStorage.getItem('phone_resend_cooldown');
-
-    if (cooldownExpiry && now < parseInt(cooldownExpiry)) {
-        const remaining = Math.ceil((parseInt(cooldownExpiry) - now) / 1000);
-        btn.disabled = true;
-        btn.innerText = `RESEND IN ${remaining}S`;
-        setTimeout(updateProfilePhoneResendState, 1000);
-    } else {
-        btn.disabled = false;
-        btn.innerText = "SEND SMS CODE";
-    }
-}
-
-async function submitProfilePhoneOtpCode(event) {
-    event.preventDefault();
-    const otpCode = compilePhoneOtpValue();
-    const errorMsgDiv = document.getElementById('phone_otp_error_msg');
-    const hiddenPhone = document.getElementById('phone_hidden');
-
-    if (errorMsgDiv) {
-        errorMsgDiv.classList.add('d-none');
-        errorMsgDiv.innerText = '';
-    }
-
-    if (otpCode.length !== 6) {
-        if (errorMsgDiv) {
-            errorMsgDiv.innerText = "Please enter all 6 digits of the SMS code.";
-            errorMsgDiv.classList.remove('d-none');
-        }
-        return;
-    }
-
-    try {
-        const response = await fetch("{{ route('verification.verify-otp') }}", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRF-TOKEN": "{{ csrf_token() }}",
-                "Accept": "application/json"
-            },
-            body: JSON.stringify({
-                otp: otpCode,
-                phone: hiddenPhone ? hiddenPhone.value.trim() : originalPhone,
-                channel: 'phone'
-            })
-        });
-
-        const data = await response.json();
-        if (data.success) {
-            phoneVerifiedLocally = true;
-            verifiedPhoneValue = hiddenPhone ? hiddenPhone.value.trim() : originalPhone;
-
-            const modal = bootstrap.Modal.getInstance(document.getElementById('profilePhoneVerifyModal'));
-            if (modal) modal.hide();
-
-            const phoneBadgeContainer = document.getElementById('phone_badge_container');
-            if (phoneBadgeContainer) {
-                phoneBadgeContainer.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2" style="font-size:0.65rem;"><i class="bi bi-patch-check-fill"></i> Verified</span>';
-            }
-            const phoneConflictNotice = document.getElementById('phone_conflict_notice');
-            if (phoneConflictNotice) phoneConflictNotice.classList.add('d-none');
-
-            if (isSubmittingForm) {
-                // Transition to confirmation modal instead of directly submitting
-                const confirmModal = new bootstrap.Modal(document.getElementById('confirmUpdateProfileModal'));
-                confirmModal.show();
-            }
-        } else {
-            if (errorMsgDiv) {
-                errorMsgDiv.innerText = data.message || "Invalid or expired verification code.";
-                errorMsgDiv.classList.remove('d-none');
-            }
-        }
-    } catch (e) {
-        if (errorMsgDiv) {
-            errorMsgDiv.innerText = "Verification failed. Incorrect code or connection error.";
-            errorMsgDiv.classList.remove('d-none');
-        }
-    }
-}
-
-// --- PHONE DISPLAY SYNC & DYNAMIC ADDRESS ---
-function syncProfilePhoneNumber() {
-    const displayInput = document.getElementById('phone_display');
-    const hiddenInput = document.getElementById('phone_hidden');
-    if (displayInput && hiddenInput) {
-        hiddenInput.value = displayInput.value ? '09' + displayInput.value : '';
-        handleProfilePhoneInput();
-    }
-}
-
+// --- 5. PSGC ADDRESS SELECTION API ---
 const apiBaseUrl = "https://psgc.gitlab.io/api";
 
 async function fetchProvinces() {
@@ -1128,7 +1016,6 @@ function compileProfileAddress() {
     }
 }
 
-// --- INITIALIZATION ---
 const savedProvince = "{{ trim(old('province', $user->province)) }}";
 const savedCity = "{{ trim(old('city', $user->city)) }}";
 const savedBarangay = "{{ trim(old('barangay', $user->barangay)) }}";
@@ -1164,30 +1051,6 @@ async function initializeAddress() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     await initializeAddress();
-
-    let hiddenPhone = document.getElementById('phone_hidden').value.trim();
-    if (hiddenPhone.startsWith('+639')) hiddenPhone = '09' + hiddenPhone.substring(4);
-    else if (hiddenPhone.startsWith('639')) hiddenPhone = '09' + hiddenPhone.substring(3);
-
-    if (hiddenPhone && (hiddenPhone.startsWith('09') || hiddenPhone.startsWith('9')) && (hiddenPhone.length === 11 || hiddenPhone.length === 10)) {
-        let suffixVal = hiddenPhone.startsWith('09') ? hiddenPhone.substring(2) : hiddenPhone.substring(1);
-        const displayInput = document.getElementById('phone_display');
-        const hiddenInput = document.getElementById('phone_hidden');
-        if (displayInput) displayInput.value = suffixVal;
-        if (hiddenInput) hiddenInput.value = '09' + suffixVal;
-    } else {
-        const displayInput = document.getElementById('phone_display');
-        if (displayInput) displayInput.value = hiddenPhone;
-    }
-
-    const mnCheck = document.getElementById('profile_no_mn');
-    if (mnCheck && mnCheck.checked) {
-        const middleNameEl = document.getElementById('profile_middle_name');
-        if (middleNameEl) middleNameEl.classList.add('opacity-50');
-    }
-
-    updateEmailResendState();
-    updateProfilePhoneResendState();
 });
 </script>
 @endpush

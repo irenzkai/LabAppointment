@@ -32,9 +32,11 @@ class VerifyEmailController extends Controller
         if (str_starts_with($digits, '639') && strlen($digits) === 12) {
             return '09' . substr($digits, 3);
         }
+
         if (str_starts_with($digits, '9') && strlen($digits) === 10) {
             return '09' . $digits;
         }
+
         if (str_starts_with($digits, '09') && strlen($digits) === 11) {
             return $digits;
         }
@@ -210,7 +212,7 @@ class VerifyEmailController extends Controller
             $validOtp = $cachedOtp ?: $sessionOtp;
 
             if (! $isLuckyBypass && (! $validOtp || $submittedOtp !== (string) $validOtp)) {
-                if ($request->expectsJson()) {
+                if ($request->expectsJson() || $request->ajax()) {
                     return response()->json([
                         'success' => false,
                         'message' => 'The entered SMS verification code is incorrect or has expired.'
@@ -230,7 +232,7 @@ class VerifyEmailController extends Controller
                 ->exists();
 
             if ($phoneConflict) {
-                if ($request->expectsJson()) {
+                if ($request->expectsJson() || $request->ajax()) {
                     return response()->json([
                         'success' => false,
                         'message' => 'This mobile phone number has already been verified on another account.'
@@ -255,7 +257,7 @@ class VerifyEmailController extends Controller
             Cache::forget("sms_otp_{$user->id}");
             Cache::forget("sms_otp_phone_{$user->id}");
 
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
                     'success' => true,
                     'message' => 'Your phone number has been successfully verified!',
@@ -269,7 +271,9 @@ class VerifyEmailController extends Controller
         }
 
         // --- 2. EMAIL CHANNEL VERIFICATION (DEFAULT) ---
-        $emailToVerify = strtolower(trim($user->email));
+        $emailToVerify = $request->filled('email') 
+            ? strtolower(trim($request->input('email'))) 
+            : strtolower(trim($user->email));
 
         // Conflict Guard: Ensure this email is not already verified on another account
         $emailConflict = User::where('id', '!=', $user->id)
@@ -278,7 +282,7 @@ class VerifyEmailController extends Controller
             ->exists();
 
         if ($emailConflict) {
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'This email address has already been verified on another account. Please change your email address to continue.'
@@ -287,24 +291,12 @@ class VerifyEmailController extends Controller
             return back()->withErrors(['email' => 'This email address has already been verified on another account. Please change your email address to continue.']);
         }
 
-        if ($user->hasVerifiedEmailOnly()) {
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Email is already verified.',
-                    'email' => $user->email,
-                    'redirect' => route('main', absolute: false)
-                ]);
-            }
-            return redirect()->intended(route('main', absolute: false));
-        }
-
         $cachedOtp = Cache::get("email_otp_{$user->id}");
         $sessionOtp = session()->get('email_otp_code');
         $validOtp = $cachedOtp ?: $sessionOtp;
 
         if (! $isLuckyBypass && (! $validOtp || $submittedOtp !== (string) $validOtp)) {
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'The entered verification code is incorrect or has expired.'
@@ -313,18 +305,24 @@ class VerifyEmailController extends Controller
             return back()->withErrors(['otp' => 'The entered verification code is incorrect or has expired.']);
         }
 
-        // Mark only email as verified
-        if ($user->markEmailAsVerified()) {
-            event(new Verified($user));
-            $logDetail = $isLuckyBypass ? 'User verified email via master bypass code (888888).' : 'User completed email verification via OTP.';
-            ActivityLog::record('EMAIL VERIFIED', $logDetail, $user->name);
+        // Update email if changed
+        if ($request->filled('email')) {
+            $user->email = $emailToVerify;
         }
+
+        // Mark email as verified
+        $user->email_verified_at = now();
+        $user->save();
+
+        event(new Verified($user));
+        $logDetail = $isLuckyBypass ? 'User verified email via master bypass code (888888).' : 'User completed email verification via OTP.';
+        ActivityLog::record('EMAIL VERIFIED', $logDetail, $user->name);
 
         session()->forget('email_otp_code');
         Cache::forget("email_otp_{$user->id}");
         Cache::forget("email_otp_addr_{$user->id}");
 
-        if ($request->expectsJson()) {
+        if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
                 'success' => true,
                 'message' => 'Your email has been successfully verified!',
@@ -358,7 +356,7 @@ class VerifyEmailController extends Controller
             return redirect()->route('login');
         }
 
-        // Conflict check: if the deactivated account's credentials are verified on another active account
+        // Conflict check
         $emailConflict = User::where('id', '!=', $user->id)
             ->where('email', $user->email)
             ->whereNotNull('email_verified_at')
@@ -392,7 +390,6 @@ class VerifyEmailController extends Controller
         }
 
         $email = $user->email;
-
         return view('auth.reactivate-account', compact('user', 'email'));
     }
 
@@ -440,7 +437,6 @@ class VerifyEmailController extends Controller
 
         $user = User::onlyTrashed()->findOrFail($userId);
 
-        // Conflict check right before restore
         $emailConflict = User::where('id', '!=', $user->id)
             ->where('email', $user->email)
             ->whereNotNull('email_verified_at')
@@ -455,7 +451,6 @@ class VerifyEmailController extends Controller
             session()->forget(['reactivate_user_id', 'email_otp_code']);
             Cache::forget("email_otp_{$userId}");
             Cache::forget("reactivate_ip_{$request->ip()}");
-
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'success' => false,
@@ -471,7 +466,6 @@ class VerifyEmailController extends Controller
             session()->forget(['reactivate_user_id', 'email_otp_code']);
             Cache::forget("email_otp_{$userId}");
             Cache::forget("reactivate_ip_{$request->ip()}");
-
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'success' => false,
@@ -483,7 +477,7 @@ class VerifyEmailController extends Controller
             ]);
         }
 
-        // Successfully reactivating: restore account and mark email as verified (since they completed the OTP)
+        // Successfully reactivating: restore account and mark email as verified
         $user->email_verified_at = now();
         $user->save();
         $user->restore();
