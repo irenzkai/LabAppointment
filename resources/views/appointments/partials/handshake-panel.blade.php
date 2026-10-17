@@ -1,5 +1,8 @@
 @php
     $currentStatus = $status ?? ($labHistory->permission_status ?? 'none');
+    $targetUserId = isset($targetUser) ? $targetUser->id : Auth::id();
+    $isSelf = (Auth::id() === $targetUserId);
+    $isPatientView = Auth::user()->isPatient() || $isSelf;
 @endphp
 
 @if($currentStatus == 'none' || empty($currentStatus))
@@ -11,7 +14,7 @@
         
         <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Historical Data Connection</h5>
         
-        @if(Auth::user()->isPatient())
+        @if($isPatientView)
             <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
                 Your physical clinic records have not been digitized yet. Submit a request to have our laboratory team initialize your archival folder.
             </p>
@@ -25,7 +28,7 @@
             <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
                 This patient has not requested a historical data import yet. Clinical protocol requires patient consent before historical physical records can be digitized. Send an authorization request to the patient's portal.
             </p>
-            <form action="{{ route('history.staff-trigger', $targetUser->id) }}" method="POST" class="m-0">
+            <form action="{{ route('history.staff-trigger', $targetUserId) }}" method="POST" class="m-0">
                 @csrf
                 <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
                     <i class="bi bi-envelope-paper-fill me-1.5"></i> ASK PATIENT FOR PERMISSION
@@ -41,18 +44,37 @@
             <i class="bi bi-person-check-fill fs-2 text-info"></i>
         </div>
         
-        @if(Auth::user()->isEmployee())
+        @if(Auth::user()->isEmployee() && !$isSelf)
+            {{-- Staff viewing another patient's request --}}
             <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Import Request Received</h5>
             <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
                 The patient has authorized and requested to have their physical laboratory history digitized. You may now initialize and open the manual entry compilation tool.
             </p>
-            <form action="{{ route('history.accept', ['user' => $targetUser->id]) }}" method="POST" class="m-0">
+            <form action="{{ route('history.accept', ['user' => $targetUserId]) }}" method="POST" class="m-0">
                 @csrf
                 <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
                     <i class="bi bi-check-circle-fill me-1.5"></i> ACCEPT & OPEN IMPORT TOOL
                 </button>
             </form>
+        @elseif($isSelf && Auth::user()->isEmployee())
+            {{-- Staff viewing their own personal request --}}
+            <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Awaiting Laboratory Review</h5>
+            <p class="text-muted small mb-3 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
+                Your request was successfully dispatched. As a clinical team member, you may also proceed directly to initialize your own records.
+            </p>
+            <div class="d-flex flex-column align-items-center gap-2">
+                <div class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 py-2 px-3 uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+                    <i class="bi bi-hourglass-split me-1"></i> STATUS: PENDING CLINICAL REVIEW
+                </div>
+                <form action="{{ route('history.accept', ['user' => $targetUserId]) }}" method="POST" class="m-0 mt-2">
+                    @csrf
+                    <button type="submit" class="btn-custom btn-outline-accent py-2 px-4 fw-bold uppercase shadow-sm" style="font-size: 0.78rem;">
+                        <i class="bi bi-check-circle-fill me-1.5"></i> INITIALIZE & OPEN IMPORT TOOL
+                    </button>
+                </form>
+            </div>
         @else
+            {{-- Patient viewing their own pending request --}}
             <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Awaiting Laboratory Review</h5>
             <p class="text-muted small mb-3 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
                 Your request was successfully dispatched. Please wait while a laboratory technologist reviews and initializes your profile archive.
@@ -70,12 +92,12 @@
             <i class="bi bi-shield-exclamation fs-2 text-warning"></i>
         </div>
         
-        @if(Auth::user()->isPatient())
+        @if($isPatientView)
             <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Permission Requested</h5>
             <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
                 The laboratory is requesting your authorization to digitize and link your previous physical clinical examination records. Do you authorize this request?
             </p>
-            <form action="{{ route('history.accept') }}" method="POST" class="m-0">
+            <form action="{{ route('history.accept', ['user' => $targetUserId]) }}" method="POST" class="m-0">
                 @csrf
                 <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
                     <i class="bi bi-check2-circle me-1.5"></i> ALLOW & UNLOCK DIGITIZATION

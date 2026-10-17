@@ -10,6 +10,11 @@ if (!isset($availableServices)) {
 // Protect controller-passed $existingRecords from being clobbered by empty dynamic_data array
 $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? array_reverse($labHistory->dynamic_data) : []);
 $status = $labHistory->permission_status ?? 'none';
+
+// Check if the current user is looking at their own personal clinical archive
+$isSelf = (Auth::id() === $targetUser->id);
+// When viewing one's own archive, treat it as a patient function even for staff or admins
+$isPatientView = Auth::user()->isPatient() || $isSelf;
 @endphp
 
 <div class="text-start animate-page" id="patient-archive-page">
@@ -125,8 +130,8 @@ $status = $labHistory->permission_status ?? 'none';
                             </button>
                         @endif
 
-                        {{-- "Notify Patient" action button for staff inside the sidebar --}}
-                        @if(Auth::user()->isEmployee() && count($existingRecords) > 0)
+                        {{-- "Notify Patient" action button for staff inside the sidebar (hidden if looking at own profile) --}}
+                        @if(Auth::user()->isEmployee() && count($existingRecords) > 0 && !$isSelf)
                             <form action="{{ route('history.notify-encoded', $targetUser->id) }}" method="POST" class="mb-3">
                                 @csrf
                                 <button type="submit" class="btn-custom btn-outline-accent w-100 py-2 fw-bold uppercase shadow-sm">
@@ -285,7 +290,7 @@ $status = $labHistory->permission_status ?? 'none';
                 <div class="w-100 my-2" id="handshake-box-container">
                     <div class="handshake-box-wrapper w-100">
                         @if(view()->exists('appointments.partials.handshake-panel'))
-                            @include('appointments.partials.handshake-panel')
+                            @include('appointments.partials.handshake-panel', ['isSelf' => $isSelf, 'isPatientView' => $isPatientView])
                         @else
                             {{-- Resilient Fallback Request Box --}}
                             <div class="card p-4 p-md-5 text-center border-secondary shadow-sm w-100" style="background-color: var(--bg-card); border-radius: 16px;">
@@ -294,17 +299,24 @@ $status = $labHistory->permission_status ?? 'none';
                                 </div>
                                 <h5 class="text-main fw-bold mb-2 uppercase" style="font-size: 1.25rem;">Historical Data Connection</h5>
                                 <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
-                                    @if(Auth::user()->isPatient())
+                                    @if($isPatientView)
                                         Your physical clinic records have not been digitized yet. Submit a request to have our laboratory team initialize your archival folder.
                                     @else
                                         This patient has not requested a historical data import yet. Clinical protocol requires patient consent before historical physical records can be digitized. Send an authorization request to the patient's portal.
                                     @endif
                                 </p>
-                                @if(Auth::user()->isPatient())
+                                @if($isPatientView)
                                     @if($status === 'pending_staff')
                                         <div class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 py-2 px-3 uppercase fw-bold" style="font-size: 0.72rem;">
                                             <i class="bi bi-hourglass-split me-1"></i> Status: Pending Clinical Review
                                         </div>
+                                    @elseif($status === 'pending_patient')
+                                        <form action="{{ route('history.accept', ['user' => $targetUser->id]) }}" method="POST" class="m-0">
+                                            @csrf
+                                            <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
+                                                <i class="bi bi-check-circle-fill me-1.5"></i> Allow Digitization
+                                            </button>
+                                        </form>
                                     @else
                                         <form action="{{ route('history.request') }}" method="POST" class="m-0">
                                             @csrf
@@ -445,7 +457,7 @@ function showAddRecordForm() {
 
     const addRecordPanel = document.getElementById('add-record-panel');
     if (addRecordPanel) {
-        addRecordPanel.classList.remove('d-none');
+        addRecordPanel.classList.add('d-none');
     }
 }
 
