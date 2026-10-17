@@ -12,9 +12,23 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
 $status = $labHistory->permission_status ?? 'none';
 
 // Check if the current user is looking at their own personal clinical archive
-$isSelf = (Auth::id() === $targetUser->id);
+$isSelf = (Auth::id() == $targetUser->id);
 // When viewing one's own archive, treat it as a patient function even for staff or admins
 $isPatientView = Auth::user()->isPatient() || $isSelf;
+
+// Server-Side Active Tab Determination (Eliminates post-load JavaScript layout shifting & blinking)
+$activeTab = 'app';
+if (session('success') || session('error') || session('info') || request('tab') === 'lab' || request('tab') === 'lab-history') {
+    $activeTab = 'lab';
+} elseif ($status !== 'granted' && $appointments->isEmpty()) {
+    $activeTab = 'lab';
+} elseif ($appointments->isEmpty() && count($existingRecords) > 0) {
+    $activeTab = 'lab';
+}
+
+// Determine if Add Record form should be open immediately for staff
+$isStaffViewingPatient = (Auth::user()->isEmployee() && !$isSelf);
+$shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient && count($existingRecords) === 0);
 @endphp
 
 <div class="text-start animate-page" id="patient-archive-page">
@@ -72,21 +86,21 @@ $isPatientView = Auth::user()->isPatient() || $isSelf;
     {{-- Nav Tabs --}}
     <ul class="nav nav-pills mb-4 border-bottom pb-3 gap-2" id="historyTabs" role="tablist" style="border-color: var(--border-color) !important;">
         <li class="nav-item">
-            <button class="nav-link active fw-bold px-4" id="tab-btn-app-history" data-bs-toggle="pill" data-bs-target="#app-history" onclick="resetActiveDetail()">APPOINTMENT HISTORY</button>
+            <button class="nav-link {{ $activeTab === 'app' ? 'active' : '' }} fw-bold px-4" id="tab-btn-app-history" data-bs-toggle="pill" data-bs-target="#app-history" onclick="resetActiveDetail()">APPOINTMENT HISTORY</button>
         </li>
         <li class="nav-item">
-            <button class="nav-link fw-bold px-4" id="tab-btn-lab-history" data-bs-toggle="pill" data-bs-target="#lab-history" onclick="resetActiveDetail()">LABORATORY RECORDS</button>
+            <button class="nav-link {{ $activeTab === 'lab' ? 'active' : '' }} fw-bold px-4" id="tab-btn-lab-history" data-bs-toggle="pill" data-bs-target="#lab-history" onclick="resetActiveDetail()">LABORATORY RECORDS</button>
         </li>
     </ul>
 
     <div class="tab-content">
         {{-- TAB 1: APPOINTMENT HISTORY (Split-Pane Grid Layout) --}}
-        <div class="tab-pane fade show active" id="app-history">
+        <div class="tab-pane fade {{ $activeTab === 'app' ? 'show active' : '' }}" id="app-history">
             <div class="row g-4">
                 {{-- Left Side: Historical Appointment Deck --}}
                 <div class="col-lg-5 col-xl-4">
                     <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 540px;">
-                        @forelse($appointments as $app)
+                        @forelse($appointments as $index => $app)
                             @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1, 'isHistory' => true])
                         @empty
                             <div class="card p-4 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
@@ -101,7 +115,7 @@ $isPatientView = Auth::user()->isPatient() || $isSelf;
                 <div class="col-lg-7 col-xl-8">
                     <div id="workspace-container" class="h-100">
                         {{-- Default Empty State Placeholder --}}
-                        <div id="details-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100 placeholder-compact" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
+                        <div id="details-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100 placeholder-compact {{ $appointments->count() > 0 ? 'd-none' : '' }}" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
                             <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
                                 <i class="bi bi-clipboard2-pulse-fill fs-2 text-accent"></i>
                             </div>
@@ -109,9 +123,9 @@ $isPatientView = Auth::user()->isPatient() || $isSelf;
                             <p class="text-muted small mb-0" style="max-width: 380px; font-size: 0.83rem;">Select any clinical entry from the left-hand panel to review its test breakdowns, billing summaries, and context actions.</p>
                         </div>
 
-                        {{-- Hidden Detail Panels --}}
-                        @foreach($appointments as $app)
-                            @include('appointments.partials.detail-card', ['app' => $app, 'is_staff' => false, 'isHistory' => true])
+                        {{-- Detail Panels (First one is visible by default server-side) --}}
+                        @foreach($appointments as $index => $app)
+                            @include('appointments.partials.detail-card', ['app' => $app, 'is_staff' => false, 'isHistory' => true, 'isDefaultActive' => ($index === 0)])
                         @endforeach
                     </div>
                 </div>
@@ -119,20 +133,20 @@ $isPatientView = Auth::user()->isPatient() || $isSelf;
         </div>
 
         {{-- TAB 2: LABORATORY RECORDS (Full-Width Workspace with Split-Pane Layout) --}}
-        <div class="tab-pane fade" id="lab-history">
+        <div class="tab-pane fade {{ $activeTab === 'lab' ? 'show active' : '' }}" id="lab-history">
             @if($status == 'granted')
                 <div class="row g-4">
                     {{-- Left Side: Historical Records List --}}
                     <div class="col-lg-5 col-xl-4">
                         {{-- Staff can only ADD RECORD on OTHER patients, NOT on themselves --}}
-                        @if(Auth::user()->isEmployee() && !$isSelf)
+                        @if($isStaffViewingPatient)
                             <button type="button" class="btn-custom btn-accent w-100 py-2.5 mb-2 fw-bold uppercase shadow-sm" onclick="showAddRecordForm()">
                                 <i class="bi bi-plus-lg me-1"></i> ADD RECORD
                             </button>
                         @endif
 
                         {{-- "Notify Patient" action button for staff (strictly on other patients) --}}
-                        @if(Auth::user()->isEmployee() && count($existingRecords) > 0 && !$isSelf)
+                        @if($isStaffViewingPatient && count($existingRecords) > 0)
                             <form action="{{ route('history.notify-encoded', $targetUser->id) }}" method="POST" class="mb-3">
                                 @csrf
                                 <button type="submit" class="btn-custom btn-outline-accent w-100 py-2 fw-bold uppercase shadow-sm">
@@ -142,8 +156,8 @@ $isPatientView = Auth::user()->isPatient() || $isSelf;
                         @endif
 
                         <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 520px;">
-                            @forelse($existingRecords as $record)
-                                <div class="card app-list-card bg-card border-secondary p-3 text-start mb-2" id="record-card-{{ $record['id'] }}" onclick="showRecordDetails('{{ $record['id'] }}')">
+                            @forelse($existingRecords as $recordIdx => $record)
+                                <div class="card app-list-card bg-card border-secondary p-3 text-start mb-2 {{ ($recordIdx === 0 && !$shouldOpenAddRecordByDefault) ? 'border-accent shadow-neon' : '' }}" id="record-card-{{ $record['id'] }}" onclick="showRecordDetails('{{ $record['id'] }}')">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
                                         <div class="fw-bold text-main fs-6 text-truncate" style="max-width: 180px; color: var(--text-main) !important;">
                                             {{ $record['requested_by'] ?? 'INDIVIDUAL' }}
@@ -172,7 +186,7 @@ $isPatientView = Auth::user()->isPatient() || $isSelf;
                     <div class="col-lg-7 col-xl-8">
                         <div id="lab-workspace-container" class="h-100">
                             {{-- Default Placeholder --}}
-                            <div id="record-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100 placeholder-compact" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
+                            <div id="record-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100 placeholder-compact {{ (count($existingRecords) > 0 || $shouldOpenAddRecordByDefault) ? 'd-none' : '' }}" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
                                 <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
                                     <i class="bi bi-file-earmark-medical fs-2 text-accent"></i>
                                 </div>
@@ -180,16 +194,30 @@ $isPatientView = Auth::user()->isPatient() || $isSelf;
                                 <p class="text-muted small mb-0" style="max-width: 380px; font-size: 0.83rem;">Select a digitized laboratory record from the left-hand sidebar directory to review files and download reports.</p>
                             </div>
 
-                            {{-- Digitize New Record Form Panel (Strictly for staff viewing ANOTHER patient) --}}
-                            @if(Auth::user()->isEmployee() && !$isSelf)
-                                <div id="add-record-panel" class="d-none animate-page">
+                            {{-- Digitize New Record Form Panel (Visible by default if 0 records, otherwise toggled by ADD RECORD button) --}}
+                            @if($isStaffViewingPatient)
+                                <div id="add-record-panel" class="card border-secondary bg-card p-4 {{ $shouldOpenAddRecordByDefault ? '' : 'd-none' }} animate-page" style="background-color: var(--bg-card); color: var(--text-main); border-radius: 14px;">
+                                    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom border-secondary border-opacity-25 pb-3">
+                                        <div>
+                                            <h4 class="text-main fw-bold mb-0 uppercase tracking-tighter" style="font-size: 1.35rem; color: var(--text-main) !important;">
+                                                <i class="bi bi-file-earmark-plus text-accent me-1.5"></i> Digitize Physical Record
+                                            </h4>
+                                            <small class="text-secondary small">Compile and scan archival laboratory report into patient timeline</small>
+                                        </div>
+                                        @if(count($existingRecords) > 0)
+                                            <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1 fw-bold text-uppercase" onclick="hideAddRecordForm()">
+                                                <i class="bi bi-x-lg me-1"></i> Cancel
+                                            </button>
+                                        @endif
+                                    </div>
+
                                     @include('appointments.partials.digitize-records')
                                 </div>
                             @endif
 
                             {{-- Records Detail Workspace --}}
-                            @foreach($existingRecords as $record)
-                                <div id="record-details-{{ $record['id'] }}" class="record-detail-pane card border-secondary bg-card p-4 d-none animate-page" style="background-color: var(--bg-card); color: var(--text-main); border-radius: 14px;">
+                            @foreach($existingRecords as $recordIdx => $record)
+                                <div id="record-details-{{ $record['id'] }}" class="record-detail-pane card border-secondary bg-card p-4 {{ ($recordIdx === 0 && !$shouldOpenAddRecordByDefault) ? '' : 'd-none' }} animate-page" style="background-color: var(--bg-card); color: var(--text-main); border-radius: 14px;">
                                     {{-- Document Title --}}
                                     <div class="border-bottom border-secondary border-opacity-25 pb-3 mb-4 text-start">
                                         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
@@ -257,7 +285,6 @@ $isPatientView = Auth::user()->isPatient() || $isSelf;
 
                                         {{-- Embedded Document Preview --}}
                                         <div class="col-12 border-top border-secondary border-opacity-25 pt-4 d-none" id="preview-area-{{ $record['id'] }}">
-                                            {{-- Custom Header with integrated Close Button --}}
                                             <div class="bg-warning text-dark p-2 px-3 fw-bold small uppercase rounded-top d-flex justify-content-between align-items-center">
                                                 <span><i class="bi bi-eye-fill me-2"></i>PREVIEWING ATTACHED FILE: <span id="preview-title-{{ $record['id'] }}"></span></span>
                                                 <button type="button" class="btn p-0 text-dark border-0 d-flex align-items-center" onclick="closeHistPreview('{{ $record['id'] }}')" title="Close Preview">
@@ -359,14 +386,10 @@ $isPatientView = Auth::user()->isPatient() || $isSelf;
     <div id="qr_lightbox" class="d-none fixed inset-0 w-100 h-100 d-flex align-items-center justify-content-center" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 3000; background-color: rgba(0, 0, 0, 0.85); cursor: zoom-out;" onclick="closeQRLightbox(event)">
         <div class="text-center p-3 animate-fade-in w-100 h-100 d-flex flex-column align-items-center justify-content-center" style="max-width: 95vw; max-height: 95vh;">
             <div id="lightbox_viewer_container" class="position-relative d-flex align-items-center justify-content-center bg-white rounded p-2 border border-secondary shadow-lg" style="max-width: 85vw; max-height: 80vh; overflow: auto; min-width: 300px; min-height: 300px;">
-                <!-- Render Image Scan -->
                 <img src="" id="lightbox_qr_img" alt="Zoomed Asset" class="img-fluid rounded transition-all" style="max-height: 75vh; max-width: 80vw; object-fit: contain; transform: scale(1); transform-origin: center; cursor: grab;">
-
-                <!-- Render PDF Document Scan -->
                 <iframe id="lightbox_pdf_viewer" class="d-none rounded" style="width: 80vw; height: 75vh; border: none;"></iframe>
             </div>
 
-            {{-- Interactive Document Control Toolbar --}}
             <div id="lightbox_zoom_controls" class="mt-3 d-flex gap-3 align-items-center bg-dark bg-opacity-75 px-4 py-2 rounded-pill border border-secondary">
                 <button type="button" class="btn btn-sm btn-outline-light rounded-circle px-2.5 py-1" onclick="zoomImage(-0.15, event)" title="Zoom Out"><i class="bi bi-zoom-out"></i></button>
                 <span id="zoom_percent" class="text-white small fw-bold">100%</span>
@@ -380,10 +403,6 @@ $isPatientView = Auth::user()->isPatient() || $isSelf;
 
     {{-- 5. THEME-ADAPTIVE MODALS LOOP --}}
     @foreach($appointments as $app)
-        @php
-            $isExpired = $app->isExpired();
-        @endphp
-        {{-- A. DELETE EXPIRED APPOINTMENT MODAL --}}
         @if(Auth::id() == $app->user_id)
             <div class="modal fade" id="deleteExpiredModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
                 <div class="modal-dialog modal-sm modal-dialog-centered">
@@ -409,16 +428,24 @@ $isPatientView = Auth::user()->isPatient() || $isSelf;
 
 @push('scripts')
 <script>
-// --- GLOBAL WORKSPACE HANDLERS (Defined globally so inline onclicks never fail) ---
+// --- GLOBAL WORKSPACE HANDLERS ---
 
 function showAppointmentDetails(appId) {
-    document.getElementById('details-placeholder')?.classList.add('d-none');
-    document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
+    const placeholder = document.getElementById('details-placeholder');
+    if (placeholder) {
+        placeholder.classList.add('d-none');
+        placeholder.style.display = 'none';
+    }
+    document.querySelectorAll('.appointment-detail-pane').forEach(el => {
+        el.classList.add('d-none');
+        el.style.display = 'none';
+    });
     document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
 
     const detailPanel = document.getElementById(`details-${appId}`);
     if (detailPanel) {
         detailPanel.classList.remove('d-none');
+        detailPanel.style.display = 'block';
     }
     const listCard = document.getElementById(`card-${appId}`);
     if (listCard) {
@@ -430,17 +457,23 @@ function showRecordDetails(recordId) {
     const recordPlaceholder = document.getElementById('record-placeholder');
     if (recordPlaceholder) {
         recordPlaceholder.classList.add('d-none');
+        recordPlaceholder.style.display = 'none';
     }
-    document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.record-detail-pane').forEach(el => {
+        el.classList.add('d-none');
+        el.style.display = 'none';
+    });
     document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
 
     const addRecordPanel = document.getElementById('add-record-panel');
     if (addRecordPanel) {
         addRecordPanel.classList.add('d-none');
+        addRecordPanel.style.display = 'none';
     }
     const detailPanel = document.getElementById(`record-details-${recordId}`);
     if (detailPanel) {
         detailPanel.classList.remove('d-none');
+        detailPanel.style.display = 'block';
     }
     const listCard = document.getElementById(`record-card-${recordId}`);
     if (listCard) {
@@ -452,33 +485,40 @@ function showAddRecordForm() {
     const recordPlaceholder = document.getElementById('record-placeholder');
     if (recordPlaceholder) {
         recordPlaceholder.classList.add('d-none');
+        recordPlaceholder.style.display = 'none';
     }
-    document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.record-detail-pane').forEach(el => {
+        el.classList.add('d-none');
+        el.style.display = 'none';
+    });
     document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
 
     const addRecordPanel = document.getElementById('add-record-panel');
     if (addRecordPanel) {
-        addRecordPanel.classList.add('d-none');
+        addRecordPanel.classList.remove('d-none');
+        addRecordPanel.style.display = 'block';
     }
 }
 
-function resetActiveDetail() {
-    const detailsPlaceholder = document.getElementById('details-placeholder');
-    if (detailsPlaceholder) {
-        detailsPlaceholder.classList.remove('d-none');
-    }
-    const recordPlaceholder = document.getElementById('record-placeholder');
-    if (recordPlaceholder) {
-        recordPlaceholder.classList.remove('d-none');
-    }
-    document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
-    document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
-    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
-
+function hideAddRecordForm() {
     const addRecordPanel = document.getElementById('add-record-panel');
     if (addRecordPanel) {
         addRecordPanel.classList.add('d-none');
+        addRecordPanel.style.display = 'none';
     }
+    @if(count($existingRecords) > 0)
+        showRecordDetails("{{ $existingRecords[0]['id'] }}");
+    @else
+        const recordPlaceholder = document.getElementById('record-placeholder');
+        if (recordPlaceholder) {
+            recordPlaceholder.classList.remove('d-none');
+            recordPlaceholder.style.display = 'flex';
+        }
+    @endif
+}
+
+function resetActiveDetail() {
+    // Left unforced on tab change to let server-side pre-rendered states persist cleanly
 }
 
 function closeHistPreview(recordId) {
@@ -632,6 +672,7 @@ function toggleFullscreen(event) {
 window.showAppointmentDetails = showAppointmentDetails;
 window.showRecordDetails = showRecordDetails;
 window.showAddRecordForm = showAddRecordForm;
+window.hideAddRecordForm = hideAddRecordForm;
 window.resetActiveDetail = resetActiveDetail;
 window.closeHistPreview = closeHistPreview;
 window.previewHistFile = previewHistFile;
@@ -642,62 +683,15 @@ window.closeQRLightbox = closeQRLightbox;
 window.toggleFullscreen = toggleFullscreen;
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. SMART TAB PERSISTENCE ENGINE
-    let activeTabTarget = '#app-history';
-
-    @if(session('success') || session('error') || session('info') || request('tab') === 'lab' || request('tab') === 'lab-history')
-        activeTabTarget = '#lab-history';
-    @elseif($status !== 'granted' && $appointments->isEmpty())
-        activeTabTarget = '#lab-history';
-    @else
-        const urlHash = window.location.hash;
-        const storedTab = localStorage.getItem('patient_archive_active_tab');
-
-        if (urlHash && (urlHash === '#lab-history' || urlHash === '#app-history')) {
-            activeTabTarget = urlHash;
-        } else if (storedTab && (storedTab === '#lab-history' || storedTab === '#app-history')) {
-            activeTabTarget = storedTab;
-        }
-    @endif
-
-    const targetTabBtn = document.querySelector(`button[data-bs-target="${activeTabTarget}"]`);
-    if (targetTabBtn) {
-        const tabInstance = bootstrap.Tab.getOrCreateInstance(targetTabBtn);
-        tabInstance.show();
-    }
-
-    // Persist user tab changes immediately
+    // Persist user tab changes without jumping
     document.querySelectorAll('#historyTabs button[data-bs-toggle="pill"]').forEach(btn => {
         btn.addEventListener('shown.bs.tab', (e) => {
             const target = e.target.getAttribute('data-bs-target');
-            localStorage.setItem('patient_archive_active_tab', target);
             if (history.replaceState) {
                 history.replaceState(null, null, target);
             }
-            // Auto-select first item when switching tabs
-            if (target === '#lab-history') {
-                @if(count($existingRecords) > 0)
-                    showRecordDetails("{{ $existingRecords[0]['id'] }}");
-                @endif
-            } else if (target === '#app-history') {
-                @if($appointments->count() > 0)
-                    showAppointmentDetails("{{ $appointments[0]->id }}");
-                @endif
-            }
         });
     });
-
-    // 2. AUTO-SELECT FIRST RECORD ON LOAD IF PRESENT
-    @if(count($existingRecords) > 0)
-        showRecordDetails("{{ $existingRecords[0]['id'] }}");
-    @endif
-
-    // 3. AUTO-SELECT FIRST APPOINTMENT IF APPOINTMENT TAB IS ACTIVE
-    if (activeTabTarget === '#app-history') {
-        @if($appointments->count() > 0)
-            showAppointmentDetails("{{ $appointments[0]->id }}");
-        @endif
-    }
 
     document.addEventListener('fullscreenchange', () => {
         const icon = document.getElementById('fullscreen_icon');
@@ -747,14 +741,14 @@ document.addEventListener('DOMContentLoaded', () => {
     margin-bottom: 1.75rem !important;
 }
 
-/* 4. Top clearance from header navbar to PATIENT ARCHIVE (matches My Appointments) */
+/* 4. Top clearance from header navbar to PATIENT ARCHIVE */
 main.container {
     min-height: auto !important;
     padding-top: 3.25rem !important;
     padding-bottom: 1.5rem !important;
 }
 
-/* 5. High-Contrast Back to Appointments Button with Emerald Accent Hover */
+/* 5. High-Contrast Back to Appointments Button */
 .btn-back-appointments {
     color: var(--text-main) !important;
     border: 1.5px solid var(--border-color) !important;
@@ -799,7 +793,7 @@ main.container {
 .app-list-card { transition: all 0.2s ease; cursor: pointer; }
 .app-list-card:hover { border-color: var(--brand-accent) !important; transform: translateX(2px); }
 
-/* 8. Handshake Box Container & Fallback */
+/* 8. Handshake Box Container */
 #handshake-box-container {
     width: 100% !important;
     padding: 0.5rem 0 !important;
