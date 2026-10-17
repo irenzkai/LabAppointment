@@ -9,27 +9,68 @@ if (!isset($availableServices)) {
 
 // Protect controller-passed $existingRecords from being clobbered by empty dynamic_data array
 $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? array_reverse($labHistory->dynamic_data) : []);
+$status = $labHistory->permission_status ?? 'none';
 @endphp
 
-<div class="container text-start animate-page" id="patient-archive-page">
+<div class="text-start animate-page" id="patient-archive-page">
     {{-- Page Header --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
+    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3 page-header-archive" style="border-color: var(--border-color) !important;">
         <div>
             <h2 class="text-accent fw-bold mb-0 uppercase tracking-tight" style="font-size: 1.85rem; letter-spacing: 1px;">PATIENT ARCHIVE</h2>
             <p class="text-secondary mb-0 small">Records for: <span class="text-accent fw-bold uppercase">{{ $targetUser->name }}</span></p>
         </div>
-        <a href="{{ route('appointments.index') }}" class="btn btn-sm btn-outline-secondary px-4 py-2 fw-bold text-uppercase" style="color: var(--text-muted) !important; border-color: var(--border-color) !important; border-radius: 8px;">
-            <i class="bi bi-arrow-left me-2"></i> BACK TO APPOINTMENTS
+        <a href="{{ route('appointments.index') }}" class="btn btn-sm btn-back-appointments px-3 py-2 fw-bold text-uppercase">
+            <i class="bi bi-arrow-left me-1.5"></i> BACK TO APPOINTMENTS
         </a>
     </div>
+
+    {{-- Top-Level Notification Alerts (Single Unified Position at the TOP) --}}
+    @if(session('success'))
+        <div class="alert alert-clinical alert-dismissible fade show d-flex align-items-center mb-4 shadow-sm" role="alert" style="background-color: rgba(25, 211, 140, 0.08); border-left: 4px solid var(--brand-accent) !important; border-radius: 8px;">
+            <i class="bi bi-check-circle-fill me-3 fs-4 text-accent"></i>
+            <div class="text-start">
+                <div class="fw-800 uppercase fs-x-small text-accent" style="font-size: 0.75rem; letter-spacing: 0.5px;">Success Notification</div>
+                <div class="small text-main" style="color: var(--text-main) !important; font-size: 0.88rem; line-height: 1.4;">
+                    {{ session('success') }}
+                </div>
+            </div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div class="alert alert-clinical alert-dismissible fade show d-flex align-items-center mb-4 shadow-sm" role="alert" style="background-color: rgba(220, 53, 69, 0.08); border-left: 4px solid #dc3545 !important; border-radius: 8px;">
+            <i class="bi bi-exclamation-triangle-fill me-3 fs-4 text-danger"></i>
+            <div class="text-start">
+                <div class="fw-800 uppercase fs-x-small text-danger" style="font-size: 0.75rem; letter-spacing: 0.5px;">Notice</div>
+                <div class="small text-main" style="color: var(--text-main) !important; font-size: 0.88rem; line-height: 1.4;">
+                    {{ session('error') }}
+                </div>
+            </div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
+    @if(session('info'))
+        <div class="alert alert-clinical alert-dismissible fade show d-flex align-items-center mb-4 shadow-sm" role="alert" style="background-color: rgba(13, 202, 240, 0.08); border-left: 4px solid #0dcaf0 !important; border-radius: 8px;">
+            <i class="bi bi-info-circle-fill me-3 fs-4 text-info"></i>
+            <div class="text-start">
+                <div class="fw-800 uppercase fs-x-small text-info" style="font-size: 0.75rem; letter-spacing: 0.5px;">Information</div>
+                <div class="small text-main" style="color: var(--text-main) !important; font-size: 0.88rem; line-height: 1.4;">
+                    {{ session('info') }}
+                </div>
+            </div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
 
     {{-- Nav Tabs --}}
     <ul class="nav nav-pills mb-4 border-bottom pb-3 gap-2" id="historyTabs" role="tablist" style="border-color: var(--border-color) !important;">
         <li class="nav-item">
-            <button class="nav-link active fw-bold px-4" data-bs-toggle="pill" data-bs-target="#app-history" onclick="resetActiveDetail()">APPOINTMENT HISTORY</button>
+            <button class="nav-link active fw-bold px-4" id="tab-btn-app-history" data-bs-toggle="pill" data-bs-target="#app-history" onclick="resetActiveDetail()">APPOINTMENT HISTORY</button>
         </li>
         <li class="nav-item">
-            <button class="nav-link fw-bold px-4" data-bs-toggle="pill" data-bs-target="#lab-history" onclick="resetActiveDetail()">LABORATORY RECORDS</button>
+            <button class="nav-link fw-bold px-4" id="tab-btn-lab-history" data-bs-toggle="pill" data-bs-target="#lab-history" onclick="resetActiveDetail()">LABORATORY RECORDS</button>
         </li>
     </ul>
 
@@ -39,12 +80,12 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
             <div class="row g-4">
                 {{-- Left Side: Historical Appointment Deck --}}
                 <div class="col-lg-5 col-xl-4">
-                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
+                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 540px;">
                         @forelse($appointments as $app)
                             @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1, 'isHistory' => true])
                         @empty
-                            <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 420px; background-color: var(--bg-card);">
-                                <i class="bi bi-calendar-x text-accent fs-1 mb-3 opacity-75"></i>
+                            <div class="card p-4 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
+                                <i class="bi bi-calendar-x text-accent fs-2 mb-2 opacity-75"></i>
                                 <p class="small mb-0">No past bookings found.</p>
                             </div>
                         @endforelse
@@ -55,12 +96,12 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
                 <div class="col-lg-7 col-xl-8">
                     <div id="workspace-container" class="h-100">
                         {{-- Default Empty State Placeholder --}}
-                        <div id="details-placeholder" class="card p-5 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100" style="min-height: 420px; background-color: var(--bg-card);">
-                            <div class="bg-secondary bg-opacity-10 rounded-circle p-3 mb-4 text-accent d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
-                                <i class="bi bi-clipboard2-pulse-fill fs-1 text-accent"></i>
+                        <div id="details-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100 placeholder-compact" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
+                            <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                <i class="bi bi-clipboard2-pulse-fill fs-2 text-accent"></i>
                             </div>
-                            <h4 class="text-main fw-bold mb-2 uppercase">Archive Workspace</h4>
-                            <p class="text-muted small mb-0" style="max-width: 380px;">Select any clinical entry from the left-hand panel to review its test breakdowns, billing summaries, and context actions.</p>
+                            <h5 class="text-main fw-bold mb-1 uppercase">Archive Workspace</h5>
+                            <p class="text-muted small mb-0" style="max-width: 380px; font-size: 0.83rem;">Select any clinical entry from the left-hand panel to review its test breakdowns, billing summaries, and context actions.</p>
                         </div>
 
                         {{-- Hidden Detail Panels --}}
@@ -74,7 +115,6 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
 
         {{-- TAB 2: LABORATORY RECORDS (Full-Width Workspace with Split-Pane Layout) --}}
         <div class="tab-pane fade" id="lab-history">
-            @php $status = $labHistory->permission_status; @endphp
             @if($status == 'granted')
                 <div class="row g-4">
                     {{-- Left Side: Historical Records List --}}
@@ -95,7 +135,7 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
                             </form>
                         @endif
 
-                        <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 580px;">
+                        <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 520px;">
                             @forelse($existingRecords as $record)
                                 <div class="card app-list-card bg-card border-secondary p-3 text-start mb-2" id="record-card-{{ $record['id'] }}" onclick="showRecordDetails('{{ $record['id'] }}')">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
@@ -114,7 +154,7 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
                                     </div>
                                 </div>
                             @empty
-                                <div class="card p-5 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 350px; background-color: var(--bg-card);">
+                                <div class="card p-4 text-center text-muted border-secondary border-dashed d-flex flex-column align-items-center justify-content-center" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
                                     <i class="bi bi-file-earmark-lock2 fs-2 mb-2 opacity-50"></i>
                                     <p class="small mb-0">No historical records digitized yet.</p>
                                 </div>
@@ -126,12 +166,12 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
                     <div class="col-lg-7 col-xl-8">
                         <div id="lab-workspace-container" class="h-100">
                             {{-- Default Placeholder --}}
-                            <div id="record-placeholder" class="card p-5 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100" style="min-height: 420px; background-color: var(--bg-card);">
-                                <div class="bg-secondary bg-opacity-10 rounded-circle p-3 mb-4 text-accent d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
-                                    <i class="bi bi-file-earmark-medical fs-1 text-accent"></i>
+                            <div id="record-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center h-100 placeholder-compact" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
+                                <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                    <i class="bi bi-file-earmark-medical fs-2 text-accent"></i>
                                 </div>
-                                <h4 class="text-main fw-bold mb-2 uppercase">Laboratory Records Workspace</h4>
-                                <p class="text-muted small mb-0" style="max-width: 380px;">Select a digitized laboratory record from the left-hand sidebar directory to review files and download reports.</p>
+                                <h5 class="text-main fw-bold mb-1 uppercase">Laboratory Records Workspace</h5>
+                                <p class="text-muted small mb-0" style="max-width: 380px; font-size: 0.83rem;">Select a digitized laboratory record from the left-hand sidebar directory to review files and download reports.</p>
                             </div>
 
                             {{-- Digitize New Record Form Panel --}}
@@ -143,7 +183,7 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
 
                             {{-- Records Detail Workspace --}}
                             @foreach($existingRecords as $record)
-                                <div id="record-details-{{ $record['id'] }}" class="record-detail-pane card border-secondary bg-card p-4 d-none animate-page" style="background-color: var(--bg-card); color: var(--text-main);">
+                                <div id="record-details-{{ $record['id'] }}" class="record-detail-pane card border-secondary bg-card p-4 d-none animate-page" style="background-color: var(--bg-card); color: var(--text-main); border-radius: 14px;">
                                     {{-- Document Title --}}
                                     <div class="border-bottom border-secondary border-opacity-25 pb-3 mb-4 text-start">
                                         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
@@ -241,8 +281,63 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
                     </div>
                 </div>
             @else
-                {{-- Handshake alerts --}}
-                @include('appointments.partials.handshake-panel')
+                {{-- FULL-WIDTH HANDSHAKE / REQUEST DATA IMPORT BOX CONTAINER --}}
+                <div class="w-100 my-2" id="handshake-box-container">
+                    <div class="handshake-box-wrapper w-100">
+                        @if(view()->exists('appointments.partials.handshake-panel'))
+                            @include('appointments.partials.handshake-panel')
+                        @else
+                            {{-- Resilient Fallback Request Box --}}
+                            <div class="card p-4 p-md-5 text-center border-secondary shadow-sm w-100" style="background-color: var(--bg-card); border-radius: 16px;">
+                                <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 p-2.5 text-accent mx-auto" style="background-color: rgba(25, 211, 140, 0.08); width: 58px; height: 58px;">
+                                    <i class="bi bi-shield-lock-fill fs-2 text-accent"></i>
+                                </div>
+                                <h5 class="text-main fw-bold mb-2 uppercase" style="font-size: 1.25rem;">Historical Data Connection</h5>
+                                <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
+                                    @if(Auth::user()->isPatient())
+                                        Your physical clinic records have not been digitized yet. Submit a request to have our laboratory team initialize your archival folder.
+                                    @else
+                                        This patient has not requested a historical data import yet. Clinical protocol requires patient consent before historical physical records can be digitized. Send an authorization request to the patient's portal.
+                                    @endif
+                                </p>
+                                @if(Auth::user()->isPatient())
+                                    @if($status === 'pending_staff')
+                                        <div class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 py-2 px-3 uppercase fw-bold" style="font-size: 0.72rem;">
+                                            <i class="bi bi-hourglass-split me-1"></i> Status: Pending Clinical Review
+                                        </div>
+                                    @else
+                                        <form action="{{ route('history.request') }}" method="POST" class="m-0">
+                                            @csrf
+                                            <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
+                                                <i class="bi bi-send-fill me-1.5"></i> Request Data Import
+                                            </button>
+                                        </form>
+                                    @endif
+                                @else
+                                    @if($status === 'pending_patient')
+                                        <div class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-2 px-3 uppercase fw-bold" style="font-size: 0.72rem;">
+                                            <i class="bi bi-clock-history me-1"></i> Status: Awaiting User Consent
+                                        </div>
+                                    @elseif($status === 'pending_staff')
+                                        <form action="{{ route('history.accept', ['user' => $targetUser->id]) }}" method="POST" class="m-0">
+                                            @csrf
+                                            <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
+                                                <i class="bi bi-check-circle-fill me-1.5"></i> Accept & Open Import Tool
+                                            </button>
+                                        </form>
+                                    @else
+                                        <form action="{{ route('history.staff-trigger', $targetUser->id) }}" method="POST" class="m-0">
+                                            @csrf
+                                            <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
+                                                <i class="bi bi-envelope-paper-fill me-1.5"></i> Ask Patient for Permission
+                                            </button>
+                                        </form>
+                                    @endif
+                                @endif
+                            </div>
+                        @endif
+                    </div>
+                </div>
             @endif
         </div>
     </div>
@@ -301,235 +396,295 @@ $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? ar
 
 @push('scripts')
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    // Toggle active panel details for Appointment History Tab
-    function showAppointmentDetails(appId) {
-        document.getElementById('details-placeholder').classList.add('d-none');
-        document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
-        document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+// --- GLOBAL WORKSPACE HANDLERS (Defined globally so inline onclicks never fail) ---
 
-        const detailPanel = document.getElementById(`details-${appId}`);
-        if(detailPanel) {
-            detailPanel.classList.remove('d-none');
-        }
-        const listCard = document.getElementById(`card-${appId}`);
-        if(listCard) {
-            listCard.classList.add('border-accent', 'shadow-neon');
-        }
+function showAppointmentDetails(appId) {
+    document.getElementById('details-placeholder')?.classList.add('d-none');
+    document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+
+    const detailPanel = document.getElementById(`details-${appId}`);
+    if (detailPanel) {
+        detailPanel.classList.remove('d-none');
     }
-
-    // Reset placeholder when switching tabs with safe conditional null-checks
-    function resetActiveDetail() {
-        const detailsPlaceholder = document.getElementById('details-placeholder');
-        if (detailsPlaceholder) {
-            detailsPlaceholder.classList.remove('d-none');
-        }
-        const recordPlaceholder = document.getElementById('record-placeholder');
-        if (recordPlaceholder) {
-            recordPlaceholder.classList.remove('d-none');
-        }
-        document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
-        document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
-        document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
-
-        const addRecordPanel = document.getElementById('add-record-panel');
-        if (addRecordPanel) {
-            addRecordPanel.classList.add('d-none');
-        }
+    const listCard = document.getElementById(`card-${appId}`);
+    if (listCard) {
+        listCard.classList.add('border-accent', 'shadow-neon');
     }
+}
 
-    // Show Digitize New Record Form Panel
-    function showAddRecordForm() {
-        const recordPlaceholder = document.getElementById('record-placeholder');
-        if (recordPlaceholder) {
-            recordPlaceholder.classList.add('d-none');
-        }
-        document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
-        document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
-
-        const addRecordPanel = document.getElementById('add-record-panel');
-        if (addRecordPanel) {
-            addRecordPanel.classList.remove('d-none');
-        }
+function showRecordDetails(recordId) {
+    const recordPlaceholder = document.getElementById('record-placeholder');
+    if (recordPlaceholder) {
+        recordPlaceholder.classList.add('d-none');
     }
+    document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
 
-    // Show Specific Digitized Record Detailed Workspace
-    function showRecordDetails(recordId) {
-        const recordPlaceholder = document.getElementById('record-placeholder');
-        if (recordPlaceholder) {
-            recordPlaceholder.classList.add('d-none');
-        }
-        document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
-        document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
-
-        const addRecordPanel = document.getElementById('add-record-panel');
-        if (addRecordPanel) {
-            addRecordPanel.classList.add('d-none');
-        }
-        const detailPanel = document.getElementById(`record-details-${recordId}`);
-        if(detailPanel) {
-            detailPanel.classList.remove('d-none');
-        }
-        const listCard = document.getElementById(`record-card-${recordId}`);
-        if(listCard) {
-            listCard.classList.add('border-accent', 'shadow-neon');
-        }
+    const addRecordPanel = document.getElementById('add-record-panel');
+    if (addRecordPanel) {
+        addRecordPanel.classList.add('d-none');
     }
+    const detailPanel = document.getElementById(`record-details-${recordId}`);
+    if (detailPanel) {
+        detailPanel.classList.remove('d-none');
+    }
+    const listCard = document.getElementById(`record-card-${recordId}`);
+    if (listCard) {
+        listCard.classList.add('border-accent', 'shadow-neon');
+    }
+}
 
-    // Close actively opened file preview inside workspace
-    function closeHistPreview(recordId) {
-        const previewArea = document.getElementById(`preview-area-${recordId}`);
-        const pdfIframe = document.getElementById(`pdf-iframe-${recordId}`);
-        const imgEl = document.getElementById(`image-img-${recordId}`);
-        if (previewArea) previewArea.classList.add('d-none');
-        if (pdfIframe) pdfIframe.src = '';
+function showAddRecordForm() {
+    const recordPlaceholder = document.getElementById('record-placeholder');
+    if (recordPlaceholder) {
+        recordPlaceholder.classList.add('d-none');
+    }
+    document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+
+    const addRecordPanel = document.getElementById('add-record-panel');
+    if (addRecordPanel) {
+        addRecordPanel.classList.remove('d-none');
+    }
+}
+
+function resetActiveDetail() {
+    const detailsPlaceholder = document.getElementById('details-placeholder');
+    if (detailsPlaceholder) {
+        detailsPlaceholder.classList.remove('d-none');
+    }
+    const recordPlaceholder = document.getElementById('record-placeholder');
+    if (recordPlaceholder) {
+        recordPlaceholder.classList.remove('d-none');
+    }
+    document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('.app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+
+    const addRecordPanel = document.getElementById('add-record-panel');
+    if (addRecordPanel) {
+        addRecordPanel.classList.add('d-none');
+    }
+}
+
+function closeHistPreview(recordId) {
+    const previewArea = document.getElementById(`preview-area-${recordId}`);
+    const pdfIframe = document.getElementById(`pdf-iframe-${recordId}`);
+    const imgEl = document.getElementById(`image-img-${recordId}`);
+    if (previewArea) previewArea.classList.add('d-none');
+    if (pdfIframe) pdfIframe.src = '';
+    if (imgEl) imgEl.src = '';
+}
+
+function previewHistFile(recordId, fileUrl, labelName, certNo = '') {
+    const previewArea = document.getElementById(`preview-area-${recordId}`);
+    const title = document.getElementById(`preview-title-${recordId}`);
+    const imgContainer = document.getElementById(`image-container-${recordId}`);
+    const imgEl = document.getElementById(`image-img-${recordId}`);
+    const pdfContainer = document.getElementById(`pdf-container-${recordId}`);
+    const pdfIframe = document.getElementById(`pdf-iframe-${recordId}`);
+
+    if (!previewArea || !title) return;
+
+    const certDisplay = certNo ? ` (CERT: ${certNo})` : '';
+    title.innerText = (labelName + certDisplay).toUpperCase();
+    previewArea.classList.remove('d-none');
+
+    const isPdf = fileUrl.toLowerCase().endsWith('.pdf') || fileUrl.startsWith('data:application/pdf');
+
+    if (isPdf) {
+        if (imgContainer) imgContainer.classList.add('d-none');
         if (imgEl) imgEl.src = '';
-    }
-
-    // Dynamically preview and render historical image/PDF file inside the workspace
-    function previewHistFile(recordId, fileUrl, labelName, certNo = '') {
-        const previewArea = document.getElementById(`preview-area-${recordId}`);
-        const title = document.getElementById(`preview-title-${recordId}`);
-        const imgContainer = document.getElementById(`image-container-${recordId}`);
-        const imgEl = document.getElementById(`image-img-${recordId}`);
-        const pdfContainer = document.getElementById(`pdf-container-${recordId}`);
-        const pdfIframe = document.getElementById(`pdf-iframe-${recordId}`);
-
-        if (!previewArea || !title) return;
-
-        const certDisplay = certNo ? ` (CERT: ${certNo})` : '';
-        title.innerText = (labelName + certDisplay).toUpperCase();
-        previewArea.classList.remove('d-none');
-
-        // Parse file extension formatting safely
-        const isPdf = fileUrl.toLowerCase().endsWith('.pdf') || fileUrl.startsWith('data:application/pdf');
-
-        if (isPdf) {
-            if (imgContainer) imgContainer.classList.add('d-none');
-            if (imgEl) imgEl.src = '';
-            if (pdfContainer && pdfIframe) {
-                pdfIframe.src = fileUrl;
-                pdfContainer.classList.remove('d-none');
-            }
-        } else {
-            if (pdfContainer) pdfContainer.classList.add('d-none');
-            if (pdfIframe) pdfIframe.src = '';
-            if (imgContainer && imgEl) {
-                imgEl.src = fileUrl;
-                imgContainer.dataset.url = fileUrl;
-                imgContainer.classList.remove('d-none');
-            }
+        if (pdfContainer && pdfIframe) {
+            pdfIframe.src = fileUrl;
+            pdfContainer.classList.remove('d-none');
+        }
+    } else {
+        if (pdfContainer) pdfContainer.classList.add('d-none');
+        if (pdfIframe) pdfIframe.src = '';
+        if (imgContainer && imgEl) {
+            imgEl.src = fileUrl;
+            imgContainer.dataset.url = fileUrl;
+            imgContainer.classList.remove('d-none');
         }
     }
+}
 
-    // Zoom/Lightbox Controller handlers (Image dragging & Fullscreen support)
-    let currentScale = 1;
-    let translateX = 0;
-    let translateY = 0;
-    let isDragging = false;
-    let startX, startY;
+// Zoom/Lightbox Controller handlers
+let currentScale = 1;
+let translateX = 0;
+let translateY = 0;
+let isDragging = false;
+let startX, startY;
 
-    function zoomImage(amount, event) {
-        if (event) event.stopPropagation();
-        currentScale += amount;
-        currentScale = Math.max(0.5, Math.min(3, currentScale));
-        const img = document.getElementById('lightbox_qr_img');
-        if (img) {
-            img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${currentScale})`;
-            img.style.cursor = currentScale > 1 ? 'grab' : 'default';
-        }
-        const percentEl = document.getElementById('zoom_percent');
-        if (percentEl) {
-            percentEl.innerText = `${Math.round(currentScale * 100)}%`;
-        }
+function zoomImage(amount, event) {
+    if (event) event.stopPropagation();
+    currentScale += amount;
+    currentScale = Math.max(0.5, Math.min(3, currentScale));
+    const img = document.getElementById('lightbox_qr_img');
+    if (img) {
+        img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${currentScale})`;
+        img.style.cursor = currentScale > 1 ? 'grab' : 'default';
     }
-    window.zoomImage = zoomImage;
-
-    function resetZoom(event) {
-        if (event) event.stopPropagation();
-        currentScale = 1;
-        translateX = 0;
-        translateY = 0;
-        isDragging = false;
-        const img = document.getElementById('lightbox_qr_img');
-        if (img) {
-            img.style.transform = `translate(0px, 0px) scale(1)`;
-            img.style.cursor = 'default';
-        }
-        const percentEl = document.getElementById('zoom_percent');
-        if (percentEl) {
-            percentEl.innerText = '100%';
-        }
+    const percentEl = document.getElementById('zoom_percent');
+    if (percentEl) {
+        percentEl.innerText = `${Math.round(currentScale * 100)}%`;
     }
-    window.resetZoom = resetZoom;
+}
 
-    function zoomFile(fileSrc) {
-        if (!fileSrc) return;
-        const isPdf = fileSrc.toLowerCase().endsWith('.pdf') || fileSrc.startsWith('data:application/pdf');
-        const img = document.getElementById('lightbox_qr_img');
-        const iframe = document.getElementById('lightbox_pdf_viewer');
-        const controls = document.getElementById('lightbox_zoom_controls');
-
-        resetZoom();
-        if (isPdf) {
-            img.classList.add('d-none');
-            controls.classList.add('d-none');
-            iframe.src = fileSrc;
-            iframe.classList.remove('d-none');
-        } else {
-            iframe.classList.add('d-none');
-            iframe.src = '';
-            img.src = fileSrc;
-            img.classList.remove('d-none');
-            controls.classList.remove('d-none');
-        }
-        document.getElementById('qr_lightbox').classList.remove('d-none');
-        document.getElementById('qr_lightbox').classList.add('d-flex');
+function resetZoom(event) {
+    if (event) event.stopPropagation();
+    currentScale = 1;
+    translateX = 0;
+    translateY = 0;
+    isDragging = false;
+    const img = document.getElementById('lightbox_qr_img');
+    if (img) {
+        img.style.transform = `translate(0px, 0px) scale(1)`;
+        img.style.cursor = 'default';
     }
-    window.zoomQR = zoomFile;
-
-    function closeQRLightbox(event) {
-        if (event) {
-            const container = document.getElementById('lightbox_viewer_container');
-            const controls = document.getElementById('lightbox_zoom_controls');
-            if (container.contains(event.target) || (controls && controls.contains(event.target))) {
-                return;
-            }
-        }
-        document.getElementById('qr_lightbox').classList.add('d-none');
-        document.getElementById('qr_lightbox').classList.remove('d-flex');
-        if (document.fullscreenElement) {
-            document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
-        }
-        resetZoom();
+    const percentEl = document.getElementById('zoom_percent');
+    if (percentEl) {
+        percentEl.innerText = '100%';
     }
-    window.closeQRLightbox = closeQRLightbox;
+}
 
-    function toggleFullscreen(event) {
-        if (event) event.stopPropagation();
+function zoomFile(fileSrc) {
+    if (!fileSrc) return;
+    const isPdf = fileSrc.toLowerCase().endsWith('.pdf') || fileSrc.startsWith('data:application/pdf');
+    const img = document.getElementById('lightbox_qr_img');
+    const iframe = document.getElementById('lightbox_pdf_viewer');
+    const controls = document.getElementById('lightbox_zoom_controls');
+
+    resetZoom();
+    if (isPdf) {
+        img.classList.add('d-none');
+        controls.classList.add('d-none');
+        iframe.src = fileSrc;
+        iframe.classList.remove('d-none');
+    } else {
+        iframe.classList.add('d-none');
+        iframe.src = '';
+        img.src = fileSrc;
+        img.classList.remove('d-none');
+        controls.classList.remove('d-none');
+    }
+    document.getElementById('qr_lightbox').classList.remove('d-none');
+    document.getElementById('qr_lightbox').classList.add('d-flex');
+}
+
+function closeQRLightbox(event) {
+    if (event) {
         const container = document.getElementById('lightbox_viewer_container');
-        const icon = document.getElementById('fullscreen_icon');
-        if (!document.fullscreenElement) {
-            container.requestFullscreen().then(() => {
-                if (icon) {
-                    icon.classList.remove('bi-fullscreen');
-                    icon.classList.add('bi-fullscreen-exit');
-                }
-            }).catch(err => {
-                console.error("Error attempting to enable fullscreen mode:", err);
-            });
-        } else {
-            document.exitFullscreen().then(() => {
-                if (icon) {
-                    icon.classList.remove('bi-fullscreen-exit');
-                    icon.classList.add('bi-fullscreen');
-                }
-            }).catch(err => {
-                console.error("Error attempting to exit fullscreen mode:", err);
-            });
+        const controls = document.getElementById('lightbox_zoom_controls');
+        if (container.contains(event.target) || (controls && controls.contains(event.target))) {
+            return;
         }
     }
-    window.toggleFullscreen = toggleFullscreen;
+    document.getElementById('qr_lightbox').classList.add('d-none');
+    document.getElementById('qr_lightbox').classList.remove('d-flex');
+    if (document.fullscreenElement) {
+        document.exitFullscreen().catch(err => console.error("Error exiting fullscreen:", err));
+    }
+    resetZoom();
+}
+
+function toggleFullscreen(event) {
+    if (event) event.stopPropagation();
+    const container = document.getElementById('lightbox_viewer_container');
+    const icon = document.getElementById('fullscreen_icon');
+    if (!document.fullscreenElement) {
+        container.requestFullscreen().then(() => {
+            if (icon) {
+                icon.classList.remove('bi-fullscreen');
+                icon.classList.add('bi-fullscreen-exit');
+            }
+        }).catch(err => {
+            console.error("Error attempting to enable fullscreen mode:", err);
+        });
+    } else {
+        document.exitFullscreen().then(() => {
+            if (icon) {
+                icon.classList.remove('bi-fullscreen-exit');
+                icon.classList.add('bi-fullscreen');
+            }
+        }).catch(err => {
+            console.error("Error attempting to exit fullscreen mode:", err);
+        });
+    }
+}
+
+// Hoist functions to window
+window.showAppointmentDetails = showAppointmentDetails;
+window.showRecordDetails = showRecordDetails;
+window.showAddRecordForm = showAddRecordForm;
+window.resetActiveDetail = resetActiveDetail;
+window.closeHistPreview = closeHistPreview;
+window.previewHistFile = previewHistFile;
+window.zoomImage = zoomImage;
+window.resetZoom = resetZoom;
+window.zoomQR = zoomFile;
+window.closeQRLightbox = closeQRLightbox;
+window.toggleFullscreen = toggleFullscreen;
+
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. SMART TAB PERSISTENCE ENGINE
+    let activeTabTarget = '#app-history';
+
+    @if(session('success') || session('error') || session('info') || request('tab') === 'lab' || request('tab') === 'lab-history')
+        activeTabTarget = '#lab-history';
+    @elseif($status !== 'granted' && $appointments->isEmpty())
+        activeTabTarget = '#lab-history';
+    @else
+        const urlHash = window.location.hash;
+        const storedTab = localStorage.getItem('patient_archive_active_tab');
+
+        if (urlHash && (urlHash === '#lab-history' || urlHash === '#app-history')) {
+            activeTabTarget = urlHash;
+        } else if (storedTab && (storedTab === '#lab-history' || storedTab === '#app-history')) {
+            activeTabTarget = storedTab;
+        }
+    @endif
+
+    const targetTabBtn = document.querySelector(`button[data-bs-target="${activeTabTarget}"]`);
+    if (targetTabBtn) {
+        const tabInstance = bootstrap.Tab.getOrCreateInstance(targetTabBtn);
+        tabInstance.show();
+    }
+
+    // Persist user tab changes immediately
+    document.querySelectorAll('#historyTabs button[data-bs-toggle="pill"]').forEach(btn => {
+        btn.addEventListener('shown.bs.tab', (e) => {
+            const target = e.target.getAttribute('data-bs-target');
+            localStorage.setItem('patient_archive_active_tab', target);
+            if (history.replaceState) {
+                history.replaceState(null, null, target);
+            }
+            // Auto-select first item when switching tabs
+            if (target === '#lab-history') {
+                @if(count($existingRecords) > 0)
+                    showRecordDetails("{{ $existingRecords[0]['id'] }}");
+                @endif
+            } else if (target === '#app-history') {
+                @if($appointments->count() > 0)
+                    showAppointmentDetails("{{ $appointments[0]->id }}");
+                @endif
+            }
+        });
+    });
+
+    // 2. AUTO-SELECT FIRST RECORD ON LOAD IF PRESENT
+    @if(count($existingRecords) > 0)
+        showRecordDetails("{{ $existingRecords[0]['id'] }}");
+    @endif
+
+    // 3. AUTO-SELECT FIRST APPOINTMENT IF APPOINTMENT TAB IS ACTIVE
+    if (activeTabTarget === '#app-history') {
+        @if($appointments->count() > 0)
+            showAppointmentDetails("{{ $appointments[0]->id }}");
+        @endif
+    }
 
     document.addEventListener('fullscreenchange', () => {
         const icon = document.getElementById('fullscreen_icon');
@@ -555,21 +710,62 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, { passive: false });
     }
-
-    // Globally hoist functions
-    window.showAppointmentDetails = showAppointmentDetails;
-    window.resetActiveDetail = resetActiveDetail;
-    window.showAddRecordForm = showAddRecordForm;
-    window.showRecordDetails = showRecordDetails;
-    window.previewHistFile = previewHistFile;
-    window.closeHistPreview = closeHistPreview;
 });
 </script>
 @endpush
 
 @push('styles')
 <style>
-/* Scoped alignment styles */
+/* 1. Proportional desktop container constraint (prevents extreme edge-to-edge stretching) */
+#patient-archive-page {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding-top: 1.5rem !important;
+    padding-bottom: 1rem !important;
+}
+
+/* 2. Standard spacing between page header and content below */
+.page-header-archive {
+    margin-bottom: 1.5rem !important;
+}
+
+/* 3. Space between navigation tabs and workspace cards */
+#historyTabs {
+    margin-bottom: 1.75rem !important;
+}
+
+/* 4. Top clearance from header navbar to PATIENT ARCHIVE (matches My Appointments) */
+main.container {
+    min-height: auto !important;
+    padding-top: 3.25rem !important;
+    padding-bottom: 1.5rem !important;
+}
+
+/* 5. High-Contrast Back to Appointments Button with Emerald Accent Hover */
+.btn-back-appointments {
+    color: var(--text-main) !important;
+    border: 1.5px solid var(--border-color) !important;
+    background-color: var(--bg-card) !important;
+    border-radius: 8px !important;
+    font-size: 0.75rem !important;
+    letter-spacing: 0.5px !important;
+    transition: all 0.2s ease-in-out !important;
+}
+.btn-back-appointments:hover {
+    background-color: var(--brand-accent) !important;
+    border-color: var(--brand-accent) !important;
+    color: #1c232d !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(25, 211, 140, 0.2) !important;
+}
+
+/* 6. Compact Empty State Placeholders */
+.placeholder-compact {
+    padding: 2.25rem 1.5rem !important;
+    border-radius: 14px !important;
+}
+
+/* 7. Nav Tabs & Cards */
 #historyTabs .nav-link {
     color: var(--text-muted) !important;
     border: 1px solid var(--border-color);
@@ -590,7 +786,23 @@ document.addEventListener('DOMContentLoaded', () => {
 .app-list-card { transition: all 0.2s ease; cursor: pointer; }
 .app-list-card:hover { border-color: var(--brand-accent) !important; transform: translateX(2px); }
 
-/* Custom zoom elements wrapper overrides */
+/* 8. Handshake Box Container & Fallback */
+#handshake-box-container {
+    width: 100% !important;
+    padding: 0.5rem 0 !important;
+}
+.handshake-box-wrapper {
+    width: 100% !important;
+}
+.handshake-box-wrapper .card,
+#handshake-box-container .card {
+    width: 100% !important;
+    border-radius: 16px !important;
+    min-height: auto !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* 9. Custom zoom elements wrapper overrides */
 .image-preview-wrapper {
     position: relative;
 }

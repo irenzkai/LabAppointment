@@ -188,6 +188,38 @@ $phoneVerifiedElsewhere = !empty($user->phone) && \App\Models\User::where('id', 
     </form>
 </div>
 
+<!-- CONFIRM PROFILE UPDATE MODAL -->
+<div class="modal fade" id="confirmUpdateProfileModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="false" style="z-index: 1050;">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 450px;">
+        <div class="modal-content border-secondary bg-card text-start shadow-lg" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main); border-radius: 14px;">
+            <div class="modal-header border-secondary border-opacity-15 bg-secondary bg-opacity-10 py-3">
+                <h5 class="modal-title text-accent fw-bold uppercase small m-0">
+                    <i class="bi bi-shield-lock-fill me-2 fs-5"></i>Confirm Profile Update
+                </h5>
+                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 text-start">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0" style="width: 48px; height: 48px; background-color: rgba(25, 211, 140, 0.1);">
+                        <i class="bi bi-person-check-fill fs-3 text-accent"></i>
+                    </div>
+                    <div>
+                        <h6 class="text-main fw-bold mb-1 uppercase" style="font-size: 0.95rem;">Save Personal Information?</h6>
+                        <p class="text-muted small mb-0" style="font-size: 0.8rem;">Are you sure you want to save these updates to your clinical profile?</p>
+                    </div>
+                </div>
+                <p class="text-muted small mb-0" style="font-size: 0.82rem; line-height: 1.5;">
+                    Your revised name, demographics, and registered address will be synchronized across your diagnostic examination orders and patient records.
+                </p>
+            </div>
+            <div class="modal-footer border-secondary border-opacity-15 p-3 d-flex gap-2">
+                <button type="button" class="btn-custom btn-outline-secondary w-50 py-2.5 small fw-bold uppercase" data-bs-dismiss="modal">CANCEL</button>
+                <button type="button" class="btn-custom btn-accent w-50 py-2.5 small fw-bold uppercase shadow-sm" onclick="proceedWithProfileUpdate()">CONFIRM & SAVE</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- EMAIL OTP MODAL -->
 <div class="modal fade" id="profileEmailVerifyModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="false" style="z-index: 1050;">
     <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
@@ -300,6 +332,7 @@ let phoneVerifiedLocally = {{ $user->phone_verified_at ? 'true' : 'false' }};
 let verifiedPhoneValue = originalPhone;
 
 let isSubmittingForm = false;
+let isProfileFormConfirmed = false;
 
 // --- DYNAMIC BADGE SYNCHRONIZERS ON INPUT ---
 function handleProfileEmailInput() {
@@ -407,7 +440,12 @@ function validateName(value) {
 
 // --- FORM VALIDATOR & INTERCEPTOR ---
 function validateProfileForm(event) {
-    const form = event.target;
+    if (isProfileFormConfirmed) {
+        compileProfileAddress();
+        return true;
+    }
+
+    const form = event.target || document.getElementById('profileUpdateForm');
     let errorsCount = 0;
 
     form.querySelectorAll('.invalid-feedback-inline').forEach(el => {
@@ -544,8 +582,25 @@ function validateProfileForm(event) {
         }
     }
 
+    // Open confirmation modal before actual submission
+    event.preventDefault();
+    event.stopPropagation();
+
+    const confirmModal = new bootstrap.Modal(document.getElementById('confirmUpdateProfileModal'));
+    confirmModal.show();
+    return false;
+}
+
+// --- PROCEED WITH UPDATE FROM CONFIRMATION MODAL ---
+function proceedWithProfileUpdate() {
+    isProfileFormConfirmed = true;
+    const confirmModalEl = document.getElementById('confirmUpdateProfileModal');
+    const modalInstance = bootstrap.Modal.getInstance(confirmModalEl);
+    if (modalInstance) {
+        modalInstance.hide();
+    }
     compileProfileAddress();
-    return true;
+    document.getElementById('profileUpdateForm').submit();
 }
 
 // --- FORM RESET ---
@@ -581,6 +636,7 @@ function resetProfileForm(event) {
         phoneVerifiedLocally = {{ $user->phone_verified_at ? 'true' : 'false' }};
         verifiedPhoneValue = originalPhone;
         isSubmittingForm = false;
+        isProfileFormConfirmed = false;
 
         handleProfileEmailInput();
         handleProfilePhoneInput();
@@ -603,7 +659,7 @@ function openProfileVerifyModal(type) {
         const emailInput = document.getElementById('prof_email');
         const currentVal = emailInput ? emailInput.value.trim().toLowerCase() : '';
         if (currentVal === originalEmail.toLowerCase() && emailVerifiedElsewhere) {
-            alert('This email address has already been claimed and verified on another active account. Please update your email address or deactivate this profile.');
+            alert('This email address has already been claimed and verified by another active account. Please update your email address or deactivate this profile.');
             return;
         }
 
@@ -616,7 +672,7 @@ function openProfileVerifyModal(type) {
         const phoneInput = document.getElementById('phone_hidden');
         const currentVal = phoneInput ? phoneInput.value.trim() : '';
         if (currentVal === originalPhone && phoneVerifiedElsewhere) {
-            alert('This mobile phone number has already been claimed and verified on another active account. Please update your phone number.');
+            alert('This mobile phone number has already been claimed and verified by another active account. Please update your phone number.');
             return;
         }
 
@@ -826,9 +882,9 @@ async function submitProfileOtpCode(event) {
                     openProfileVerifyModal('phone');
                     return;
                 }
-                const mainForm = document.getElementById('profileUpdateForm');
-                compileProfileAddress();
-                mainForm.submit();
+                // Transition to confirmation modal instead of directly submitting
+                const confirmModal = new bootstrap.Modal(document.getElementById('confirmUpdateProfileModal'));
+                confirmModal.show();
             }
         } else {
             if (errorMsgDiv) {
@@ -966,9 +1022,9 @@ async function submitProfilePhoneOtpCode(event) {
             if (phoneConflictNotice) phoneConflictNotice.classList.add('d-none');
 
             if (isSubmittingForm) {
-                const mainForm = document.getElementById('profileUpdateForm');
-                compileProfileAddress();
-                mainForm.submit();
+                // Transition to confirmation modal instead of directly submitting
+                const confirmModal = new bootstrap.Modal(document.getElementById('confirmUpdateProfileModal'));
+                confirmModal.show();
             }
         } else {
             if (errorMsgDiv) {
@@ -1116,6 +1172,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (hiddenPhone && (hiddenPhone.startsWith('09') || hiddenPhone.startsWith('9')) && (hiddenPhone.length === 11 || hiddenPhone.length === 10)) {
         let suffixVal = hiddenPhone.startsWith('09') ? hiddenPhone.substring(2) : hiddenPhone.substring(1);
         const displayInput = document.getElementById('phone_display');
+        const hiddenInput = document.getElementById('phone_hidden');
         if (displayInput) displayInput.value = suffixVal;
         if (hiddenInput) hiddenInput.value = '09' + suffixVal;
     } else {

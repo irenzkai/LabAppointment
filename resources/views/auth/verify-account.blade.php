@@ -83,8 +83,13 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
                                 <div class="d-flex align-items-center mb-1 text-danger fw-bold uppercase small">
                                     <i class="bi bi-telephone-x-fill me-2 fs-5"></i> Phone Number Conflict
                                 </div>
-                                <div class="small text-main mb-1">
+                                <div class="small text-main mb-2">
                                     The mobile number <strong>{{ $user->phone }}</strong> is already verified on another active account. SMS verification is disabled for this number.
+                                </div>
+                                <div class="d-flex flex-wrap gap-2 mt-2">
+                                    <button type="button" class="btn btn-sm btn-outline-danger uppercase fw-bold py-1 px-3" onclick="toggleChangePhoneForm(true)">
+                                        <i class="bi bi-pencil-square me-1"></i> Change Phone Number
+                                    </button>
                                 </div>
                             </div>
                         @endif
@@ -148,7 +153,7 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
                                 </button>
                             </form>
 
-                            {{-- Google-style "Use another verification method instead" button --}}
+                            {{-- "Use another verification method instead" button --}}
                             <div class="mt-4 pt-3 border-top border-secondary border-opacity-15 text-center">
                                 <button type="button" class="btn btn-outline-secondary w-100 py-2.5 small fw-bold uppercase" onclick="switchVerificationView('selector')">
                                     <i class="bi bi-shield-lock me-1.5 text-accent"></i> Use another verification method instead
@@ -194,7 +199,6 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
                                 </button>
 
                                 {{-- Pathway 3: Mobile SMS OTP --}}
-                                @if(!empty($user->phone))
                                 <button type="button" class="btn verify-card p-3 text-start w-100 {{ $phoneConflict ? 'opacity-75' : '' }}" onclick="switchVerificationView('sms_otp')">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <div>
@@ -204,12 +208,13 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
                                                     <span class="badge bg-danger ms-1" style="font-size: 0.6rem;">Conflict</span>
                                                 @endif
                                             </div>
-                                            <div class="x-small text-muted">Receive a 6-digit text message code on your mobile phone ({{ $user->phone }}).</div>
+                                            <div class="x-small text-muted">
+                                                Receive a 6-digit text message code on your mobile phone ({{ $user->phone ?: 'No number on file' }}).
+                                            </div>
                                         </div>
                                         <i class="bi bi-chat-dots-fill fs-3 text-accent"></i>
                                     </div>
                                 </button>
-                                @endif
                             </div>
 
                             <button type="button" class="btn btn-link text-secondary text-decoration-none small w-100 text-center" onclick="switchVerificationView('link')">
@@ -261,7 +266,7 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
                         </div>
 
                         {{-- =========================================================================
-                             VIEW 4: MOBILE SMS OTP CODE SUBMISSION
+                             VIEW 4: MOBILE SMS OTP CODE SUBMISSION WITH CHANGE NUMBER OPTION
                              ========================================================================= --}}
                         <div id="view_sms_otp" class="verification-view d-none">
                             <form id="sms-otp-form" onsubmit="handleOtpSubmit(event, 'sms')">
@@ -269,19 +274,24 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
                                 <div class="mb-3 text-center">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
                                         <label class="small text-muted fw-bold uppercase">Enter 6-Digit SMS Code</label>
-                                        <span class="x-small text-accent font-monospace">{{ Auth::user()->phone }}</span>
+                                        <div class="d-flex align-items-center gap-1.5">
+                                            <span class="x-small text-accent font-monospace">{{ Auth::user()->phone ?: 'No number' }}</span>
+                                            <button type="button" class="btn btn-link text-accent text-decoration-none p-0 x-small fw-bold" onclick="toggleChangePhoneForm(true)" title="Change Phone Number">
+                                                <i class="bi bi-pencil-square"></i>
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <div class="d-flex justify-content-between gap-2 my-3 mx-auto" style="max-width: 330px;">
                                         @for($i = 0; $i < 6; $i++)
-                                            <input type="text" inputmode="numeric" pattern="[0-9]*" class="form-control otp-box sms-otp-box text-center fw-bold fs-3" maxlength="1" data-index="{{ $i }}" oninput="handleOtpBoxInput(this, event, 'sms')" onkeydown="handleOtpBoxKeydown(this, event, 'sms')" onpaste="handleOtpBoxPaste(event, 'sms')" {{ $phoneConflict ? 'disabled' : '' }}>
+                                            <input type="text" inputmode="numeric" pattern="[0-9]*" class="form-control otp-box sms-otp-box text-center fw-bold fs-3" maxlength="1" data-index="{{ $i }}" oninput="handleOtpBoxInput(this, event, 'sms')" onkeydown="handleOtpBoxKeydown(this, event, 'sms')" onpaste="handleOtpBoxPaste(event, 'sms')" {{ ($phoneConflict || empty($user->phone)) ? 'disabled' : '' }}>
                                         @endfor
                                     </div>
                                     <input type="hidden" name="otp" id="sms_otp_hidden">
                                     <div id="sms_otp_error" class="text-danger small mt-1 d-none fw-bold"></div>
                                 </div>
 
-                                <button id="submit-sms-otp-btn" type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm uppercase" {{ $phoneConflict ? 'disabled' : '' }}>
+                                <button id="submit-sms-otp-btn" type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm uppercase" {{ ($phoneConflict || empty($user->phone)) ? 'disabled' : '' }}>
                                     VERIFY SMS CODE
                                 </button>
                             </form>
@@ -290,10 +300,17 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
                                 <form id="resend-sms-otp-form" onsubmit="handleSmsOtpDispatch(event)">
                                     @csrf
                                     <span class="small text-muted">Didn't receive the SMS code?</span>
-                                    <button id="resend-sms-otp-btn" type="submit" class="btn btn-link text-accent fw-bold text-decoration-none p-0 small ms-1 align-baseline" style="font-size: 0.85rem;" {{ $phoneConflict ? 'disabled' : '' }}>
+                                    <button id="resend-sms-otp-btn" type="submit" class="btn btn-link text-accent fw-bold text-decoration-none p-0 small ms-1 align-baseline" style="font-size: 0.85rem;" {{ ($phoneConflict || empty($user->phone)) ? 'disabled' : '' }}>
                                         RESEND SMS CODE
                                     </button>
                                 </form>
+                            </div>
+
+                            {{-- Direct action link to change mobile number --}}
+                            <div class="mt-2 text-center">
+                                <button type="button" class="btn btn-link text-muted text-decoration-none smaller p-0 hover-accent" onclick="toggleChangePhoneForm(true)">
+                                    <i class="bi bi-phone me-1 text-accent"></i> Wrong number? Click here to update your phone number
+                                </button>
                             </div>
 
                             <div class="mt-4 pt-3 border-top border-secondary border-opacity-15 text-center">
@@ -304,15 +321,18 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
                         </div>
 
                         {{-- =========================================================================
-                             VIEW 5: CHANGE EMAIL FORM (OPTIONAL ACCORDION)
+                             VIEW 5: CHANGE EMAIL FORM CONTAINER
                              ========================================================================= --}}
-                        <div id="form_change_email_container" class="d-none mt-4 p-3 rounded border border-secondary border-opacity-10" style="background-color: rgba(25, 211, 140, 0.02);">
-                            <form method="POST" action="{{ route('verification.change-email') }}" novalidate id="changeEmailForm">
+                        <div id="form_change_email_container" class="{{ $errors->has('email') ? '' : 'd-none' }} mt-4 p-3 rounded border border-secondary border-opacity-10" style="background-color: rgba(25, 211, 140, 0.02);">
+                            <form method="POST" action="{{ route('verification.change-email') }}" novalidate id="changeEmailForm" onsubmit="return validateChangeEmailForm(event)">
                                 @csrf
-                                <div class="mb-3">
+                                <div class="mb-3 text-start">
                                     <label class="small text-muted fw-bold mb-1 uppercase">Enter Correct Email Address</label>
-                                    <input type="email" name="email" id="new_email_input" class="form-control py-2" placeholder="correct-email@example.com" value="{{ old('email', Auth::user()->email) }}" required>
+                                    <input type="email" name="email" id="new_email_input" class="form-control py-2 shadow-none {{ $errors->has('email') ? 'is-invalid' : '' }}" placeholder="correct-email@example.com" value="{{ old('email', Auth::user()->email) }}" required>
                                     <small class="text-muted mt-1 d-block" style="font-size:0.65rem;">Correcting your email updates your clinical profile, resolves account conflicts, and resets resend countdowns.</small>
+                                    <div id="email_input_error" class="text-danger small mt-1 {{ $errors->has('email') ? '' : 'd-none' }} fw-bold">
+                                        {{ $errors->first('email') }}
+                                    </div>
                                 </div>
                                 <div class="d-flex gap-2">
                                     <button type="button" class="btn-custom btn-outline-secondary w-50 py-2.5 small" onclick="toggleChangeEmailForm(false)">CANCEL</button>
@@ -321,9 +341,31 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
                             </form>
                         </div>
 
+                        {{-- =========================================================================
+                             VIEW 6: CHANGE PHONE NUMBER FORM CONTAINER
+                             ========================================================================= --}}
+                        <div id="form_change_phone_container" class="{{ $errors->has('phone') ? '' : 'd-none' }} mt-4 p-3 rounded border border-secondary border-opacity-10" style="background-color: rgba(25, 211, 140, 0.02);">
+                            <form method="POST" action="{{ Route::has('verification.change-phone') ? route('verification.change-phone') : url('phone/change') }}" novalidate id="changePhoneForm" onsubmit="return validateChangePhoneForm(event)">
+                                @csrf
+                                <div class="mb-3 text-start">
+                                    <label class="small text-muted fw-bold mb-1 uppercase">Enter Correct Mobile Number (11 Digits)</label>
+                                    <input type="tel" name="phone" id="new_phone_input" class="form-control py-2 font-monospace shadow-none {{ $errors->has('phone') ? 'is-invalid' : '' }}" placeholder="09XXXXXXXXX" maxlength="11" value="{{ old('phone', Auth::user()->phone) }}" required>
+                                    <small class="text-muted mt-1 d-block" style="font-size:0.65rem;">Enter an active 11-digit Philippine mobile number starting with 09 (e.g. 09123456789). Updating your phone resolves conflicts and resets SMS dispatch limits.</small>
+                                    <div id="phone_input_error" class="text-danger small mt-1 {{ $errors->has('phone') ? '' : 'd-none' }} fw-bold">
+                                        {{ $errors->first('phone') }}
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn-custom btn-outline-secondary w-50 py-2.5 small" onclick="toggleChangePhoneForm(false)">CANCEL</button>
+                                    <button type="submit" class="btn-custom btn-accent w-50 py-2.5 small">UPDATE NUMBER</button>
+                                </div>
+                            </form>
+                        </div>
+
                         <hr class="border-secondary border-opacity-25 my-4">
 
-                        <div class="d-flex justify-content-between align-items-center mt-3">
+                        {{-- Footer Quick Actions --}}
+                        <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
                             {{-- Logout Option --}}
                             <form method="POST" action="{{ route('logout') }}" class="m-0">
                                 @csrf
@@ -332,10 +374,17 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
                                 </button>
                             </form>
 
-                            {{-- Change Email Trigger Link --}}
-                            <button type="button" class="btn btn-link text-accent text-decoration-none small p-0" onclick="toggleChangeEmailForm(true)">
-                                <i class="bi bi-envelope-plus me-1"></i>Change Email
-                            </button>
+                            <div class="d-flex gap-3">
+                                {{-- Change Phone Trigger Link --}}
+                                <button type="button" class="btn btn-link text-accent text-decoration-none small p-0 hover-accent" onclick="toggleChangePhoneForm(true)">
+                                    <i class="bi bi-phone me-1"></i>Change Phone
+                                </button>
+
+                                {{-- Change Email Trigger Link --}}
+                                <button type="button" class="btn btn-link text-accent text-decoration-none small p-0 hover-accent" onclick="toggleChangeEmailForm(true)">
+                                    <i class="bi bi-envelope-plus me-1"></i>Change Email
+                                </button>
+                            </div>
                         </div>
 
                     </div>
@@ -409,7 +458,7 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
         }
     }
 
-    // 2. MULTI-VIEW SCREEN CONTROLLER (GOOGLE-STYLE)
+    // 2. MULTI-VIEW SCREEN CONTROLLER
     let currentActiveView = 'link';
 
     function switchVerificationView(viewName) {
@@ -417,8 +466,12 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
         localStorage.setItem('active_verify_view', viewName);
 
         document.querySelectorAll('.verification-view').forEach(v => v.classList.add('d-none'));
+        
         const changeEmailContainer = document.getElementById('form_change_email_container');
         if (changeEmailContainer) changeEmailContainer.classList.add('d-none');
+
+        const changePhoneContainer = document.getElementById('form_change_phone_container');
+        if (changePhoneContainer) changePhoneContainer.classList.add('d-none');
 
         const titleEl = document.getElementById('header-title');
         const subEl = document.getElementById('header-subtitle');
@@ -451,17 +504,108 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
         updateAllThrottlerStates();
     }
 
-    // 3. TOGGLE CHANGE EMAIL FORM
+    // 3. TOGGLE CHANGE EMAIL & PHONE FORMS
     function toggleChangeEmailForm(show = true) {
         const changeEmailContainer = document.getElementById('form_change_email_container');
+        const changePhoneContainer = document.getElementById('form_change_phone_container');
+        if (changePhoneContainer) changePhoneContainer.classList.add('d-none');
+
         if (show) {
             document.querySelectorAll('.verification-view').forEach(v => v.classList.add('d-none'));
             changeEmailContainer.classList.remove('d-none');
+            
+            document.getElementById('header-title').innerText = "Update Registered Email";
+            document.getElementById('header-subtitle').innerText = "Enter a valid email address to receive your verification links.";
+            document.getElementById('header-icon').className = "bi bi-envelope-gear fs-2";
+            
             setTimeout(() => document.getElementById('new_email_input')?.focus(), 150);
         } else {
             changeEmailContainer.classList.add('d-none');
             switchVerificationView('link');
         }
+    }
+
+    function toggleChangePhoneForm(show = true) {
+        const changePhoneContainer = document.getElementById('form_change_phone_container');
+        const changeEmailContainer = document.getElementById('form_change_email_container');
+        if (changeEmailContainer) changeEmailContainer.classList.add('d-none');
+
+        if (show) {
+            document.querySelectorAll('.verification-view').forEach(v => v.classList.add('d-none'));
+            changePhoneContainer.classList.remove('d-none');
+
+            document.getElementById('header-title').innerText = "Update Mobile Number";
+            document.getElementById('header-subtitle').innerText = "Enter an active 11-digit mobile phone number to receive your SMS OTP.";
+            document.getElementById('header-icon').className = "bi bi-telephone-gear fs-2";
+
+            setTimeout(() => document.getElementById('new_phone_input')?.focus(), 150);
+        } else {
+            changePhoneContainer.classList.add('d-none');
+            switchVerificationView('sms_otp');
+        }
+    }
+
+    function validateChangeEmailForm(e) {
+        const emailInput = document.getElementById('new_email_input');
+        const errorDiv = document.getElementById('email_input_error');
+        const val = emailInput ? emailInput.value.trim() : '';
+
+        if (!val || !/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(val)) {
+            e.preventDefault();
+            if (errorDiv) {
+                errorDiv.innerText = "Please enter a valid email address with a domain (e.g. name@domain.com).";
+                errorDiv.classList.remove('d-none');
+            }
+            if (emailInput) {
+                emailInput.classList.add('is-invalid');
+                emailInput.focus();
+            }
+            return false;
+        }
+
+        if (errorDiv) errorDiv.classList.add('d-none');
+        if (emailInput) emailInput.classList.remove('is-invalid');
+
+        // Reset email dispatch limits on email change
+        localStorage.removeItem('resend_link_attempts');
+        localStorage.removeItem('resend_link_cooldown');
+        localStorage.removeItem('resend_link_lockout');
+        localStorage.removeItem('resend_email_otp_attempts');
+        localStorage.removeItem('resend_email_otp_cooldown');
+        localStorage.removeItem('resend_email_otp_lockout');
+        localStorage.setItem('active_verify_view', 'link');
+
+        return true;
+    }
+
+    function validateChangePhoneForm(e) {
+        const phoneInput = document.getElementById('new_phone_input');
+        const errorDiv = document.getElementById('phone_input_error');
+        const val = phoneInput ? phoneInput.value.trim() : '';
+
+        if (!val || !/^09\d{9}$/.test(val)) {
+            e.preventDefault();
+            if (errorDiv) {
+                errorDiv.innerText = "Phone number must start with 09 and contain exactly 11 digits (e.g. 09123456789).";
+                errorDiv.classList.remove('d-none');
+            }
+            if (phoneInput) {
+                phoneInput.classList.add('is-invalid');
+                phoneInput.focus();
+            }
+            return false;
+        }
+
+        if (errorDiv) errorDiv.classList.add('d-none');
+        if (phoneInput) phoneInput.classList.remove('is-invalid');
+
+        // Reset SMS rate-limiting & lockout keys on phone number change
+        localStorage.removeItem('resend_sms_otp_attempts');
+        localStorage.removeItem('resend_sms_otp_cooldown');
+        localStorage.removeItem('resend_sms_otp_lockout');
+        localStorage.setItem('active_verify_view', 'sms_otp');
+
+        return true;
     }
 
     // 4. 6-DIGIT OTP FIELDS HANDLERS WITH PASTE SUPPORT
@@ -516,7 +660,7 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
         return compiled;
     }
 
-    // 5. SERVER-DELEGATED OTP VERIFICATION (WITH UNCLICKABLE "VERIFYING..." LOADING STATE)
+    // 5. SERVER-DELEGATED OTP VERIFICATION
     async function handleOtpSubmit(event, channel) {
         event.preventDefault();
         if (isSubmittingOtp) return false;
@@ -593,7 +737,7 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
         return false;
     }
 
-    // 6. ASYNCHRONOUS IN-PAGE DISPATCHERS (UNCLICKABLE "SENDING..." LOADING STATES)
+    // 6. ASYNCHRONOUS IN-PAGE DISPATCHERS
     async function handleLinkDispatch(event) {
         event.preventDefault();
         if (isDispatchingLink) return;
@@ -843,12 +987,28 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
     setInterval(updateAllThrottlerStates, 1000);
 
     document.addEventListener('DOMContentLoaded', () => {
-        const savedView = localStorage.getItem('active_verify_view') || 'link';
-        switchVerificationView(savedView);
+        // Automatically open the relevant view depending on active status or errors
+        let initialView = localStorage.getItem('active_verify_view') || 'link';
+
+        @if(session('status') === 'verification-sms-sent')
+            initialView = 'sms_otp';
+        @elseif(session('status') === 'verification-code-sent')
+            initialView = 'email_otp';
+        @elseif(session('status') === 'verification-link-sent')
+            initialView = 'link';
+        @endif
+
+        @if($errors->has('phone'))
+            toggleChangePhoneForm(true);
+        @elseif($errors->has('email') && old('email'))
+            toggleChangeEmailForm(true);
+        @else
+            switchVerificationView(initialView);
+        @endif
+
         updateAllThrottlerStates();
 
         // 8. REAL-TIME MULTI-TAB POLLING
-        // If the user clicks a verification link in an external tab or device, automatically route them to main
         setInterval(async () => {
             try {
                 const res = await fetch("{{ route('verification.status') }}");

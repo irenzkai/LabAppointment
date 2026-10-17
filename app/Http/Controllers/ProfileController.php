@@ -2,16 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\ActivityLog;
 use App\Models\User;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\View\View;
 
@@ -20,7 +22,7 @@ class ProfileController extends Controller
     /**
      * Display the user's profile settings form (Left-Right Split Pane).
      */
-    public function edit(Request $request): View 
+    public function edit(Request $request): View
     {
         return view('profile.edit', ['user' => $request->user()]);
     }
@@ -35,9 +37,11 @@ class ProfileController extends Controller
         if (str_starts_with($digits, '639') && strlen($digits) === 12) {
             return '09' . substr($digits, 3);
         }
+
         if (str_starts_with($digits, '9') && strlen($digits) === 10) {
             return '09' . $digits;
         }
+
         if (str_starts_with($digits, '09') && strlen($digits) === 11) {
             return $digits;
         }
@@ -48,20 +52,21 @@ class ProfileController extends Controller
     /**
      * Update the user's profile information (Handles name, suffix collation, and credential conflicts).
      */
-    public function update(ProfileUpdateRequest $request): RedirectResponse 
+    public function update(ProfileUpdateRequest $request): RedirectResponse
     {
         $user = $request->user();
 
         // 1. Clean and normalize name values
         $fName = strtoupper(trim($request->first_name));
-        $mName = ($request->middle_name && strtoupper($request->middle_name) !== 'N/A') 
-            ? strtoupper(trim($request->middle_name)) 
+        $mName = ($request->middle_name && strtoupper($request->middle_name) !== 'N/A')
+            ? strtoupper(trim($request->middle_name))
             : 'N/A';
         $lName = strtoupper(trim($request->last_name));
         $suffix = $request->filled('suffix') ? strtoupper(trim($request->suffix)) : '';
 
         // 2. Compile combined display name, appending the suffix if it exists
         $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
+
         if (!empty($suffix)) {
             $displayName .= " {$suffix}";
         }
@@ -139,7 +144,7 @@ class ProfileController extends Controller
      * Delete the user's account (Supports standard redirect and async AJAX workflows).
      * Deactivation unsets verified timestamps so credentials can be reclaimed if needed.
      */
-    public function destroy(Request $request): RedirectResponse|JsonResponse 
+    public function destroy(Request $request): RedirectResponse|JsonResponse
     {
         $request->validateWithBag('userDeletion', [
             'password' => ['required', 'current_password'],
@@ -206,11 +211,19 @@ class ProfileController extends Controller
         $user = $request->user();
 
         if ($user->hasVerifiedEmail()) {
-            return redirect()->route('dashboard');
+            return redirect()->route(Route::has('main') ? 'main' : 'dashboard');
         }
 
         $request->validate([
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,' . $user->id, 'regex:/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
+            'email' => [
+                'required',
+                'string',
+                'lowercase',
+                'email',
+                'max:255',
+                'unique:users,email,' . $user->id,
+                'regex:/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'
+            ],
         ], [
             'email.regex' => 'Please enter a valid email address with a domain (e.g. name@domain.com or user@online.htcgsc.edu.ph).',
             'email.unique' => 'This email address is already registered.'
@@ -242,5 +255,77 @@ class ProfileController extends Controller
         Cache::forget("email_otp_addr_{$user->id}");
 
         return back()->with('status', 'verification-code-sent');
+    }
+
+    /**
+     * Update unverified mobile phone number corrections on the fly directly from the verification hub.
+     */
+    public function changeUnverifiedPhone(Request $request): RedirectResponse|JsonResponse
+    {
+        $user = $request->user();
+
+        if ($user->hasVerifiedPhone()) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Your mobile phone number is already verified.'
+                ], 422);
+            }
+            return redirect()->route(Route::has('main') ? 'main' : 'dashboard');
+        }
+
+        $request->validate([
+            'phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
+        ], [
+            'phone.required' => 'Please enter your mobile phone number.',
+            'phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits (e.g. 09123456789).',
+        ]);
+
+        $newPhone = $this->normalizePhoneNumber((string) $request->phone);
+
+        // Ensure this phone number is not verified on another active account
+        $phoneVerifiedElsewhere = User::where('id', '!=', $user->id)
+            ->where('phone', $newPhone)
+            ->whereNotNull('phone_verified_at')
+            ->exists();
+
+        if ($phoneVerifiedElsewhere) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This mobile phone number has already been claimed and verified by another active account.'
+                ], 422);
+            }
+
+            return back()->withInput()->withErrors([
+                'phone' => 'This mobile phone number has already been claimed and verified by another active account.'
+            ]);
+        }
+
+        $user->phone = $newPhone;
+        $user->phone_verified_at = null;
+        $user->save();
+
+        ActivityLog::record('PHONE CORRECTED', "User changed their unverified mobile phone number to {$user->phone}.", $user->name);
+
+        // Clear previous SMS OTP sessions and caches to reset dispatch limits
+        session()->forget(['sms_otp_code', 'sms_otp_phone']);
+        Cache::forget("sms_otp_{$user->id}");
+        Cache::forget("sms_otp_phone_{$user->id}");
+
+        // Automatically dispatch fresh SMS OTP to the newly updated mobile number
+        try {
+            return app(VerifyEmailController::class)->sendSmsOtp($request);
+        } catch (\Throwable $e) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Mobile number updated successfully. You can now request your SMS verification code.',
+                    'phone' => $user->phone,
+                ]);
+            }
+
+            return back()->with('status', 'verification-sms-sent');
+        }
     }
 }

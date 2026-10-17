@@ -86,7 +86,6 @@ Route::post('/login', function (Request $request) {
         } else {
             $normalizedPhone = $digits;
         }
-
         $user = User::where('phone', $normalizedPhone)->first();
         $credentialType = 'phone';
     } else {
@@ -427,6 +426,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Change unverified email address
     Route::post('/email/change', function (Request $request) {
         $user = $request->user();
+
         $request->validate([
             'email' => [
                 'required',
@@ -470,6 +470,65 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
     });
 
+    // Change unverified phone number
+    Route::post('/phone/change', function (Request $request) {
+        $user = $request->user();
+
+        if ($user->hasVerifiedPhone()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your mobile phone number is already verified.'
+            ], 422);
+        }
+
+        $request->validate([
+            'phone' => ['required', 'string', 'regex:/^09\d{9}$/'],
+        ], [
+            'phone.required' => 'Please enter your mobile phone number.',
+            'phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits (e.g. 09123456789).'
+        ]);
+
+        $clean = preg_replace('/[^0-9]/', '', (string)$request->phone);
+        if (str_starts_with($clean, '639') && strlen($clean) === 12) {
+            $newPhone = '09' . substr($clean, 3);
+        } elseif (str_starts_with($clean, '9') && strlen($clean) === 10) {
+            $newPhone = '09' . $clean;
+        } else {
+            $newPhone = $clean;
+        }
+
+        $phoneConflict = User::where('id', '!=', $user->id)
+            ->where('phone', $newPhone)
+            ->whereNotNull('phone_verified_at')
+            ->exists();
+
+        if ($phoneConflict) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This mobile phone number has already been claimed and verified by another active account.'
+            ], 422);
+        }
+
+        $user->phone = $newPhone;
+        $user->phone_verified_at = null;
+        $user->save();
+
+        ActivityLog::record('PHONE CORRECTED', "User changed their unverified mobile phone number to {$user->phone}.", $user->name);
+
+        session()->forget(['sms_otp_code', 'sms_otp_phone']);
+        Cache::forget("sms_otp_{$user->id}");
+        Cache::forget("sms_otp_phone_{$user->id}");
+
+        app(VerifyEmailController::class)->sendSmsOtp($request);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Mobile number updated. A new SMS verification code has been dispatched.',
+            'user' => $user,
+            'phone' => $user->phone,
+        ]);
+    });
+
     // Logout
     Route::post('/logout', function (Request $request) {
         $request->user()->currentAccessToken()->delete();
@@ -486,14 +545,12 @@ Route::middleware('auth:sanctum')->group(function () {
             ->where('deleted_by_patient', false)
             ->latest()
             ->get();
-
         $dependents = \App\Models\Appointment::with(['services', 'dependent', 'result', 'user'])
             ->where('user_id', $user->id)
             ->whereNotNull('dependent_id')
             ->where('deleted_by_patient', false)
             ->latest()
             ->get();
-
         return response()->json([
             'self' => $self,
             'dependents' => $dependents,
@@ -532,14 +589,12 @@ Route::middleware('auth:sanctum')->group(function () {
             ->where('deleted_by_patient', false)
             ->latest()
             ->get();
-
         $recordsModels = \App\Models\LaboratoryHistoryRecord::whereHas('laboratoryHistory', function ($q) use ($user) {
             $q->where('user_id', $user->id);
         })
             ->with(['scans', 'procedures'])
             ->latest('date_of_record')
             ->get();
-
         $existingRecords = $recordsModels->map(function ($r) {
             return [
                 'id' => $r->id,
@@ -570,7 +625,6 @@ Route::middleware('auth:sanctum')->group(function () {
         $user = $request->user();
         $history = LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
         $history->update(['permission_status' => 'pending_staff']);
-
         ActivityLog::record('HISTORY REQUEST', 'Patient requested data import', $user->name);
 
         $internalStaff = User::whereIn('role', ['staff', 'lab_tech', 'admin'])->get();
@@ -594,7 +648,6 @@ Route::middleware('auth:sanctum')->group(function () {
         $user = $request->user();
         $history = LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
         $history->update(['permission_status' => 'granted']);
-
         ActivityLog::record('HISTORY GRANTED', "Handshake accepted by {$user->role}", $user->name);
 
         return response()->json([

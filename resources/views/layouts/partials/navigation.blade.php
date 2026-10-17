@@ -227,7 +227,7 @@
 
                     {{-- USER PROFILE DROPDOWN --}}
                     <div class="dropdown">
-                        <button class="btn-custom btn-outline-accent py-2 dropdown-toggle d-inline-flex align-items-center gap-1.5" data-bs-toggle="dropdown" aria-expanded="false">
+                        <button class="btn-custom btn-outline-accent py-2 dropdown-toggle d-inline-flex align-items-center gap-2" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-person-circle"></i>
                             <span>{{ strtoupper(Auth::user()->first_name) }}</span>
                         </button>

@@ -4,10 +4,10 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\Appointment;
-use App\Models\AppointmentResult;
 use App\Models\Dependent;
 use App\Models\Service;
 use App\Models\User;
+use App\Models\ActivityLog;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
@@ -33,10 +33,10 @@ class AppointmentSeeder extends Seeder
             return;
         }
 
-        $p1 = $patients[0];
-        $p2 = $patients[1] ?? $patients[0];
-        $p3 = $patients[2] ?? $patients[0];
-        $p4 = $patients[3] ?? $patients[0];
+        $p1 = $patients[0]; // Juan Dela Cruz
+        $p2 = $patients[1] ?? $patients[0]; // Maria Clara
+        $p3 = $patients[2] ?? $patients[0]; // Pedro Penduko
+        $p4 = $patients[3] ?? $patients[0]; // Ana Silang-Santos
 
         // 3. Ensure sample minor dependents exist for family bookings
         $dep1 = Dependent::firstOrCreate(
@@ -69,7 +69,7 @@ class AppointmentSeeder extends Seeder
             ]
         );
 
-        // 4. Fetch primary services (e.g., FBS / RBS, BUN, CBC)
+        // 4. Fetch standard laboratory services
         $fbs = Service::where('name', 'like', '%FBS%')->first() ?? Service::first();
         $bun = Service::where('name', 'like', '%BUN%')->first() ?? $fbs;
         $cbc = Service::where('name', 'like', '%CBC%')->first() ?? $fbs;
@@ -82,7 +82,6 @@ class AppointmentSeeder extends Seeder
             Service $service,
             string $status,
             string $paymentStatus,
-            string $paymentMethod,
             Carbon $dateTime,
             array $extras = []
         ) {
@@ -102,7 +101,7 @@ class AppointmentSeeder extends Seeder
             $app->user_id = $user->id;
             $app->dependent_id = $extras['dependent_id'] ?? null;
             $app->organization_name = $extras['organization_name'] ?? null;
-            // Strictly cap batch_id to 10 characters max
+            // Strictly cap batch_id to 10 characters maximum
             $app->batch_id = isset($extras['batch_id']) ? substr((string)$extras['batch_id'], 0, 10) : null;
 
             $app->appointment_date = $appDate;
@@ -124,7 +123,8 @@ class AppointmentSeeder extends Seeder
             $app->patient_city = $extras['patient_city'] ?? ($user->city ?? 'CITY OF GENERAL SANTOS');
             $app->patient_province = $extras['patient_province'] ?? ($user->province ?? 'SOUTH COTABATO');
 
-            $app->payment_method = $paymentMethod;
+            // Set to Cash only (prevents blank/missing cashless payment receipts)
+            $app->payment_method = 'Cash';
             $app->payment_status = $paymentStatus;
             $app->payment_amount = ($paymentStatus === 'paid') ? (float)$service->price : 0.00;
             $app->status = $status;
@@ -133,29 +133,19 @@ class AppointmentSeeder extends Seeder
             $app->return_reason = $extras['return_reason'] ?? null;
             $app->cancellation_reason = $extras['cancellation_reason'] ?? null;
 
-            if (in_array($status, ['tested', 'encoded', 'released'])) {
+            if ($status === 'tested') {
                 $app->tested_at = $dateTime->copy()->addMinutes(20);
-            }
-            if ($status === 'released') {
-                $app->results_released_at = $dateTime->copy()->addHours(2);
+                $app->result_estimated_at = $dateTime->copy()->addHours(2);
             }
 
-            // Explicitly set timestamps to match historical queries
+            // Preserve explicit historical timestamp values
             $app->timestamps = false;
             $app->created_at = $dateTime;
             $app->updated_at = $dateTime->copy()->addMinutes(30);
             $app->save();
 
-            // Attach the service
+            // Link the service
             $app->services()->sync([$service->id]);
-
-            // Add basic result tracker for processed workflows
-            if (in_array($status, ['tested', 'encoded', 'released'])) {
-                AppointmentResult::firstOrCreate(
-                    ['appointment_id' => $app->id],
-                    ['included_reports' => ['lab']]
-                );
-            }
 
             return $app;
         };
@@ -164,24 +154,27 @@ class AppointmentSeeder extends Seeder
         $today = Carbon::today();
 
         // =========================================================================
-        // 1. TODAY'S APPOINTMENTS (Populates Daily Reports, Today Revenue, Active Queue)
+        // 1. TODAY'S APPOINTMENTS (Populates Today's Metrics, Daily Reports & Queue)
         // =========================================================================
 
-        // Personal Bookings (Self)
-        $createAppointment($p1, $fbs, 'pending', 'unpaid', 'Cash', $today->copy()->setTime(8, 0));
-        $createAppointment($p2, $bun, 'approved', 'unpaid', 'Cash', $today->copy()->setTime(9, 0));
-        $createAppointment($p3, $fbs, 'tested', 'paid', 'Cashless', $today->copy()->setTime(10, 0));
-        $createAppointment($p4, $cbc, 'encoded', 'paid', 'Cashless', $today->copy()->setTime(11, 0));
-        $createAppointment($p1, $bun, 'retest', 'paid', 'Cash', $today->copy()->setTime(13, 0), [
-            'return_reason' => 'Specimen hemolyzed during processing. Recollect required.',
-        ]);
-        $createAppointment($p2, $fbs, 'canceled', 'paid', 'Cashless', $today->copy()->setTime(14, 0), [
-            'cancellation_reason' => 'Patient requested appointment cancellation. Refund pending verification.',
-        ]);
-        $createAppointment($p3, $cbc, 'released', 'paid', 'Cashless', $today->copy()->setTime(15, 0));
+        // Personal Bookings (Self) - Cash Only, No Encoded/Released
+        $app1 = $createAppointment($p1, $fbs, 'pending', 'unpaid', $today->copy()->setTime(8, 0));
+        ActivityLog::record('BOOKED', 'Appointment booked for testing', $app1->patient_name, $app1->id);
 
-        // Family Dependent Bookings
-        $createAppointment($p1, $bun, 'approved', 'paid', 'Cashless', $today->copy()->setTime(9, 30), [
+        $createAppointment($p2, $bun, 'approved', 'unpaid', $today->copy()->setTime(9, 0));
+        $createAppointment($p3, $fbs, 'tested', 'paid', $today->copy()->setTime(10, 0));
+        $createAppointment($p4, $cbc, 'tested', 'paid', $today->copy()->setTime(11, 0));
+
+        $createAppointment($p1, $bun, 'retest', 'paid', $today->copy()->setTime(13, 0), [
+            'return_reason' => 'Specimen hemolyzed during collection. Recollection required.',
+        ]);
+
+        $createAppointment($p2, $fbs, 'canceled', 'unpaid', $today->copy()->setTime(14, 0), [
+            'cancellation_reason' => 'Patient called to cancel due to personal conflict.',
+        ]);
+
+        // Family Dependent Bookings (Cash Only)
+        $createAppointment($p1, $bun, 'approved', 'paid', $today->copy()->setTime(9, 30), [
             'dependent_id' => $dep1->id,
             'patient_first_name' => $dep1->first_name,
             'patient_middle_name' => $dep1->middle_name,
@@ -191,19 +184,19 @@ class AppointmentSeeder extends Seeder
             'patient_birthdate' => $dep1->birthdate,
         ]);
 
-        $createAppointment($p2, $fbs, 'returned', 'unpaid', 'Cash', $today->copy()->setTime(10, 30), [
+        $createAppointment($p2, $fbs, 'returned', 'unpaid', $today->copy()->setTime(10, 30), [
             'dependent_id' => $dep2->id,
             'patient_first_name' => $dep2->first_name,
             'patient_middle_name' => $dep2->middle_name,
             'patient_last_name' => $dep2->last_name,
             'patient_sex' => $dep2->sex,
             'patient_birthdate' => $dep2->birthdate,
-            'return_reason' => 'Referral prescription note unclear. Please upload a legible copy.',
+            'return_reason' => 'Doctor referral note is missing. Please attach a prescription.',
         ]);
 
         // Bulk / Corporate Batch Bookings (batch_id is strictly <= 10 characters)
-        $batchId = 'DOLE' . strtoupper(Str::random(6)); // Exactly 10 chars
-        $createAppointment($p3, $bun, 'encoded', 'paid', 'Cashless', $today->copy()->setTime(11, 30), [
+        $batchId = 'DOLE' . strtoupper(Str::random(5)); // Exactly 9 chars
+        $createAppointment($p3, $bun, 'tested', 'paid', $today->copy()->setTime(11, 30), [
             'organization_name' => 'DOLE PHILIPPINES INC.',
             'batch_id' => $batchId,
             'patient_first_name' => 'ROBERTO',
@@ -213,7 +206,7 @@ class AppointmentSeeder extends Seeder
             'patient_phone' => '09171234561',
         ]);
 
-        $createAppointment($p3, $fbs, 'encoded', 'paid', 'Cashless', $today->copy()->setTime(11, 30), [
+        $createAppointment($p3, $fbs, 'tested', 'paid', $today->copy()->setTime(11, 30), [
             'organization_name' => 'DOLE PHILIPPINES INC.',
             'batch_id' => $batchId,
             'patient_first_name' => 'CARMINA',
@@ -233,31 +226,42 @@ class AppointmentSeeder extends Seeder
             $service = $servicePool[$d % count($servicePool)];
             $user = $patients[$d % $patients->count()];
 
-            // Active/completed appointments for that day
-            $createAppointment($user, $service, 'tested', 'paid', 'Cashless', $pastDay->copy()->setTime(9, 0));
-            $createAppointment($user, $bun, 'encoded', 'paid', 'Cash', $pastDay->copy()->setTime(14, 0));
+            // Tested appointment (Cash & Paid) - Does NOT expire
+            $createAppointment($user, $service, 'tested', 'paid', $pastDay->copy()->setTime(9, 0));
 
-            // Unprogressed appointments scheduled >24 hours ago (These show as EXPIRED)
+            // Unprogressed appointments scheduled >24 hours ago (These naturally register as EXPIRED)
             if ($d >= 2 && $d <= 4) {
-                $createAppointment($user, $fbs, 'pending', 'unpaid', 'Cash', $pastDay->copy()->setTime(8, 0));
+                $createAppointment($user, $fbs, 'pending', 'unpaid', $pastDay->copy()->setTime(8, 0));
+            }
+
+            // Returned and canceled historical appointments
+            if ($d === 3) {
+                $createAppointment($user, $bun, 'returned', 'unpaid', $pastDay->copy()->setTime(13, 0), [
+                    'return_reason' => 'Patient did not comply with required 10-hour fasting.',
+                ]);
+            }
+            if ($d === 5) {
+                $createAppointment($user, $cbc, 'canceled', 'unpaid', $pastDay->copy()->setTime(15, 0), [
+                    'cancellation_reason' => 'Appointment canceled by patient.',
+                ]);
             }
         }
 
         // =========================================================================
-        // 3. PAST 6 MONTHS (Monthly Reports & 6-Month Rolling Chart)
+        // 3. PAST 6 MONTHS (Monthly Reports & 6-Month Rolling Analytics Chart)
         // =========================================================================
 
         for ($m = 1; $m <= 5; $m++) {
             $monthDate = $now->copy()->subMonths($m)->startOfMonth();
 
-            // Scatter 4-5 appointments across different days of the month
-            $daysInMonth = [4, 10, 16, 22, 27];
+            // Scatter 4-5 appointments across the month (Cash only, tested/approved/canceled)
+            $daysInMonth = [4, 11, 17, 24];
             foreach ($daysInMonth as $idx => $dayNum) {
                 $appTimestamp = $monthDate->copy()->addDays($dayNum)->setTime(10, 0);
                 $service = $servicePool[$idx % count($servicePool)];
                 $user = $patients[$idx % $patients->count()];
 
-                $statuses = ['tested', 'encoded', 'released', 'canceled'];
+                $statuses = ['tested', 'tested', 'approved', 'canceled'];
                 $status = $statuses[$idx % count($statuses)];
                 $paymentStatus = ($status === 'canceled') ? 'unpaid' : 'paid';
 
@@ -266,20 +270,30 @@ class AppointmentSeeder extends Seeder
                     $service,
                     $status,
                     $paymentStatus,
-                    ($idx % 2 === 0) ? 'Cashless' : 'Cash',
                     $appTimestamp
                 );
             }
+
+            // Historical corporate batch entry per month (batch_id <= 10 characters)
+            $batchCode = 'B' . $m . strtoupper(Str::random(6)); // 8 chars
+            $createAppointment($p1, $bun, 'tested', 'paid', $monthDate->copy()->addDays(20)->setTime(9, 0), [
+                'organization_name' => 'SAN MIGUEL CORP GSC',
+                'batch_id' => $batchCode,
+                'patient_first_name' => 'EDUARDO',
+                'patient_middle_name' => 'DELA',
+                'patient_last_name' => 'ROSA',
+                'patient_email' => "eduardo{$m}@smc.com.ph",
+            ]);
         }
 
         // =========================================================================
-        // 4. PAST 4 YEARS (Yearly Reports & 5-Year Analytics Bar Chart)
+        // 4. PAST 4 YEARS (Yearly Master Reports & 5-Year Analytics Bar Chart)
         // =========================================================================
 
         for ($y = 1; $y <= 4; $y++) {
             $yearBase = $now->copy()->subYears($y);
 
-            // Seed 4 distributed appointments across quarters of each year
+            // Seed 4 distributed appointments across quarters of each year (Tested & Paid Cash)
             $quarterMonths = [2, 5, 8, 11];
             foreach ($quarterMonths as $qIdx => $monthNum) {
                 $yearTimestamp = $yearBase->copy()->month($monthNum)->day(15)->setTime(10, 0);
@@ -289,9 +303,8 @@ class AppointmentSeeder extends Seeder
                 $createAppointment(
                     $user,
                     $service,
-                    'released',
+                    'tested',
                     'paid',
-                    ($qIdx % 2 === 0) ? 'Cashless' : 'Cash',
                     $yearTimestamp
                 );
             }

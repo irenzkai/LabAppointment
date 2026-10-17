@@ -90,7 +90,12 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:6,1')
         ->name('verification.change-email');
 
-    // 7. Session Polling Status Endpoint for real-time external link verification detection
+    // 7. Phone number change adjustment for unverified users
+    Route::post('phone/change', [ProfileController::class, 'changeUnverifiedPhone'])
+        ->middleware('throttle:6,1')
+        ->name('verification.change-phone');
+
+    // 8. Session Polling Status Endpoint for real-time external link verification detection
     Route::get('/api/verification-status', function () {
         return response()->json([
             'verified' => auth()->user() ? auth()->user()->hasVerifiedEmail() : false

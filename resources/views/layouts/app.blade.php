@@ -33,15 +33,15 @@
     {{-- 2. MAIN CONTENT AREA --}}
     <div class="d-flex flex-column">
 
-        <main class="container py-5 mt-2" style="min-height: 65vh;">
+        <main class="container py-4 mt-1" style="min-height: 65vh;">
 
-            {{-- Global Success Message --}}
-            @if(session('success') || request()->has('verified'))
-            <div class="alert alert-clinical d-flex align-items-center mb-4 shadow-sm" role="alert">
+            {{-- Global Success Message (suppressed on routes with dedicated in-page banners to prevent duplicate alerts) --}}
+            @if((session('success') || request()->has('verified')) && !Route::is('login', 'register', 'password.request', 'password.reset', 'verification.notice', 'patient.history', 'admin.users.history'))
+            <div class="alert alert-clinical alert-dismissible fade show d-flex align-items-center mb-4 shadow-sm" role="alert">
                 <i class="bi bi-check-circle-fill me-3 fs-4 text-accent"></i>
-                <div>
-                    <div class="fw-800 uppercase fs-x-small">Success</div>
-                    <div class="small">
+                <div class="text-start">
+                    <div class="fw-800 uppercase fs-x-small text-accent" style="font-size: 0.75rem; letter-spacing: 0.5px;">Success</div>
+                    <div class="small text-main">
                         {{-- Dynamically toggle message if arriving via live verification redirect --}}
                         @if(request()->has('verified'))
                         Your email address has been successfully verified! Welcome to Medscreen.
@@ -50,17 +50,17 @@
                         @endif
                     </div>
                 </div>
-                <button type="button" class="btn-close ms-auto shadow-none" data-bs-dismiss="alert"></button>
+                <button type="button" class="btn-close ms-auto shadow-none" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
             @endif
 
-            {{-- Global Error Banner hidden on Guest Form routes to prevent duplicate alerts [410] --}}
-            @if((session('error') || $errors->any()) && !Route::is('login', 'register', 'password.request', 'password.reset', 'verification.notice'))
-            <div class="alert alert-clinical d-flex align-items-center mb-4 shadow-sm" role="alert">
+            {{-- Global Error Banner (suppressed on routes with dedicated in-page banners to prevent duplicate alerts) --}}
+            @if((session('error') || $errors->any()) && !Route::is('login', 'register', 'password.request', 'password.reset', 'verification.notice', 'patient.history', 'admin.users.history'))
+            <div class="alert alert-clinical alert-dismissible fade show d-flex align-items-center mb-4 shadow-sm" role="alert">
                 <i class="bi bi-exclamation-triangle-fill me-3 fs-4 text-danger"></i>
-                <div>
-                    <div class="fw-800 uppercase fs-x-small">Action Required</div>
-                    <div class="small">
+                <div class="text-start">
+                    <div class="fw-800 uppercase fs-x-small text-danger" style="font-size: 0.75rem; letter-spacing: 0.5px;">Action Required</div>
+                    <div class="small text-main">
                         @if(session('error'))
                         {{ session('error') }}
                         @elseif($errors->any())
@@ -74,7 +74,7 @@
                         @endif
                     </div>
                 </div>
-                <button type="button" class="btn-close ms-auto shadow-none" data-bs-dismiss="alert"></button>
+                <button type="button" class="btn-close ms-auto shadow-none" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
             @endif
 

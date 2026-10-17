@@ -72,7 +72,7 @@
     </div>
 
     {{-- 2. PATIENT CONTEXT BAR (Theme-Aware Details Card with Accordion) --}}
-    <div class="mb-5 p-4 rounded border border-secondary border-opacity-25 shadow-sm" style="background-color: var(--bg-card); color: var(--text-main);">
+    <div class="mb-4 p-4 rounded border border-secondary border-opacity-25 shadow-sm" style="background-color: var(--bg-card); color: var(--text-main);">
         <div class="row align-items-center">
             <div class="col-md-7 text-start">
                 <h4 class="fw-bold mb-1" style="color: var(--text-main) !important;">{{ strtoupper($appointment->patient_name) }}</h4>
@@ -178,7 +178,24 @@
         </div>
     </div>
 
-    {{-- 3. MODULAR PROGRESS GRID --}}
+    {{-- 3. CLINICAL PROTOCOL & ROLE-BASED ACCESS DISCLAIMER --}}
+    <div class="mb-4 p-3 rounded border border-warning border-opacity-25 shadow-sm" style="background-color: rgba(255, 193, 7, 0.05); color: var(--text-main);">
+        <div class="d-flex align-items-center gap-3">
+            <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0" style="width: 42px; height: 42px; background-color: rgba(255, 193, 7, 0.15); color: #ffc107;">
+                <i class="bi bi-shield-lock-fill fs-5"></i>
+            </div>
+            <div class="flex-grow-1">
+                <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                    <span class="text-warning fw-bold small uppercase" style="letter-spacing: 0.5px;">Clinical Validation & Sign-off Protocol:</span>
+                </div>
+                <p class="text-main small mb-0" style="font-size: 0.825rem; line-height: 1.45;">
+                    <strong style="color: var(--text-main);">Notice:</strong> All clinic staff members (<span class="text-accent fw-semibold">Staff</span>, <span class="text-accent fw-semibold">Lab Tech</span>, <span class="text-accent fw-semibold">Admin</span>) are authorized to encode diagnostic details, input findings, and upload scanned worksheets. However, formal clinical validation and verification sign-off (<span class="fw-semibold" style="color: var(--text-main);">V2 Verifier</span>) is strictly restricted to <strong class="text-warning">Registered Medical Technologists (Lab Techs)</strong> and <strong class="text-warning">System Administrators</strong>.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    {{-- 4. MODULAR PROGRESS GRID --}}
     <div class="row g-4">
         {{-- A. Original Workstations Loop --}}
         @foreach($selectedTypes as $type)
@@ -277,6 +294,13 @@
                     <a href="{{ route('workstation.' . $routeAction, $appointment->id) }}" class="btn btn-custom {{ $currentStatus == 'verified' ? 'btn-outline-accent text-accent' : 'btn-accent' }} w-100 py-2 fw-bold small uppercase" style="color: {{ $currentStatus == 'verified' ? 'var(--brand-accent)' : '#1c232d' }} !important; border-color: var(--brand-accent) !important;">
                         @if($currentStatus == 'verified') Review Data @elseif($currentStatus == 'encoded') Verify & Sign @else Open Workstation @endif
                     </a>
+                    @if($currentStatus == 'encoded' && !auth()->user()->isLabTech())
+                    <div class="text-center mt-2">
+                        <small class="text-warning smaller fw-semibold d-inline-flex align-items-center gap-1" style="font-size: 0.7rem;">
+                            <i class="bi bi-info-circle"></i> Staff can review; verification sign-off is restricted to Lab Techs
+                        </small>
+                    </div>
+                    @endif
                 </div>
             </div>
         </div>
@@ -349,6 +373,13 @@
                     <a href="{{ route('workstation.custom', [$appointment->id, $custom->id]) }}" class="btn btn-custom {{ $customStatus == 'verified' ? 'btn-outline-accent text-accent' : 'btn-accent' }} w-100 py-2 fw-bold small uppercase" style="color: {{ $customStatus == 'verified' ? 'var(--brand-accent)' : '#1c232d' }} !important; border-color: var(--brand-accent) !important;">
                         @if($customStatus == 'verified') Review Data @elseif($customStatus == 'encoded') Verify & Sign @else Open Workstation @endif
                     </a>
+                    @if($customStatus == 'encoded' && !auth()->user()->isLabTech())
+                    <div class="text-center mt-2">
+                        <small class="text-warning smaller fw-semibold d-inline-flex align-items-center gap-1" style="font-size: 0.7rem;">
+                            <i class="bi bi-info-circle"></i> Staff can review; verification sign-off is restricted to Lab Techs
+                        </small>
+                    </div>
+                    @endif
                 </div>
             </div>
         </div>
@@ -367,7 +398,7 @@
         @endif
     </div>
 
-    {{-- 4. FINAL RELEASE SECTION --}}
+    {{-- 5. FINAL RELEASE SECTION --}}
     <div class="mt-5 pt-5 border-top text-center" style="border-color: var(--border-color) !important;">
         @if($readyToRelease && $appointment->status !== 'released')
         <div class="mb-4">

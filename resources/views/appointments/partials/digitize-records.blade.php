@@ -1,25 +1,31 @@
-<div class="card p-4 border-secondary shadow-lg animate-page" style="background-color: var(--bg-card); color: var(--text-main);">
+<div class="card p-4 border-secondary shadow-lg animate-page" style="background-color: var(--bg-card); color: var(--text-main); border-radius: 16px;">
     {{-- Header Section --}}
     <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
-        <h5 class="text-accent fw-bold mb-0 uppercase tracking-wider">
-            <i class="bi bi-file-earmark-medical me-2"></i>DIGITIZE HISTORICAL LABORATORY RECORD
-        </h5>
-        <div class="text-secondary small">Compilation Console</div>
+        <div>
+            <h5 class="text-accent fw-bold mb-0 uppercase tracking-wider">
+                <i class="bi bi-file-earmark-medical me-2"></i>DIGITIZE HISTORICAL LABORATORY RECORD
+            </h5>
+            <div class="text-secondary small">Clinical Compilation Console</div>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1.5 fw-bold uppercase" onclick="cancelDigitizerForm()" title="Close Form">
+            <i class="bi bi-x-lg me-1"></i> Close
+        </button>
     </div>
 
     {{-- Save Record Form --}}
     <form action="{{ route('history.save-manual', $targetUser->id) }}" method="POST" enctype="multipart/form-data" id="historicalImportForm" onsubmit="return validateDigitizerForm(event)">
         @csrf
 
-        <input type="hidden" name="patient_province" id="dig_province_hidden">
-        <input type="hidden" name="patient_city" id="dig_city_hidden">
-        <input type="hidden" name="patient_barangay" id="dig_barangay_hidden">
+        {{-- Pre-populated hidden fields to prevent validation dropouts --}}
+        <input type="hidden" name="patient_province" id="dig_province_hidden" value="{{ old('patient_province', $targetUser->province) }}">
+        <input type="hidden" name="patient_city" id="dig_city_hidden" value="{{ old('patient_city', $targetUser->city) }}">
+        <input type="hidden" name="patient_barangay" id="dig_barangay_hidden" value="{{ old('patient_barangay', $targetUser->barangay) }}">
 
         <div class="row g-3 text-start">
             {{-- 1. RECORD PARAMETERS --}}
             <div class="col-md-6">
                 <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Date of Original Record <span class="text-danger">*</span></label>
-                <input type="date" name="date_of_record" id="dig_date_of_record" class="form-control @error('date_of_record') is-invalid @enderror" value="{{ old('date_of_record') }}" required max="{{ date('Y-m-d') }}">
+                <input type="date" name="date_of_record" id="dig_date_of_record" class="form-control @error('date_of_record') is-invalid @enderror" value="{{ old('date_of_record', date('Y-m-d')) }}" required max="{{ date('Y-m-d') }}">
                 <div class="invalid-feedback d-none" id="err_date_of_record"></div>
                 @error('date_of_record')
                     <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
@@ -65,6 +71,14 @@
                     <div class="col-md-3">
                         <label class="smaller fw-bold mb-1 uppercase" style="color: var(--text-muted);">Suffix (Opt.)</label>
                         <input type="text" name="patient_suffix" id="dig_suffix" list="suffix_options" class="form-control uppercase @error('patient_suffix') is-invalid @enderror" value="{{ old('patient_suffix', $targetUser->suffix ?? '') }}" placeholder="e.g. JR" maxlength="10">
+                        <datalist id="suffix_options">
+                            <option value="JR">
+                            <option value="SR">
+                            <option value="II">
+                            <option value="III">
+                            <option value="IV">
+                            <option value="V">
+                        </datalist>
                         <div class="invalid-feedback d-none" id="err_patient_suffix"></div>
                         @error('patient_suffix')
                             <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
@@ -138,7 +152,7 @@
                     <div class="col-12 mt-2">
                         <div id="dig_compiled_address_container" class="alert alert-clinical p-2.5 d-none text-start animate-page" style="background-color: rgba(25, 211, 140, 0.03);">
                             <small class="text-accent fw-bold uppercase d-block mb-1" style="font-size: 0.65rem;">Compiled Address Preview</small>
-                            <div id="dig_compiled_address_text" class="text-main small"></div>
+                            <div id="dig_compiled_address_text" class="text-main small font-monospace"></div>
                         </div>
                     </div>
                 </div>
@@ -166,7 +180,7 @@
                         <input type="text" id="custom_test_input" class="form-control" placeholder="Or type custom procedure name...">
                     </div>
                     <div class="col-md-3">
-                        <button type="button" class="btn btn-outline-accent w-100" onclick="addProcedureBadge()">
+                        <button type="button" class="btn btn-outline-accent w-100 py-2 fw-bold uppercase" onclick="addProcedureBadge()">
                             <i class="bi bi-plus-lg me-1"></i> ADD TEST
                         </button>
                     </div>
@@ -214,19 +228,38 @@
                 @enderror
 
                 <div class="d-flex justify-content-between align-items-center mt-2">
-                    <button type="button" class="btn btn-sm btn-outline-accent py-1.5 px-3 fw-bold" onclick="addScanUploadRow()">
+                    <button type="button" class="btn btn-sm btn-outline-accent py-1.5 px-3 fw-bold uppercase" onclick="addScanUploadRow()">
                         <i class="bi bi-file-earmark-plus-fill me-1"></i> ADD FILE LINE
                     </button>
                 </div>
             </div>
 
+            {{-- In-Panel Bottom Confirmation Banner for Staff Record Creation --}}
+            @if(session('success') && (str_contains(strtolower(session('success')), 'compiled') || str_contains(strtolower(session('success')), 'record') || str_contains(strtolower(session('success')), 'archived')))
+                <div class="col-12 mt-3">
+                    <div class="alert alert-clinical alert-dismissible fade show d-flex align-items-center p-3 shadow-sm border-accent" style="background-color: rgba(25, 211, 140, 0.08); border-left: 4px solid var(--brand-accent) !important; border-radius: 8px;">
+                        <i class="bi bi-check-circle-fill me-2 fs-5 text-accent"></i>
+                        <div class="text-start">
+                            <div class="fw-800 uppercase fs-x-small text-accent" style="font-size: 0.72rem; letter-spacing: 0.5px;">Record Operation Completed</div>
+                            <div class="small fw-bold text-main" style="color: var(--text-main) !important; font-size: 0.85rem;">
+                                {{ session('success') }}
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                </div>
+            @endif
+
             {{-- 5. SUBMIT ACTIONS --}}
-            <div class="col-12 d-flex gap-2 mt-4 border-top border-secondary border-opacity-10 pt-3">
-                <button type="submit" class="btn-custom btn-accent flex-grow-1 py-3 fw-bold uppercase">
-                    <i class="bi bi-cloud-arrow-up-fill me-1"></i> SAVE ALL ARCHIVED DATA
+            <div class="col-12 d-flex flex-wrap gap-2 mt-4 border-top border-secondary border-opacity-10 pt-3">
+                <button type="submit" class="btn-custom btn-accent flex-grow-1 py-2.5 fw-bold uppercase shadow-sm">
+                    <i class="bi bi-cloud-arrow-up-fill me-1.5"></i> SAVE ALL ARCHIVED DATA
                 </button>
-                <button type="button" class="btn-custom btn-outline-secondary px-4 fw-bold uppercase" onclick="resetDigitizerForm()">
-                    RESET
+                <button type="button" class="btn-custom btn-outline-secondary px-4 py-2.5 fw-bold uppercase" onclick="resetDigitizerForm()">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i> RESET
+                </button>
+                <button type="button" class="btn-custom btn-outline-danger px-4 py-2.5 fw-bold uppercase" onclick="cancelDigitizerForm()">
+                    <i class="bi bi-x-lg me-1"></i> CANCEL
                 </button>
             </div>
         </div>
@@ -276,16 +309,20 @@ const selectedProcedures = new Set();
 
 // PSGC Address API for Digitizer Panel
 async function fetchDigProvinces() {
+    const sel = document.getElementById('dig_province');
     try {
         const res = await fetch(`https://psgc.gitlab.io/api/provinces/`);
+        if (!res.ok) throw new Error('Network error');
         const data = await res.json();
-        const sel = document.getElementById('dig_province');
         sel.innerHTML = '<option value="">Select Province</option>';
         data.sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
             sel.innerHTML += `<option value="${p.code}">${p.name}</option>`;
         });
     } catch (e) {
-        console.error("Provinces API Error");
+        console.warn("Provinces API unavailable, using user defaults.");
+        if (digProvinceVal) {
+            sel.innerHTML = `<option value="${digProvinceVal}" selected>${digProvinceVal}</option>`;
+        }
     }
 }
 
@@ -298,6 +335,7 @@ async function fetchDigCities(provCode) {
     citySel.innerHTML = '<option value="">Loading Cities...</option>';
     try {
         const res = await fetch(`https://psgc.gitlab.io/api/provinces/${provCode}/cities-municipalities/`);
+        if (!res.ok) throw new Error('Network error');
         const data = await res.json();
         citySel.innerHTML = '<option value="">Select City</option>';
         data.sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
@@ -305,7 +343,10 @@ async function fetchDigCities(provCode) {
         });
         citySel.disabled = false;
     } catch (e) {
-        console.error("Cities API Error");
+        if (digCityVal) {
+            citySel.innerHTML = `<option value="${digCityVal}" selected>${digCityVal}</option>`;
+            citySel.disabled = false;
+        }
     }
     updateDigCompiledAddress();
 }
@@ -317,6 +358,7 @@ async function fetchDigBarangays(cityCode) {
     brgySel.innerHTML = '<option value="">Loading Barangays...</option>';
     try {
         const res = await fetch(`https://psgc.gitlab.io/api/cities-municipalities/${cityCode}/barangays/`);
+        if (!res.ok) throw new Error('Network error');
         const data = await res.json();
         brgySel.innerHTML = '<option value="">Select Barangay</option>';
         data.sort((a, b) => a.name.localeCompare(b.name)).forEach(b => {
@@ -324,7 +366,10 @@ async function fetchDigBarangays(cityCode) {
         });
         brgySel.disabled = false;
     } catch (e) {
-        console.error("Barangays API Error");
+        if (digBrgyVal) {
+            brgySel.innerHTML = `<option value="${digBrgyVal}" selected>${digBrgyVal}</option>`;
+            brgySel.disabled = false;
+        }
     }
     updateDigCompiledAddress();
 }
@@ -342,9 +387,9 @@ function updateDigCompiledAddress() {
     if (street || brgyName || cityName || provName) {
         let parts = [];
         if (street) parts.push(street);
-        if (brgyName && !brgyName.includes('Select')) parts.push('BRGY. ' + brgyName);
-        if (cityName && !cityName.includes('Select')) parts.push(cityName);
-        if (provName && !provName.includes('Select')) parts.push(provName);
+        if (brgyName && !brgyName.includes('Select') && !brgyName.includes('Loading')) parts.push('BRGY. ' + brgyName);
+        if (cityName && !cityName.includes('Select') && !cityName.includes('Loading')) parts.push(cityName);
+        if (provName && !provName.includes('Select') && !provName.includes('Loading')) parts.push(provName);
 
         const compiled = parts.join(', ').toUpperCase();
         document.getElementById('dig_compiled_address_text').innerText = compiled;
@@ -363,7 +408,7 @@ function compileDigAddress() {
     const cityName = city.options[city.selectedIndex]?.text || '';
     const provName = prov.options[prov.selectedIndex]?.text || '';
 
-    if (brgyName && cityName && provName) {
+    if (brgyName && !brgyName.includes('Select') && cityName && !cityName.includes('Select') && provName && !provName.includes('Select')) {
         document.getElementById('dig_province_hidden').value = provName;
         document.getElementById('dig_city_hidden').value = cityName;
         document.getElementById('dig_barangay_hidden').value = brgyName;
@@ -470,6 +515,18 @@ function resetDigitizerForm() {
         });
     }
 }
+
+function cancelDigitizerForm() {
+    const addRecordPanel = document.getElementById('add-record-panel');
+    if (addRecordPanel) {
+        addRecordPanel.classList.add('d-none');
+    }
+    const recordPlaceholder = document.getElementById('record-placeholder');
+    if (recordPlaceholder) {
+        recordPlaceholder.classList.remove('d-none');
+    }
+}
+window.cancelDigitizerForm = cancelDigitizerForm;
 
 // Inline Field Error Helpers
 function setDigFieldError(input, errDivId, message) {
@@ -594,7 +651,9 @@ function validateDigitizerForm(e) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    addScanUploadRow();
+    if (document.querySelectorAll('#scansTableBody tr').length === 0) {
+        addScanUploadRow();
+    }
     await initializeDigAddress();
 
     // Attach real-time error dismissal listeners

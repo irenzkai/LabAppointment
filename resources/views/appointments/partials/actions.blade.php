@@ -14,6 +14,67 @@
         default => 'secondary'
     };
     $statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
+
+    // Calculate worksheet progress metrics for encoding and verification
+    $res = $app->result;
+    $includedReports = $res ? ($res->included_reports ?? []) : [];
+    if (empty($includedReports) && $app->relationLoaded('services')) {
+        $serviceNames = $app->services->pluck('name')->map(fn($n) => strtoupper($n))->toArray();
+        $autoReports = [];
+        foreach ($serviceNames as $name) {
+            if (str_contains($name, 'DRUG TEST')) $autoReports[] = 'drug';
+            elseif (str_contains($name, 'XRAY') || str_contains($name, 'X-RAY')) $autoReports[] = 'radio';
+            elseif (str_contains($name, 'MEDICAL CERTIFICATE')) $autoReports[] = 'med_cert';
+            else $autoReports[] = 'lab';
+        }
+        $includedReports = array_values(array_unique($autoReports));
+    }
+    if (empty($includedReports)) {
+        $includedReports = ['lab'];
+    }
+
+    $customCount = 0;
+    $customEncoded = 0;
+    $customVerified = 0;
+
+    if ($res) {
+        $customWorksheets = $res->relationLoaded('customWorkstationResults')
+            ? $res->customWorkstationResults
+            : $res->customWorkstationResults()->get();
+        $customCount = $customWorksheets->count();
+        foreach ($customWorksheets as $cw) {
+            if ($cw->status === 'verified') {
+                $customEncoded++;
+                $customVerified++;
+            } elseif ($cw->status === 'encoded') {
+                $customEncoded++;
+            }
+        }
+    }
+
+    $totalWorksheets = count($includedReports) + $customCount;
+    $encodedCount = $customEncoded;
+    $verifiedCount = $customVerified;
+
+    foreach ($includedReports as $repType) {
+        $field = match($repType) {
+            'med_cert' => 'med_status',
+            'radio' => 'radio_status',
+            'drug' => 'drug_status',
+            default => 'lab_status',
+        };
+        $st = $res ? ($res->$field ?? 'pending') : 'pending';
+
+        if ($st === 'verified') {
+            $encodedCount++;
+            $verifiedCount++;
+        } elseif ($st === 'encoded') {
+            $encodedCount++;
+        }
+    }
+
+    $toEncodeCount = max(0, $totalWorksheets - $encodedCount);
+    $toVerifyCount = max(0, $encodedCount - $verifiedCount);
 @endphp
 
 <div class="mt-2 text-start" id="actions-pane-{{ $app->id }}">
@@ -297,11 +358,56 @@
                     @endcan
                 @endif
 
-                {{-- STEP C: TESTED -> ENCODE RESULTS & OPTIONAL RETEST --}}
+                {{-- STEP C: TESTED -> ENCODE RESULTS & PROGRESS BREAKDOWN --}}
                 @if($app->status == 'tested')
+                    <div class="mb-2.5 text-center">
+                        {{-- Centered Worksheet Amount Header --}}
+                        <div class="d-inline-flex align-items-center justify-content-center gap-1.5 text-muted fw-bold text-uppercase mb-2" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+                            <i class="bi bi-file-earmark-medical text-accent"></i>
+                            <span>{{ $totalWorksheets }} {{ $totalWorksheets === 1 ? 'Worksheet' : 'Worksheets' }}</span>
+                        </div>
+
+                        {{-- Symmetrical Centered Two Metric Cards --}}
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <div class="p-2 rounded border text-center h-100 d-flex flex-column justify-content-center shadow-sm"
+                                     style="background-color: {{ $encodedCount == $totalWorksheets ? 'rgba(25, 211, 140, 0.08)' : ($encodedCount > 0 ? 'rgba(13, 202, 240, 0.08)' : 'rgba(245, 158, 11, 0.08)') }};
+                                            border-color: {{ $encodedCount == $totalWorksheets ? 'rgba(25, 211, 140, 0.3)' : ($encodedCount > 0 ? 'rgba(13, 202, 240, 0.3)' : 'rgba(245, 158, 11, 0.25)') }} !important;
+                                            border-radius: 10px;">
+                                    <div class="fw-bold text-uppercase d-flex align-items-center justify-content-center gap-1"
+                                         style="font-size: 0.65rem; letter-spacing: 0.5px; color: {{ $encodedCount == $totalWorksheets ? 'var(--brand-accent-hover, #15b376)' : ($encodedCount > 0 ? '#0dcaf0' : '#d97706') }};">
+                                        <i class="bi bi-pencil-square"></i>
+                                        <span>Encoded</span>
+                                    </div>
+                                    <div class="fw-bold font-monospace fs-6 mt-0.5" style="color: var(--text-main);">
+                                        {{ $encodedCount }}/{{ $totalWorksheets }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-2 rounded border text-center h-100 d-flex flex-column justify-content-center shadow-sm"
+                                     style="background-color: {{ $verifiedCount == $totalWorksheets ? 'rgba(25, 211, 140, 0.08)' : ($verifiedCount > 0 ? 'rgba(25, 211, 140, 0.05)' : 'rgba(100, 116, 139, 0.06)') }};
+                                            border-color: {{ $verifiedCount == $totalWorksheets ? 'rgba(25, 211, 140, 0.3)' : ($verifiedCount > 0 ? 'rgba(25, 211, 140, 0.2)' : 'var(--border-color)') }} !important;
+                                            border-radius: 10px;">
+                                    <div class="fw-bold text-uppercase d-flex align-items-center justify-content-center gap-1"
+                                         style="font-size: 0.65rem; letter-spacing: 0.5px; color: {{ $verifiedCount == $totalWorksheets ? 'var(--brand-accent-hover, #15b376)' : ($verifiedCount > 0 ? 'var(--brand-accent)' : 'var(--text-muted)') }};">
+                                        <i class="bi bi-shield-check"></i>
+                                        <span>Verified</span>
+                                    </div>
+                                    <div class="fw-bold font-monospace fs-6 mt-0.5" style="color: var(--text-main);">
+                                        {{ $verifiedCount }}/{{ $totalWorksheets }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="d-grid gap-2">
-                        <a href="{{ route('appointments.encode', $app->id) }}" class="btn-custom btn-outline-accent py-2 fw-bold text-center text-decoration-none shadow">
-                            <i class="bi bi-pencil-square me-1"></i> ENCODE RESULTS
+                        <a href="{{ route('appointments.encode', $app->id) }}" class="btn-custom btn-outline-accent py-2 fw-bold text-center text-decoration-none shadow d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-pencil-square me-1.5"></i> ENCODE RESULTS</span>
+                            <span class="badge bg-secondary bg-opacity-25 text-main font-monospace px-2 py-1 ms-2" style="font-size: 0.72rem;">
+                                {{ $encodedCount }}/{{ $totalWorksheets }}
+                            </span>
                         </a>
                         @can('isLabTech')
                             <button type="button" class="btn-custom btn-outline-danger py-2 fw-bold text-center" data-bs-toggle="modal" data-bs-target="#testModal{{ $app->id }}" onclick="if(typeof setModalMainAction === 'function'){ setModalMainAction({{ $app->id }}, 'retest'); }">
@@ -314,14 +420,66 @@
 
                 {{-- STEP D: ENCODED -> VERIFICATION TRACKER --}}
                 @if($app->status == 'encoded')
+                    <div class="mb-2.5 text-center">
+                        {{-- Centered Worksheet Amount Header --}}
+                        <div class="d-inline-flex align-items-center justify-content-center gap-1.5 text-muted fw-bold text-uppercase mb-2" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+                            <i class="bi bi-file-earmark-medical text-accent"></i>
+                            <span>{{ $totalWorksheets }} {{ $totalWorksheets === 1 ? 'Worksheet' : 'Worksheets' }}</span>
+                        </div>
+
+                        {{-- Symmetrical Centered Two Metric Cards --}}
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <div class="p-2 rounded border text-center h-100 d-flex flex-column justify-content-center shadow-sm"
+                                     style="background-color: {{ $encodedCount == $totalWorksheets ? 'rgba(25, 211, 140, 0.08)' : ($encodedCount > 0 ? 'rgba(13, 202, 240, 0.08)' : 'rgba(245, 158, 11, 0.08)') }};
+                                            border-color: {{ $encodedCount == $totalWorksheets ? 'rgba(25, 211, 140, 0.3)' : ($encodedCount > 0 ? 'rgba(13, 202, 240, 0.3)' : 'rgba(245, 158, 11, 0.25)') }} !important;
+                                            border-radius: 10px;">
+                                    <div class="fw-bold text-uppercase d-flex align-items-center justify-content-center gap-1"
+                                         style="font-size: 0.65rem; letter-spacing: 0.5px; color: {{ $encodedCount == $totalWorksheets ? 'var(--brand-accent-hover, #15b376)' : ($encodedCount > 0 ? '#0dcaf0' : '#d97706') }};">
+                                        <i class="bi bi-pencil-square"></i>
+                                        <span>Encoded</span>
+                                    </div>
+                                    <div class="fw-bold font-monospace fs-6 mt-0.5" style="color: var(--text-main);">
+                                        {{ $encodedCount }}/{{ $totalWorksheets }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-2 rounded border text-center h-100 d-flex flex-column justify-content-center shadow-sm"
+                                     style="background-color: {{ $verifiedCount == $totalWorksheets ? 'rgba(25, 211, 140, 0.08)' : ($verifiedCount > 0 ? 'rgba(25, 211, 140, 0.05)' : 'rgba(100, 116, 139, 0.06)') }};
+                                            border-color: {{ $verifiedCount == $totalWorksheets ? 'rgba(25, 211, 140, 0.3)' : ($verifiedCount > 0 ? 'rgba(25, 211, 140, 0.2)' : 'var(--border-color)') }} !important;
+                                            border-radius: 10px;">
+                                    <div class="fw-bold text-uppercase d-flex align-items-center justify-content-center gap-1"
+                                         style="font-size: 0.65rem; letter-spacing: 0.5px; color: {{ $verifiedCount == $totalWorksheets ? 'var(--brand-accent-hover, #15b376)' : ($verifiedCount > 0 ? 'var(--brand-accent)' : 'var(--text-muted)') }};">
+                                        <i class="bi bi-shield-check"></i>
+                                        <span>Verified</span>
+                                    </div>
+                                    <div class="fw-bold font-monospace fs-6 mt-0.5" style="color: var(--text-main);">
+                                        {{ $verifiedCount }}/{{ $totalWorksheets }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if($toEncodeCount > 0)
+                            <div class="smaller text-danger fw-semibold d-flex align-items-center justify-content-center gap-1 mb-2" style="font-size: 0.72rem;">
+                                <i class="bi bi-exclamation-circle-fill"></i>
+                                <span>{{ $toEncodeCount }} {{ $toEncodeCount === 1 ? 'returned result to re-encode' : 'returned results to re-encode' }}</span>
+                            </div>
+                        @endif
+                    </div>
+
                     <div class="d-grid">
                         @can('isLabTech')
-                            <button type="button" class="btn-custom btn-accent w-100 py-2" onclick="if(typeof promptAccess === 'function'){ promptAccess('{{ $app->id }}', 'hub', 'edit'); }">
-                                <i class="bi bi-shield-check me-1"></i> REVIEW & VERIFY
+                            <button type="button" class="btn-custom btn-accent w-100 py-2 d-flex justify-content-between align-items-center" onclick="if(typeof promptAccess === 'function'){ promptAccess('{{ $app->id }}', 'hub', 'edit'); }">
+                                <span><i class="bi bi-shield-check me-1.5"></i> REVIEW & VERIFY</span>
+                                <span class="badge bg-dark bg-opacity-25 text-white font-monospace px-2 py-1 ms-2" style="font-size: 0.72rem;">
+                                    {{ $verifiedCount }}/{{ $totalWorksheets }}
+                                </span>
                             </button>
                         @else
                             <div class="text-center text-secondary smaller italic mt-2">
-                                Awaiting Lab Tech Verification...
+                                Awaiting Lab Tech Verification ({{ $verifiedCount }}/{{ $totalWorksheets }} verified)...
                             </div>
                         @endcan
                     </div>

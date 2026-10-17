@@ -77,7 +77,7 @@
 
         {{-- LEFT PANEL: Selection Sidebar --}}
         <div class="col-lg-4 col-xl-3">
-            <div class="card p-3 settings-sidebar-container shadow-lg sticky-top" style="top: 100px;">
+            <div class="card p-3 settings-sidebar-container shadow-lg sticky-top" style="top: 96px;">
                 <h6 class="text-muted fw-800 uppercase tracking-widest mb-3 fs-x-small px-2" style="font-size: 0.7rem; letter-spacing: 1px;">Settings Panel</h6>
                 <div class="list-group list-group-flush settings-sidebar gap-1.5" id="settingsTabs" role="tablist">
                     <button class="list-group-item active d-flex align-items-center gap-2 text-start" id="btn-personal" data-bs-toggle="pill" data-bs-target="#tab-personal" role="tab" aria-controls="tab-personal" aria-selected="true">
@@ -87,7 +87,7 @@
                         <i class="bi bi-shield-lock fs-5"></i> Update Password
                     </button>
 
-                    {{-- Only display family dependents tab button if email is verified --}}
+                    {{-- Only display family dependents tab button if account is verified --}}
                     @if($user->hasVerifiedEmail())
                         <button class="list-group-item d-flex align-items-center gap-2 text-start" id="btn-dependents" data-bs-toggle="pill" data-bs-target="#tab-dependents" role="tab" aria-controls="tab-dependents" aria-selected="false">
                             <i class="bi bi-people fs-5"></i> Family Dependents
@@ -150,6 +150,8 @@
             targetTabId = 'tab-danger';
         @elseif(session('success') && str_contains(session('success'), 'Dependent'))
             targetTabId = 'tab-dependents';
+        @elseif($errors->any() && !$errors->updatePassword->any() && !$errors->userDeletion->any())
+            targetTabId = 'tab-personal';
         @endif
 
         // Priority B: URL hash (deep linking)
