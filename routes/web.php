@@ -41,11 +41,9 @@ Route::get('/download/apk', function () {
     if (!file_exists($path)) {
         $path = storage_path('app/public/downloads/MedscreenPatientPortal.apk');
     }
-
     if (!file_exists($path)) {
         return redirect()->route('welcome')->with('error', 'The Android APK is currently being updated. Please try downloading again shortly.');
     }
-
     return response()->download($path, 'MedscreenPatientPortal.apk', [
         'Content-Type' => 'application/vnd.android.package-archive',
         'Cache-Control' => 'no-cache, must-revalidate',
@@ -82,6 +80,7 @@ Route::middleware(['auth', 'verified', 'force.password'])->group(function () {
     Route::post('/appointments/bulk/excel', [BulkAppointmentController::class, 'storeExcel'])->name('appointments.bulk.excel');
     Route::post('/appointments/bulk/parse-excel', [BulkAppointmentController::class, 'parseExcel'])->name('appointments.bulk.parse-excel');
     Route::get('/appointments/bulk/template/{type?}', [BulkAppointmentController::class, 'downloadTemplate'])->name('appointments.bulk.template');
+    Route::post('/appointments/batch/{batchId}/resubmit-receipt', [AppointmentController::class, 'resubmitBatchReceipt'])->name('appointments.batch.resubmit-receipt');
     Route::get('/dependents/create', [DependentController::class, 'create'])->name('dependents.create');
     Route::post('/dependents', [DependentController::class, 'store'])->name('dependents.store');
     Route::get('/dependents/{dependent}/edit', [DependentController::class, 'edit'])->name('dependents.edit');

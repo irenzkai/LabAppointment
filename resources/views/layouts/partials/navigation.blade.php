@@ -171,7 +171,7 @@
                              aria-labelledby="desktopNotifDropdown" 
                              style="width: 360px; max-width: 90vw; border-radius: 12px; overflow: hidden; background-color: var(--bg-card); border: 1.5px solid var(--border-color) !important;">
                             
-                            {{-- Dropdown Header --}}
+                            {{-- Dropdown Header: Swapped to View All Navigation --}}
                             <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="background-color: var(--brand-dark); border-color: var(--border-color) !important;">
                                 <div class="d-flex align-items-center gap-2">
                                     <span class="fw-bold small text-white uppercase tracking-wider" style="font-size: 0.75rem;">Notifications</span>
@@ -179,11 +179,10 @@
                                         <span class="badge bg-danger rounded-pill smaller" style="font-size: 0.62rem;">{{ $notifCount }} new</span>
                                     @endif
                                 </div>
-                                @if($notifCount > 0)
-                                    <a href="{{ route('notifications.clearAll') }}" class="text-accent smaller fw-bold text-decoration-none hover-accent" style="font-size: 0.7rem; color: var(--brand-accent) !important;">
-                                        Mark all read
-                                    </a>
-                                @endif
+                                <a href="{{ route('notifications.index') }}" class="text-accent smaller fw-bold text-decoration-none hover-accent d-inline-flex align-items-center gap-1" style="font-size: 0.72rem; color: var(--brand-accent) !important;">
+                                    <span>View all</span>
+                                    <i class="bi bi-arrow-right"></i>
+                                </a>
                             </div>
 
                             {{-- Notification Items List --}}
@@ -228,11 +227,17 @@
                                 @endforelse
                             </div>
 
-                            {{-- Dropdown Footer --}}
+                            {{-- Dropdown Footer: Swapped to Mark All Read Action Button --}}
                             <div class="p-2.5 text-center border-top" style="border-color: var(--border-color) !important; background-color: var(--brand-dark);">
-                                <a href="{{ route('notifications.index') }}" class="text-accent small fw-bold text-decoration-none d-block hover-accent" style="font-size: 0.75rem; color: var(--brand-accent) !important;">
-                                    VIEW ALL NOTIFICATIONS &rarr;
-                                </a>
+                                @if($notifCount > 0)
+                                    <a href="{{ route('notifications.clearAll') }}" class="text-accent small fw-bold text-decoration-none d-block hover-accent py-1" style="font-size: 0.75rem; color: var(--brand-accent) !important;">
+                                        <i class="bi bi-check2-all me-1"></i> MARK ALL AS READ
+                                    </a>
+                                @else
+                                    <span class="text-muted smaller d-block py-1" style="font-size: 0.72rem;">
+                                        <i class="bi bi-check2 me-1"></i> All caught up
+                                    </span>
+                                @endif
                             </div>
                         </div>
                     </div>
@@ -336,7 +341,7 @@
      4. MOBILE NOTIFICATIONS RIGHT HALF-PANEL (OFFCANVAS)
 ========================================================================= -->
 <div class="offcanvas offcanvas-end custom-offcanvas-half" tabindex="-1" id="mobileNotificationsOffcanvas" aria-labelledby="mobileNotificationsOffcanvasLabel">
-    {{-- Offcanvas Header --}}
+    {{-- Offcanvas Header: With View All link and Close Button --}}
     <div class="offcanvas-header border-bottom py-3 px-4" style="border-color: var(--border-color) !important;">
         <div class="d-flex align-items-center gap-2">
             <i class="bi bi-bell-fill text-accent fs-5" style="color: var(--brand-accent) !important;"></i>
@@ -347,17 +352,13 @@
                 <span class="badge bg-danger rounded-pill smaller ms-1" style="font-size: 0.65rem;">{{ $notifCount }} new</span>
             @endif
         </div>
-        <button type="button" class="btn-close shadow-none" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-    </div>
-
-    {{-- Offcanvas Sub-Header Actions --}}
-    @if($notifCount > 0)
-        <div class="px-4 py-2 border-bottom d-flex justify-content-end bg-brand-dark bg-opacity-25" style="border-color: var(--border-color) !important;">
-            <a href="{{ route('notifications.clearAll') }}" class="text-accent smaller fw-bold text-decoration-none hover-accent" style="font-size: 0.72rem; color: var(--brand-accent) !important;">
-                <i class="bi bi-check2-all me-1"></i>Mark all as read
+        <div class="d-flex align-items-center gap-3">
+            <a href="{{ route('notifications.index') }}" class="text-accent smaller fw-bold text-decoration-none hover-accent" style="font-size: 0.72rem; color: var(--brand-accent) !important;">
+                View all &rarr;
             </a>
+            <button type="button" class="btn-close shadow-none" data-bs-dismiss="offcanvas" aria-label="Close"></button>
         </div>
-    @endif
+    </div>
 
     {{-- Offcanvas Notification List --}}
     <div class="offcanvas-body p-0 d-flex flex-column justify-content-between custom-scroll" style="overflow-y: auto;">
@@ -402,12 +403,19 @@
             @endforelse
         </div>
 
-        {{-- Offcanvas Footer --}}
+        {{-- Offcanvas Footer: Swapped to Mark All Read Button --}}
         <div class="p-3 border-top" style="border-color: var(--border-color) !important;">
-            <a href="{{ route('notifications.index') }}" class="btn btn-sm btn-outline-accent w-100 py-2 fw-bold uppercase d-flex align-items-center justify-content-center gap-2 text-decoration-none" style="font-size: 0.78rem;">
-                <i class="bi bi-card-checklist"></i>
-                <span>VIEW FULL NOTIFICATIONS PAGE</span>
-            </a>
+            @if($notifCount > 0)
+                <a href="{{ route('notifications.clearAll') }}" class="btn btn-sm btn-outline-accent w-100 py-2 fw-bold uppercase d-flex align-items-center justify-content-center gap-2 text-decoration-none" style="font-size: 0.78rem;">
+                    <i class="bi bi-check2-all"></i>
+                    <span>MARK ALL AS READ</span>
+                </a>
+            @else
+                <a href="{{ route('notifications.index') }}" class="btn btn-sm btn-outline-secondary w-100 py-2 fw-bold uppercase d-flex align-items-center justify-content-center gap-2 text-decoration-none" style="font-size: 0.78rem;">
+                    <i class="bi bi-card-checklist"></i>
+                    <span>VIEW FULL NOTIFICATIONS PAGE</span>
+                </a>
+            @endif
         </div>
     </div>
 </div>
