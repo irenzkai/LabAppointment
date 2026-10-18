@@ -155,7 +155,7 @@
 
                             {{-- Submit Button --}}
                             <button id="login-submit-btn" type="submit" class="btn-custom btn-accent w-100 py-3 fw-bold shadow-sm uppercase">
-                                <i class="bi bi-box-arrow-in-right me-1.5"></i>SIGN IN
+                                <i class="bi bi-box-arrow-in-right me-1"></i> SIGN IN
                             </button>
 
                             {{-- Register New Account Link --}}
@@ -232,7 +232,7 @@
             btn.disabled = false;
             btn.style.pointerEvents = '';
             btn.classList.remove('opacity-50', 'cursor-not-allowed');
-            btn.innerHTML = '<i class="bi bi-box-arrow-in-right me-1.5"></i>SIGN IN';
+            btn.innerHTML = '<i class="bi bi-box-arrow-in-right me-1"></i>SIGN IN';
             if (emailInput) emailInput.disabled = false;
             if (passInput) passInput.disabled = false;
             if (warningBox) warningBox.classList.add('d-none');

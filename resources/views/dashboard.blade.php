@@ -43,7 +43,7 @@
                     <p class="text-muted small mb-4" style="color: var(--text-muted) !important;">Schedule clinical laboratory tests and choose available clinic visit slots.</p>
                 </div>
                 <a href="{{ route('appointments.create') }}" class="btn-custom btn-accent w-100 py-2.5 mt-auto text-decoration-none shadow-sm fw-bold uppercase" style="border-radius: 8px;">
-                    <i class="bi bi-plus-lg me-1.5"></i> Book Appointment
+                    Book Appointment
                 </a>
             </div>
         </div>
@@ -59,7 +59,7 @@
                     <p class="text-muted small mb-4" style="color: var(--text-muted) !important;">Securely preview, verify, or download your official digitized medical records.</p>
                 </div>
                 <a href="{{ route('patient.history') }}" class="btn-custom btn-outline-accent w-100 py-2.5 mt-auto text-decoration-none fw-bold uppercase" style="border-radius: 8px;">
-                    <i class="bi bi-folder2-open me-1.5"></i> Access Records
+                    Access Records
                 </a>
             </div>
         </div>
@@ -75,7 +75,7 @@
                     <p class="text-muted small mb-4" style="color: var(--text-muted) !important;">Register and manage account details and bookings for your minor family members.</p>
                 </div>
                 <a href="{{ route('profile.edit') }}#tab-dependents" class="btn-custom btn-outline-accent w-100 py-2.5 mt-auto text-decoration-none fw-bold uppercase" style="border-radius: 8px;">
-                    <i class="bi bi-person-gear me-1.5"></i> Manage Dependents
+                    Manage Dependents
                 </a>
             </div>
         </div>

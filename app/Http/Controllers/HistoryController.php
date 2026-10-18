@@ -58,12 +58,12 @@ class HistoryController extends Controller
                         ->whereNotNull('batch_id')
                         ->where(function($s2) use ($targetUser) {
                             $s2->whereNull('patient_email')
-                                ->orWhere('patient_email', '')
-                                ->orWhereRaw('LOWER(patient_email) = ?', [strtolower($targetUser->email)]);
+                               ->orWhere('patient_email', '')
+                               ->orWhereRaw('LOWER(patient_email) = ?', [strtolower($targetUser->email)]);
                         })
                         ->where(function($s3) use ($targetUser) {
                             $s3->whereRaw('LOWER(patient_name) = ?', [strtolower($targetUser->name)])
-                                ->orWhere('patient_first_name', $targetUser->first_name);
+                               ->orWhere('patient_first_name', $targetUser->first_name);
                         });
                 });
             })
@@ -79,8 +79,8 @@ class HistoryController extends Controller
 
         // Retrieve digitized sub-table records & map them back into a backward-compatible array structure
         $recordsModels = LaboratoryHistoryRecord::whereHas('laboratoryHistory', function($q) use ($targetUser) {
-            $q->where('user_id', $targetUser->id);
-        })
+                $q->where('user_id', $targetUser->id);
+            })
             ->with(['scans', 'procedures'])
             ->latest('date_of_record')
             ->get();
@@ -116,6 +116,7 @@ class HistoryController extends Controller
         $user = Auth::user();
         $history = LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
         $history->update(['permission_status' => 'pending_staff']);
+
         ActivityLog::record('HISTORY REQUEST', 'Patient requested data import', $user->name);
 
         $internalStaff = User::whereIn('role', ['staff', 'lab_tech', 'admin'])->get();
@@ -139,6 +140,7 @@ class HistoryController extends Controller
     {
         session()->put("access_granted_{$user->id}_history", true);
         $history = LaboratoryHistory::where('user_id', $user->id)->first();
+        
         if ($history) {
             $history->update(['permission_status' => 'pending_patient']);
         } else {
@@ -164,11 +166,13 @@ class HistoryController extends Controller
      */
     public function acceptRequest(User $user = null)
     {
-        if ($user && !Auth::user()->isEmployee()) {
+        // Guard: Staff can accept for patients; Patients can ONLY accept for themselves
+        if ($user && !Auth::user()->isEmployee() && $user->id !== Auth::id()) {
             abort(403, 'Unauthorized operation.');
         }
 
         $targetUser = $user ?: Auth::user();
+
         if (Auth::user()->isEmployee()) {
             session()->put("access_granted_{$targetUser->id}_history", true);
         }
@@ -180,7 +184,33 @@ class HistoryController extends Controller
 
         $history->update(['permission_status' => 'granted']);
         $roleName = Auth::user()->role;
+
         ActivityLog::record('HISTORY GRANTED', "Handshake accepted by {$roleName}", $targetUser->name);
+
+        // Notify patient if staff accepted their import request
+        if (Auth::user()->isEmployee() && Auth::id() !== $targetUser->id) {
+            $targetUser->notify(new AppointmentNotification([
+                'title' => 'Lab History Unlocked',
+                'message' => 'The laboratory staff has approved your historical data connection request. You can now view your digitized records.',
+                'url' => route('patient.history'),
+                'type' => 'success'
+            ]));
+            event(new NotificationSent($targetUser->id, 'Lab History Unlocked', 'The laboratory staff has approved your historical data connection request.'));
+        }
+
+        // Notify staff if patient authorized clinic request
+        if (!Auth::user()->isEmployee()) {
+            $internalStaff = User::whereIn('role', ['staff', 'lab_tech', 'admin'])->get();
+            foreach ($internalStaff as $staff) {
+                $staff->notify(new AppointmentNotification([
+                    'title' => 'Patient Handshake Granted',
+                    'message' => "Patient {$targetUser->name} has authorized historical record digitization.",
+                    'url' => route('admin.users.history', $targetUser->id),
+                    'type' => 'success'
+                ]));
+                event(new NotificationSent($staff->id, 'Patient Handshake Granted', "Patient {$targetUser->name} has authorized historical record digitization."));
+            }
+        }
 
         return back()->with('success', 'Permission granted. Access is now open.');
     }
@@ -222,6 +252,9 @@ class HistoryController extends Controller
         ]);
 
         $history = LaboratoryHistory::where('user_id', $user->id)->firstOrCreate(['user_id' => $user->id]);
+        
+        // Ensure status is marked as granted once records are actively digitized
+        $history->update(['permission_status' => 'granted']);
 
         $fName = strtoupper(trim($request->patient_first_name));
         $mName = ($request->patient_middle_name && strtoupper($request->patient_middle_name) !== 'N/A') 
@@ -231,6 +264,7 @@ class HistoryController extends Controller
         $suffix = $request->filled('patient_suffix') ? strtoupper(trim($request->patient_suffix)) : null;
 
         $fullName = $fName . ($mName !== 'N/A' ? ' ' . $mName : '') . ' ' . $lName . ($suffix ? ' ' . $suffix : '');
+
         $street = strtoupper(trim($request->patient_street));
         $barangay = strtoupper(trim($request->patient_barangay));
         $city = strtoupper(trim($request->patient_city));
