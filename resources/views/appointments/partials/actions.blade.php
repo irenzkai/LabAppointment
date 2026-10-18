@@ -391,7 +391,6 @@
                             </button>
                             @if($app->status === 'approved')
                                 <button type="button" class="btn-custom btn-danger-custom px-3 py-2 fw-bold small d-inline-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#retModal{{ $app->id }}" title="Return approved appointment for patient correction/rescheduling">
-                                    <i class="bi bi-arrow-return-left"></i>
                                     <span>RETURN</span>
                                 </button>
                             @endif
