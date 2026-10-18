@@ -29,7 +29,7 @@ use App\Http\Controllers\Workstation\{
 |--------------------------------------------------------------------------
 */
 Route::view('/', 'welcome')->name('welcome');
-Route::view('/legal/about', 'legal.about-faq')->name('legal.about');
+Route::view('/legal/about', 'legal.about')->name('legal.about');
 Route::view('/legal/privacy', 'legal.privacy')->name('legal.privacy');
 Route::view('/legal/terms', 'legal.terms')->name('legal.terms');
 Route::view('/legal/dpa', 'legal.dpa')->name('legal.dpa');
