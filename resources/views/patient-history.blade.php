@@ -6,7 +6,6 @@
 if (!isset($availableServices)) {
     $availableServices = \App\Models\Service::where('is_available', true)->orderBy('category')->orderBy('name')->get();
 }
-
 $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? array_reverse($labHistory->dynamic_data) : []);
 $status = $labHistory->permission_status ?? 'none';
 
@@ -48,13 +47,13 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
 
 <div class="text-start" id="patient-archive-page" style="max-width: 1240px; margin: 0 auto; padding-top: 1.5rem; padding-bottom: 2rem;">
     {{-- Page Header --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3 page-header-archive" style="border-color: var(--border-color) !important;">
+    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3 page-header-archive flex-wrap gap-3" style="border-color: var(--border-color) !important;">
         <div>
             <h2 class="text-accent fw-bold mb-0 uppercase tracking-tight" style="font-size: 1.85rem; letter-spacing: 1px;">PATIENT ARCHIVE</h2>
             <p class="text-secondary mb-0 small">Records for: <span class="text-accent fw-bold uppercase">{{ $targetUser->name }}</span></p>
         </div>
-        <a href="{{ route('appointments.index') }}" class="btn btn-sm btn-back-appointments px-3 py-2 fw-bold text-uppercase">
-            <i class="bi bi-arrow-left me-1.5"></i> BACK TO APPOINTMENTS
+        <a href="{{ route('appointments.index') }}" class="btn btn-sm btn-back-appointments px-3 py-2 fw-bold text-uppercase d-inline-flex align-items-center gap-1.5">
+            <i class="bi bi-arrow-left me-1"></i> BACK TO APPOINTMENTS
         </a>
     </div>
 
@@ -98,23 +97,27 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
         </div>
     @endif
 
-    {{-- Nav Tabs (Instant Rendering) --}}
+    {{-- Nav Tabs (Instant Rendering & Full Width on Mobile) --}}
     <ul class="nav nav-pills mb-4 border-bottom pb-3 gap-2" id="historyTabs" role="tablist" style="border-color: var(--border-color) !important;">
-        <li class="nav-item">
-            <button class="nav-link {{ $activeTab === 'app' ? 'active' : '' }} fw-bold px-4" id="tab-btn-app-history" data-bs-toggle="pill" data-bs-target="#app-history" onclick="switchArchiveTab('app')">APPOINTMENT HISTORY</button>
+        <li class="nav-item flex-fill flex-sm-grow-0">
+            <button class="nav-link w-100 {{ $activeTab === 'app' ? 'active' : '' }} fw-bold px-4 py-2 text-center" id="tab-btn-app-history" data-bs-toggle="pill" data-bs-target="#app-history" onclick="switchArchiveTab('app')">
+                APPOINTMENT HISTORY
+            </button>
         </li>
-        <li class="nav-item">
-            <button class="nav-link {{ $activeTab === 'lab' ? 'active' : '' }} fw-bold px-4" id="tab-btn-lab-history" data-bs-toggle="pill" data-bs-target="#lab-history" onclick="switchArchiveTab('lab')">LABORATORY RECORDS</button>
+        <li class="nav-item flex-fill flex-sm-grow-0">
+            <button class="nav-link w-100 {{ $activeTab === 'lab' ? 'active' : '' }} fw-bold px-4 py-2 text-center" id="tab-btn-lab-history" data-bs-toggle="pill" data-bs-target="#lab-history" onclick="switchArchiveTab('lab')">
+                LABORATORY RECORDS
+            </button>
         </li>
     </ul>
 
     <div class="tab-content">
         {{-- TAB 1: APPOINTMENT HISTORY (Split-Pane Grid Layout) --}}
         <div class="tab-pane {{ $activeTab === 'app' ? 'show active' : '' }}" id="app-history">
-            <div class="row g-4 align-items-start">
+            <div class="row g-4 align-items-start position-relative">
                 {{-- Left Side: Historical Appointment Deck --}}
-                <div class="col-lg-5 col-xl-4">
-                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 520px;">
+                <div class="col-12 col-lg-5 col-xl-4" id="left-history-app-panel">
+                    <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
                         @forelse($appointments as $app)
                             @include('appointments.partials.list-card', ['app' => $app, 'groupCount' => 1, 'isHistory' => true])
                         @empty
@@ -126,11 +129,19 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                     </div>
                 </div>
 
-                {{-- Right Side: Selected Archive Detail Workspace --}}
-                <div class="col-lg-7 col-xl-8">
-                    <div id="workspace-container">
-                        {{-- Default Empty State Placeholder (Always visible when none is selected) --}}
-                        <div id="details-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center placeholder-compact" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
+                {{-- Right Side: Selected Archive Detail Workspace (Sticky on Desktop) --}}
+                <div class="col-12 col-lg-7 col-xl-8 sticky-lg-top" style="top: 90px; align-self: flex-start;" id="right-history-app-workspace">
+                    {{-- Mobile Return to Cards Button --}}
+                    <div class="d-lg-none mb-3 d-none" id="mobile-back-to-app-btn">
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100 py-2 fw-bold uppercase d-flex align-items-center justify-content-center gap-2" onclick="scrollToHistoryList('app')">
+                            <i class="bi bi-arrow-up-circle"></i>
+                            <span>Back to Appointment List</span>
+                        </button>
+                    </div>
+
+                    <div id="workspace-container" class="h-100">
+                        {{-- Default Empty State Placeholder (Visible when none is selected) --}}
+                        <div id="details-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center placeholder-compact h-100" style="min-height: 320px; background-color: var(--bg-card); border-radius: 14px;">
                             <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-inline-flex align-items-center justify-content-center" style="width: 58px; height: 58px;">
                                 <i class="bi bi-clipboard2-pulse-fill fs-2 text-accent"></i>
                             </div>
@@ -147,12 +158,12 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
             </div>
         </div>
 
-        {{-- TAB 2: LABORATORY RECORDS (Full-Width Workspace with Split-Pane Layout) --}}
+        {{-- TAB 2: LABORATORY RECORDS (Split-Pane Grid Layout) --}}
         <div class="tab-pane {{ $activeTab === 'lab' ? 'show active' : '' }}" id="lab-history">
             @if($status == 'granted' || $isStaffViewingPatient)
-                <div class="row g-4 align-items-start">
+                <div class="row g-4 align-items-start position-relative">
                     {{-- Left Side: Historical Records List --}}
-                    <div class="col-lg-5 col-xl-4">
+                    <div class="col-12 col-lg-5 col-xl-4" id="left-history-lab-panel">
                         {{-- Staff can ADD RECORD on other patients --}}
                         @if($isStaffViewingPatient)
                             <button type="button" class="btn-custom btn-accent w-100 py-2.5 mb-2 fw-bold uppercase shadow-sm" onclick="showAddRecordForm()">
@@ -170,7 +181,7 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                             </form>
                         @endif
 
-                        <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 520px;">
+                        <div class="d-flex flex-column gap-2 overflow-auto custom-scroll" style="max-height: 650px;">
                             @forelse($existingRecords as $record)
                                 <div class="card app-list-card bg-card border-secondary p-3 text-start mb-2" id="record-card-{{ $record['id'] }}" onclick="showRecordDetails('{{ $record['id'] }}')">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
@@ -197,11 +208,19 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                         </div>
                     </div>
 
-                    {{-- Right Side: Active Workspace --}}
-                    <div class="col-lg-7 col-xl-8">
-                        <div id="lab-workspace-container">
+                    {{-- Right Side: Active Workspace (Sticky on Desktop) --}}
+                    <div class="col-12 col-lg-7 col-xl-8 sticky-lg-top" style="top: 90px; align-self: flex-start;" id="right-history-lab-workspace">
+                        {{-- Mobile Return to Cards Button --}}
+                        <div class="d-lg-none mb-3 d-none" id="mobile-back-to-lab-btn">
+                            <button type="button" class="btn btn-sm btn-outline-secondary w-100 py-2 fw-bold uppercase d-flex align-items-center justify-content-center gap-2" onclick="scrollToHistoryList('lab')">
+                                <i class="bi bi-arrow-up-circle"></i>
+                                <span>Back to Records Directory</span>
+                            </button>
+                        </div>
+
+                        <div id="lab-workspace-container" class="h-100">
                             {{-- Default Placeholder (Visible if no record is selected and not adding record) --}}
-                            <div id="record-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center placeholder-compact {{ $shouldOpenAddRecordByDefault ? 'd-none' : '' }}" style="min-height: 280px; background-color: var(--bg-card); border-radius: 14px;">
+                            <div id="record-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center placeholder-compact h-100 {{ $shouldOpenAddRecordByDefault ? 'd-none' : '' }}" style="min-height: 320px; background-color: var(--bg-card); border-radius: 14px;">
                                 <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-inline-flex align-items-center justify-content-center" style="width: 58px; height: 58px;">
                                     <i class="bi bi-file-earmark-medical fs-2 text-accent"></i>
                                 </div>
@@ -224,20 +243,18 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                                                     DIGITIZED REPORT
                                                 </h4>
                                                 <div class="text-secondary smaller fw-bold uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">
-                                                    Date of Record: {{ date('M d, Y', strtotime($record['date_of_record'])) }} <span class="mx-2">|</span> 
+                                                    Date of Record: {{ date('M d, Y', strtotime($record['date_of_record'])) }} <span class="mx-2">|</span>
                                                     Requested By: {{ $record['requested_by'] ?? 'INDIVIDUAL' }}
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-
                                     <div class="row g-4 text-start">
-                                        <div class="col-md-6 border-end border-secondary border-opacity-25">
+                                        <div class="col-12 col-md-6 border-end-md">
                                             <h6 class="text-accent small fw-bold uppercase mb-3"><i class="bi bi-person-bounding-box me-1"></i> Patient Demographics</h6>
                                             <div class="mb-2"><strong>Patient Name:</strong> {{ $record['patient_name'] }}</div>
                                             <div class="mb-2"><strong>Age / Sex:</strong> {{ $record['age'] }} Years Old / {{ $record['sex'] }}</div>
                                             <div class="mb-3"><strong>Residential Address:</strong> {{ $record['address'] }}</div>
-
                                             <h6 class="text-accent small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3 mb-3"><i class="bi bi-list-check me-1"></i> Requested Procedures</h6>
                                             <div class="d-flex flex-wrap gap-1.5">
                                                 @foreach($record['tests_requested'] ?? [] as $test)
@@ -245,13 +262,12 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                                                 @endforeach
                                             </div>
                                         </div>
-
-                                        <div class="col-md-6">
+                                        <div class="col-12 col-md-6">
                                             <h6 class="text-accent small fw-bold uppercase mb-3"><i class="bi bi-file-earmark-pdf-fill me-1"></i> Attached Scanned Reports</h6>
                                             <div class="d-flex flex-column gap-2 mb-3">
                                                 @foreach($record['scans'] ?? [] as $fileIdx => $scan)
-                                                    <div class="d-flex justify-content-between align-items-center p-2.5 border rounded" style="background-color: rgba(25, 211, 140, 0.05); border-color: rgba(25, 211, 140, 0.15) !important;">
-                                                        <div class="d-flex flex-column pe-2 text-truncate">
+                                                    <div class="d-flex justify-content-between align-items-center p-2.5 border rounded flex-wrap gap-2" style="background-color: rgba(25, 211, 140, 0.05); border-color: rgba(25, 211, 140, 0.15) !important;">
+                                                        <div class="d-flex flex-column pe-2 text-truncate" style="min-width: 140px; flex: 1 1 auto;">
                                                             <span class="fw-bold small text-truncate" style="color: var(--text-main) !important; font-size: 0.85rem;">
                                                                 <i class="bi bi-file-earmark-medical text-accent me-1"></i> {{ $scan['label'] }}
                                                             </span>
@@ -277,23 +293,21 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                                                 @endforeach
                                             </div>
                                         </div>
-
                                         <div class="col-12 border-top border-secondary border-opacity-25 pt-4 d-none" id="preview-area-{{ $record['id'] }}">
                                             <div class="bg-warning text-dark p-2 px-3 fw-bold small uppercase rounded-top d-flex justify-content-between align-items-center">
-                                                <span><i class="bi bi-eye-fill me-2"></i>PREVIEWING ATTACHED FILE: <span id="preview-title-{{ $record['id'] }}"></span></span>
+                                                <span class="text-truncate me-2"><i class="bi bi-eye-fill me-2"></i>PREVIEWING ATTACHED FILE: <span id="preview-title-{{ $record['id'] }}"></span></span>
                                                 <button type="button" class="btn p-0 text-dark border-0 d-flex align-items-center" onclick="closeHistPreview('{{ $record['id'] }}')" title="Close Preview">
                                                     <i class="bi bi-x-lg" style="font-weight: 800; font-size: 0.8rem;"></i>
                                                 </button>
                                             </div>
-                                            <div class="card border-warning border-top-0 rounded-0 rounded-bottom overflow-hidden bg-card p-4 d-flex justify-content-center align-items-center" style="min-height: 480px; background-color: var(--bg-card);">
-                                                <div id="image-container-{{ $record['id'] }}" class="position-relative d-inline-block image-preview-wrapper d-none" style="cursor: zoom-in;" onclick="window.zoomQR(this.dataset.url)">
+                                            <div class="card border-warning border-top-0 rounded-0 rounded-bottom overflow-hidden bg-card p-2 p-md-4 d-flex justify-content-center align-items-center" style="min-height: 480px; background-color: var(--bg-card);">
+                                                <div id="image-container-{{ $record['id'] }}" class="position-relative d-inline-block image-preview-wrapper d-none w-100 text-center" style="cursor: zoom-in;" onclick="window.zoomQR(this.dataset.url)">
                                                     <img id="image-img-{{ $record['id'] }}" src="" class="img-fluid rounded shadow-sm mx-auto d-block" style="max-height: 500px; object-fit: contain; border: 1px solid var(--border-color);">
                                                     <div class="position-absolute top-50 start-50 translate-middle zoom-overlay d-flex flex-column align-items-center justify-content-center text-white">
                                                         <i class="bi bi-zoom-in fs-1"></i>
                                                         <span class="fw-bold mt-2" style="font-size: 0.8rem;">CLICK TO ZOOM FULLSCREEN</span>
                                                     </div>
                                                 </div>
-
                                                 <div id="pdf-container-{{ $record['id'] }}" class="w-100 h-100 d-none d-flex justify-content-center align-items-center">
                                                     <iframe id="pdf-iframe-{{ $record['id'] }}" class="w-100 rounded mx-auto" style="min-height: 480px; border: none;"></iframe>
                                                 </div>
@@ -354,7 +368,6 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
                 <img src="" id="lightbox_qr_img" alt="Zoomed Asset" class="img-fluid rounded transition-all" style="max-height: 75vh; max-width: 80vw; object-fit: contain; transform: scale(1); transform-origin: center; cursor: grab;">
                 <iframe id="lightbox_pdf_viewer" class="d-none rounded" style="width: 80vw; height: 75vh; border: none;"></iframe>
             </div>
-
             <div id="lightbox_zoom_controls" class="mt-3 d-flex gap-3 align-items-center bg-dark bg-opacity-75 px-4 py-2 rounded-pill border border-secondary">
                 <button type="button" class="btn btn-sm btn-outline-light rounded-circle px-2.5 py-1" onclick="zoomImage(-0.15, event)" title="Zoom Out"><i class="bi bi-zoom-out"></i></button>
                 <span id="zoom_percent" class="text-white small fw-bold">100%</span>
@@ -404,7 +417,6 @@ $shouldOpenAddRecordByDefault = ($activeTab === 'lab' && $isStaffViewingPatient 
 @push('scripts')
 <script>
 // --- GLOBAL WORKSPACE HANDLERS ---
-
 function switchArchiveTab(tabKey) {
     try {
         const url = new URL(window.location.href);
@@ -412,6 +424,33 @@ function switchArchiveTab(tabKey) {
         history.replaceState(null, null, url.toString());
         sessionStorage.setItem("archive_tab_{{ $targetUser->id }}", tabKey);
     } catch (e) {}
+
+    // On desktop, auto-select first card of the switched tab if none selected
+    if (window.innerWidth >= 992) {
+        if (tabKey === 'app') {
+            const firstAppCard = document.querySelector('#app-history .app-list-card');
+            if (firstAppCard && firstAppCard.id) {
+                const firstId = firstAppCard.id.replace('card-', '');
+                showAppointmentDetails(firstId);
+            }
+        } else if (tabKey === 'lab') {
+            const firstRecCard = document.querySelector('#lab-history .app-list-card');
+            const addRecordPanel = document.getElementById('add-record-panel');
+            const isAdding = addRecordPanel && !addRecordPanel.classList.contains('d-none');
+            if (!isAdding && firstRecCard && firstRecCard.id) {
+                const firstId = firstRecCard.id.replace('record-card-', '');
+                showRecordDetails(firstId);
+            }
+        }
+    }
+}
+
+function scrollToHistoryList(type = 'app') {
+    const targetId = type === 'app' ? 'left-history-app-panel' : 'left-history-lab-panel';
+    const panel = document.getElementById(targetId);
+    if (panel) {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 }
 
 function showAppointmentDetails(appId) {
@@ -422,10 +461,9 @@ function showAppointmentDetails(appId) {
     document.querySelectorAll('.appointment-detail-pane').forEach(el => {
         el.classList.add('d-none');
     });
-    document.querySelectorAll('.app-list-card').forEach(el => {
+    document.querySelectorAll('#app-history .app-list-card').forEach(el => {
         el.classList.remove('border-accent', 'shadow-neon');
     });
-
     const detailPanel = document.getElementById(`details-${appId}`);
     if (detailPanel) {
         detailPanel.classList.remove('d-none');
@@ -433,6 +471,16 @@ function showAppointmentDetails(appId) {
     const listCard = document.getElementById(`card-${appId}`);
     if (listCard) {
         listCard.classList.add('border-accent', 'shadow-neon');
+    }
+
+    // Mobile Responsive Scroll & Return Control
+    if (window.innerWidth < 992) {
+        const backBtn = document.getElementById('mobile-back-to-app-btn');
+        if (backBtn) backBtn.classList.remove('d-none');
+        const workspaceCol = document.getElementById('right-history-app-workspace');
+        if (workspaceCol) {
+            workspaceCol.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     }
 }
 
@@ -444,10 +492,9 @@ function showRecordDetails(recordId) {
     document.querySelectorAll('.record-detail-pane').forEach(el => {
         el.classList.add('d-none');
     });
-    document.querySelectorAll('.app-list-card').forEach(el => {
+    document.querySelectorAll('#lab-history .app-list-card').forEach(el => {
         el.classList.remove('border-accent', 'shadow-neon');
     });
-
     const addRecordPanel = document.getElementById('add-record-panel');
     if (addRecordPanel) {
         addRecordPanel.classList.add('d-none');
@@ -460,13 +507,22 @@ function showRecordDetails(recordId) {
     if (listCard) {
         listCard.classList.add('border-accent', 'shadow-neon');
     }
-
     try {
         const url = new URL(window.location.href);
         url.searchParams.delete('action');
         history.replaceState(null, null, url.toString());
         sessionStorage.removeItem("archive_action_{{ $targetUser->id }}");
     } catch (e) {}
+
+    // Mobile Responsive Scroll & Return Control
+    if (window.innerWidth < 992) {
+        const backBtn = document.getElementById('mobile-back-to-lab-btn');
+        if (backBtn) backBtn.classList.remove('d-none');
+        const workspaceCol = document.getElementById('right-history-lab-workspace');
+        if (workspaceCol) {
+            workspaceCol.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
 }
 
 function showAddRecordForm() {
@@ -477,10 +533,9 @@ function showAddRecordForm() {
     document.querySelectorAll('.record-detail-pane').forEach(el => {
         el.classList.add('d-none');
     });
-    document.querySelectorAll('.app-list-card').forEach(el => {
+    document.querySelectorAll('#lab-history .app-list-card').forEach(el => {
         el.classList.remove('border-accent', 'shadow-neon');
     });
-
     const addRecordPanel = document.getElementById('add-record-panel');
     if (addRecordPanel) {
         addRecordPanel.classList.remove('d-none');
@@ -488,7 +543,6 @@ function showAddRecordForm() {
             initializeDigAddress();
         }
     }
-
     try {
         const url = new URL(window.location.href);
         url.searchParams.set('tab', 'lab');
@@ -496,6 +550,16 @@ function showAddRecordForm() {
         history.replaceState(null, null, url.toString());
         sessionStorage.setItem("archive_action_{{ $targetUser->id }}", "add");
     } catch (e) {}
+
+    // Mobile Responsive Scroll & Return Control
+    if (window.innerWidth < 992) {
+        const backBtn = document.getElementById('mobile-back-to-lab-btn');
+        if (backBtn) backBtn.classList.remove('d-none');
+        const workspaceCol = document.getElementById('right-history-lab-workspace');
+        if (workspaceCol) {
+            workspaceCol.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
 }
 
 function hideAddRecordForm() {
@@ -507,6 +571,8 @@ function hideAddRecordForm() {
     if (recordPlaceholder) {
         recordPlaceholder.classList.remove('d-none');
     }
+    const backBtn = document.getElementById('mobile-back-to-lab-btn');
+    if (backBtn) backBtn.classList.add('d-none');
 
     try {
         const url = new URL(window.location.href);
@@ -516,7 +582,21 @@ function hideAddRecordForm() {
     } catch (e) {}
 }
 
-function resetActiveDetail() {}
+function resetActiveDetail() {
+    const placeholder = document.getElementById('details-placeholder');
+    if (placeholder) placeholder.classList.remove('d-none');
+    document.querySelectorAll('.appointment-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('#app-history .app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+    const backAppBtn = document.getElementById('mobile-back-to-app-btn');
+    if (backAppBtn) backAppBtn.classList.add('d-none');
+
+    const recordPlaceholder = document.getElementById('record-placeholder');
+    if (recordPlaceholder) recordPlaceholder.classList.remove('d-none');
+    document.querySelectorAll('.record-detail-pane').forEach(el => el.classList.add('d-none'));
+    document.querySelectorAll('#lab-history .app-list-card').forEach(el => el.classList.remove('border-accent', 'shadow-neon'));
+    const backLabBtn = document.getElementById('mobile-back-to-lab-btn');
+    if (backLabBtn) backLabBtn.classList.add('d-none');
+}
 
 function closeHistPreview(recordId) {
     const previewArea = document.getElementById(`preview-area-${recordId}`);
@@ -542,7 +622,6 @@ function previewHistFile(recordId, fileUrl, labelName, certNo = '') {
     previewArea.classList.remove('d-none');
 
     const isPdf = fileUrl.toLowerCase().endsWith('.pdf') || fileUrl.startsWith('data:application/pdf');
-
     if (isPdf) {
         if (imgContainer) imgContainer.classList.add('d-none');
         if (imgEl) imgEl.src = '';
@@ -558,6 +637,11 @@ function previewHistFile(recordId, fileUrl, labelName, certNo = '') {
             imgContainer.dataset.url = fileUrl;
             imgContainer.classList.remove('d-none');
         }
+    }
+
+    // Scroll to preview on small devices
+    if (window.innerWidth < 992) {
+        previewArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 }
 
@@ -608,6 +692,7 @@ function zoomFile(fileSrc) {
     const controls = document.getElementById('lightbox_zoom_controls');
 
     resetZoom();
+
     if (isPdf) {
         img.classList.add('d-none');
         controls.classList.add('d-none');
@@ -620,6 +705,7 @@ function zoomFile(fileSrc) {
         img.classList.remove('d-none');
         controls.classList.remove('d-none');
     }
+
     document.getElementById('qr_lightbox').classList.remove('d-none');
     document.getElementById('qr_lightbox').classList.add('d-flex');
 }
@@ -667,6 +753,7 @@ function toggleFullscreen(event) {
 
 // Hoist functions to window
 window.switchArchiveTab = switchArchiveTab;
+window.scrollToHistoryList = scrollToHistoryList;
 window.showAppointmentDetails = showAppointmentDetails;
 window.showRecordDetails = showRecordDetails;
 window.showAddRecordForm = showAddRecordForm;
@@ -688,6 +775,28 @@ window.addEventListener('load', () => {
             showAddRecordForm();
         }
     } catch (e) {}
+
+    // On Desktop, auto-select first item in active tab
+    if (window.innerWidth >= 992) {
+        const activeTabEl = document.querySelector('#historyTabs .nav-link.active');
+        const isLabActive = activeTabEl && activeTabEl.id === 'tab-btn-lab-history';
+
+        if (isLabActive) {
+            const addRecordPanel = document.getElementById('add-record-panel');
+            const isAdding = addRecordPanel && !addRecordPanel.classList.contains('d-none');
+            const firstRecCard = document.querySelector('#lab-history .app-list-card');
+            if (!isAdding && firstRecCard && firstRecCard.id) {
+                const firstId = firstRecCard.id.replace('record-card-', '');
+                showRecordDetails(firstId);
+            }
+        } else {
+            const firstAppCard = document.querySelector('#app-history .app-list-card');
+            if (firstAppCard && firstAppCard.id) {
+                const firstId = firstAppCard.id.replace('card-', '');
+                showAppointmentDetails(firstId);
+            }
+        }
+    }
 
     const lightbox = document.getElementById('qr_lightbox');
     const container = document.getElementById('lightbox_viewer_container');
@@ -724,6 +833,7 @@ div:has(> #patient-archive-page) {
 .page-header-archive {
     margin-bottom: 1.5rem !important;
 }
+
 #historyTabs {
     margin-bottom: 1.75rem !important;
 }
@@ -738,6 +848,7 @@ div:has(> #patient-archive-page) {
     letter-spacing: 0.5px !important;
     transition: all 0.2s ease-in-out !important;
 }
+
 .btn-back-appointments:hover {
     background-color: var(--brand-accent) !important;
     border-color: var(--brand-accent) !important;
@@ -760,27 +871,64 @@ div:has(> #patient-archive-page) {
     border-radius: 8px;
     transition: 0.2s ease;
 }
+
 #historyTabs .nav-link:hover {
     border-color: var(--brand-accent) !important;
     color: var(--brand-accent) !important;
 }
+
 #historyTabs .nav-link.active {
     background-color: var(--brand-accent) !important;
     color: #1c232d !important;
     border-color: var(--brand-accent) !important;
 }
-.shadow-neon { box-shadow: 0 0 10px rgba(25, 211, 140, 0.15) !important; }
-.app-list-card { transition: all 0.2s ease; cursor: pointer; }
-.app-list-card:hover { border-color: var(--brand-accent) !important; transform: translateX(2px); }
+
+.border-dashed { border-style: dashed !important; }
+
+#app-history .custom-scroll,
+#lab-history .custom-scroll {
+    padding: 6px 12px 6px 6px !important;
+}
+
+.app-list-card {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.app-list-card:hover {
+    border-color: var(--brand-accent) !important;
+    transform: translateX(2px);
+}
+
+.border-accent {
+    border-color: var(--brand-accent) !important;
+    border-width: 2px !important;
+}
+
+.shadow-neon {
+    box-shadow: 0 0 12px rgba(25, 211, 140, 0.25) !important;
+}
+
+.app-list-card.border-accent {
+    background-color: rgba(25, 211, 140, 0.04) !important;
+}
+
+@media (min-width: 768px) {
+    .border-end-md {
+        border-right: 1px solid rgba(100, 116, 139, 0.25) !important;
+    }
+}
 
 /* 6. Handshake Box Container */
 #handshake-box-container {
     width: 100% !important;
     padding: 0.5rem 0 !important;
 }
+
 .handshake-box-wrapper {
     width: 100% !important;
 }
+
 .handshake-box-wrapper .card,
 #handshake-box-container .card {
     width: 100% !important;
@@ -793,6 +941,7 @@ div:has(> #patient-archive-page) {
 .image-preview-wrapper {
     position: relative;
 }
+
 .image-preview-wrapper .zoom-overlay {
     position: absolute;
     top: 0;
@@ -804,8 +953,10 @@ div:has(> #patient-archive-page) {
     transition: opacity 0.22s ease-in-out;
     border-radius: inherit;
 }
+
 .image-preview-wrapper:hover .zoom-overlay {
     opacity: 1;
 }
 </style>
 @endpush
+@endsection

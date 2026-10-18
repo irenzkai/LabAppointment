@@ -345,15 +345,15 @@
     <div class="offcanvas-header border-bottom py-3 px-4" style="border-color: var(--border-color) !important;">
         <div class="d-flex align-items-center gap-2">
             <i class="bi bi-bell-fill text-accent fs-5" style="color: var(--brand-accent) !important;"></i>
-            <h5 class="offcanvas-title fw-800 mb-0 uppercase tracking-tight" id="mobileNotificationsOffcanvasLabel" style="font-size: 1.15rem; color: var(--text-main) !important;">
+            <h5 class="offcanvas-title fw-800 mb-0 uppercase tracking-tight" id="mobileNotificationsOffcanvasLabel" style="font-size: 0.80rem; color: var(--text-main) !important;">
                 Notifications
             </h5>
             @if($notifCount > 0)
-                <span class="badge bg-danger rounded-pill smaller ms-1" style="font-size: 0.65rem;">{{ $notifCount }} new</span>
+                <span class="badge bg-danger rounded-pill smaller ms-1" style="font-size: 0.50rem;">{{ $notifCount }} new</span>
             @endif
         </div>
         <div class="d-flex align-items-center gap-3">
-            <a href="{{ route('notifications.index') }}" class="text-accent smaller fw-bold text-decoration-none hover-accent" style="font-size: 0.72rem; color: var(--brand-accent) !important;">
+            <a href="{{ route('notifications.index') }}" class="text-accent smaller fw-bold text-decoration-none hover-accent" style="font-size: 0.60rem; color: var(--brand-accent) !important;">
                 View all &rarr;
             </a>
             <button type="button" class="btn-close shadow-none" data-bs-dismiss="offcanvas" aria-label="Close"></button>
