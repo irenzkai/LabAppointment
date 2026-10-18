@@ -358,6 +358,7 @@
                                     <option value="No payment received / pending verification">No payment received / pending verification</option>
                                     <option value="Invalid test selection for patient demographics">Invalid test selection for patient demographics</option>
                                     <option value="Discrepancy in schedule / date selection">Discrepancy in schedule / date selection</option>
+                                    <option value="Patient requested for rescheduling/cancellation">Patient requested for rescheduling/cancellation</option>
                                     <option value="Others">Others (Specify details below)</option>
                                 </select>
                             </div>

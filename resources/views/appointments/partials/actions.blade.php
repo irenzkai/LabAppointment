@@ -311,23 +311,67 @@
     @if($isStaffView)
         <div class="staff-action-container">
             @if(!$isExpired)
-                {{-- STEP A: PENDING -> APPROVE or RETURN (Direct for individual or batch patients) --}}
+                {{-- STEP A: PENDING -> APPROVE (WITH CONFIRMATION MODAL) or RETURN --}}
                 @if($app->status == 'pending')
                     @php
                         $isApproveDisabled = ($app->payment_method === 'Cashless' && $app->payment_status !== 'paid');
                     @endphp
                     <div class="d-flex gap-2 justify-content-end mb-2">
-                        <form action="{{ route('appointments.status', $app->id) }}" method="POST" class="flex-grow-1 m-0 ajax-action-form" data-app-id="{{ $app->id }}" onsubmit="handleAjaxActionSubmit(event, this)">
-                            @csrf
-                            @method('PATCH')
-                            <input type="hidden" name="status" value="approved">
-                            <button type="submit" class="btn-custom btn-accent w-100 py-2 fw-bold {{ $isApproveDisabled ? 'opacity-50 cursor-not-allowed' : '' }}" {{ $isApproveDisabled ? 'disabled title="Payment must be confirmed before approval"' : '' }}>
-                                <i class="bi bi-check-circle me-1"></i> APPROVE
-                            </button>
-                        </form>
+                        <button type="button" 
+                                class="btn-custom btn-accent flex-grow-1 py-2 fw-bold {{ $isApproveDisabled ? 'opacity-50 cursor-not-allowed' : '' }}" 
+                                {{ $isApproveDisabled ? 'disabled title="Cashless payment must be confirmed before approval"' : 'data-bs-toggle=modal data-bs-target=#approveModal' . $app->id }}>
+                            <i class="bi bi-check-circle me-1"></i> APPROVE
+                        </button>
                         <button type="button" class="btn-custom btn-danger-custom px-4" data-bs-toggle="modal" data-bs-target="#retModal{{ $app->id }}">
                             RETURN
                         </button>
+                    </div>
+
+                    {{-- Single Appointment Approval Confirmation Modal (Teleported to body via JS) --}}
+                    <div class="modal fade action-teleport-modal" id="approveModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060 !important;">
+                        <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+                            <form action="{{ route('appointments.status', $app->id) }}" method="POST" class="modal-content shadow-lg border-0 ajax-action-form" data-app-id="{{ $app->id }}" onsubmit="handleAjaxActionSubmit(event, this)" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color) !important; color: var(--text-main);">
+                                @csrf
+                                @method('PATCH')
+                                <input type="hidden" name="status" value="approved">
+                                <div class="modal-header py-3" style="background-color: var(--bg-card); border-bottom: 1px solid var(--border-color);">
+                                    <h5 class="modal-title text-accent fw-bold uppercase small m-0 d-flex align-items-center gap-2" style="color: var(--brand-accent) !important;">
+                                        <i class="bi bi-check-circle-fill fs-5"></i>
+                                        <span>Approve Appointment?</span>
+                                    </h5>
+                                    <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body p-4 text-start">
+                                    <p class="small mb-3" style="color: var(--text-main) !important;">
+                                        Confirm clinical approval for patient <strong class="fw-bold" style="color: var(--brand-accent) !important;">{{ strtoupper($app->patient_name) }}</strong> (Ref #{{ $app->id }})?
+                                    </p>
+                                    <div class="p-3 rounded border mb-0 smaller text-muted" style="background-color: rgba(25, 211, 140, 0.04); border-color: var(--border-color) !important;">
+                                        <div class="d-flex justify-content-between mb-1.5">
+                                            <span class="fw-semibold">Schedule Date:</span>
+                                            <span class="text-main fw-bold">{{ $app->appointment_date ? \Carbon\Carbon::parse($app->appointment_date)->format('M d, Y') : 'N/A' }}</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between mb-1.5">
+                                            <span class="fw-semibold">Time Slot:</span>
+                                            <span class="text-main fw-bold">{{ $app->time_slot ? date('h:i A', strtotime($app->time_slot)) : '--' }}</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between mb-1.5">
+                                            <span class="fw-semibold">Payment Method:</span>
+                                            <span class="text-main fw-bold">{{ $app->payment_method }}</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between pt-1 border-top" style="border-color: var(--border-color) !important;">
+                                            <span class="fw-semibold">Total Amount:</span>
+                                            <span class="text-accent fw-bold" style="color: var(--brand-accent) !important;">₱{{ number_format($app->totalPrice(), 2) }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer p-0" style="background-color: var(--bg-card); border-top: 1px solid var(--border-color);">
+                                    <div class="d-flex w-100">
+                                        <button type="button" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller" style="color: var(--text-muted); border-right: 1px solid var(--border-color) !important; border-radius: 0;" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-link text-decoration-none w-50 py-3 fw-bold uppercase smaller hover-bg-neon" style="color: var(--brand-accent); border-radius: 0;">Yes, Approve</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 @endif
 
@@ -338,22 +382,35 @@
                     </button>
                 @endif
 
-                {{-- STEP B: APPROVED / RETEST -> MARK AS TESTED (Lab Tech Only) & EDIT DEMOGRAPHICS (Staff) --}}
+                {{-- STEP B: APPROVED / RETEST -> MARK AS TESTED & RETURN (Staff Can Return Approved Appointments) --}}
                 @if($app->status == 'approved' || $app->status == 'retest')
                     @can('isLabTech')
-                        <button type="button" class="btn-custom btn-accent w-100 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#testModal{{ $app->id }}" onclick="if(typeof setModalMainAction === 'function'){ setModalMainAction({{ $app->id }}, 'tested'); }">
-                            <i class="bi bi-person-check me-1"></i> MARK PATIENT AS TESTED
-                        </button>
+                        <div class="d-flex gap-2 mb-2">
+                            <button type="button" class="btn-custom btn-accent flex-grow-1 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#testModal{{ $app->id }}" onclick="if(typeof setModalMainAction === 'function'){ setModalMainAction({{ $app->id }}, 'tested'); }">
+                                <i class="bi bi-person-check me-1"></i> MARK AS TESTED
+                            </button>
+                            @if($app->status === 'approved')
+                                <button type="button" class="btn-custom btn-danger-custom px-3 py-2 fw-bold small d-inline-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#retModal{{ $app->id }}" title="Return approved appointment for patient correction/rescheduling">
+                                    <i class="bi bi-arrow-return-left"></i>
+                                    <span>RETURN</span>
+                                </button>
+                            @endif
+                        </div>
                         @include('appointments.partials.mark-tested-modal')
                     @else
-                        {{-- Dedicated Demographic Edit for Normal Staff (No Testing Authority) --}}
-                        <div class="d-flex flex-column gap-2 mb-2">
-                            <a href="{{ route('appointments.edit-details', $app->id) }}?from=queue" class="btn-custom btn-outline-accent w-100 py-2 fw-bold text-center text-decoration-none shadow-sm uppercase" style="font-size: 0.75rem;">
+                        {{-- Dedicated Demographic Edit & Return for Normal Staff (No Testing Authority) --}}
+                        <div class="d-flex gap-2 mb-2">
+                            <a href="{{ route('appointments.edit-details', $app->id) }}?from=queue" class="btn-custom btn-outline-accent flex-grow-1 py-2 fw-bold text-center text-decoration-none shadow-sm uppercase" style="font-size: 0.70rem;">
                                 <i class="bi bi-pencil-square me-1"></i> Edit Demographics
                             </a>
-                            <div class="alert small py-2.5 mb-0 text-center" style="background-color: rgba(25, 211, 140, 0.05); color: var(--text-main); border: 1.5px solid var(--border-color); border-radius: 8px;">
-                                <i class="bi bi-hourglass-split me-1 text-warning"></i> Awaiting Clinical Sampling (Lab Tech Only)
-                            </div>
+                            @if($app->status === 'approved')
+                                <button type="button" class="btn-custom btn-danger-custom px-3 py-2 fw-bold small d-inline-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#retModal{{ $app->id }}" title="Return approved appointment for patient correction/rescheduling">
+                                    <span>RETURN</span>
+                                </button>
+                            @endif
+                        </div>
+                        <div class="alert small py-2 mb-2 text-center" style="background-color: rgba(25, 211, 140, 0.05); color: var(--text-main); border: 1.5px solid var(--border-color); border-radius: 8px;">
+                            <i class="bi bi-hourglass-split me-1 text-warning"></i> Awaiting Clinical Sampling (Lab Tech Only)
                         </div>
                     @endcan
                 @endif
@@ -361,13 +418,11 @@
                 {{-- STEP C: TESTED -> ENCODE RESULTS & PROGRESS BREAKDOWN --}}
                 @if($app->status == 'tested')
                     <div class="mb-2.5 text-center">
-                        {{-- Centered Worksheet Amount Header --}}
                         <div class="d-inline-flex align-items-center justify-content-center gap-1.5 text-muted fw-bold text-uppercase mb-2" style="font-size: 0.68rem; letter-spacing: 0.5px;">
                             <i class="bi bi-file-earmark-medical text-accent"></i>
                             <span>{{ $totalWorksheets }} {{ $totalWorksheets === 1 ? 'Worksheet' : 'Worksheets' }}</span>
                         </div>
 
-                        {{-- Symmetrical Centered Two Metric Cards --}}
                         <div class="row g-2 mb-2">
                             <div class="col-6">
                                 <div class="p-2 rounded border text-center h-100 d-flex flex-column justify-content-center shadow-sm"
@@ -421,13 +476,11 @@
                 {{-- STEP D: ENCODED -> VERIFICATION TRACKER --}}
                 @if($app->status == 'encoded')
                     <div class="mb-2.5 text-center">
-                        {{-- Centered Worksheet Amount Header --}}
                         <div class="d-inline-flex align-items-center justify-content-center gap-1.5 text-muted fw-bold text-uppercase mb-2" style="font-size: 0.68rem; letter-spacing: 0.5px;">
                             <i class="bi bi-file-earmark-medical text-accent"></i>
                             <span>{{ $totalWorksheets }} {{ $totalWorksheets === 1 ? 'Worksheet' : 'Worksheets' }}</span>
                         </div>
 
-                        {{-- Symmetrical Centered Two Metric Cards --}}
                         <div class="row g-2 mb-2">
                             <div class="col-6">
                                 <div class="p-2 rounded border text-center h-100 d-flex flex-column justify-content-center shadow-sm"
@@ -530,6 +583,41 @@
 </div>
 
 <script>
+/**
+ * 1. AUTOMATIC MODAL TELEPORTATION (Solves Backdrop Stacking Context Bugs)
+ * Moves all modals out of transformed/animated containers and mounts them as direct children of <body>.
+ */
+function teleportActionModals() {
+    document.querySelectorAll('.action-teleport-modal, .appointment-detail-pane .modal').forEach(modal => {
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+    });
+}
+
+teleportActionModals();
+document.addEventListener('DOMContentLoaded', teleportActionModals);
+
+// Ensure modal is attached to document.body before Bootstrap shows backdrop
+document.addEventListener('show.bs.modal', function(e) {
+    if (e.target && e.target.classList.contains('modal') && e.target.parentElement !== document.body) {
+        document.body.appendChild(e.target);
+    }
+}, true);
+
+// Clean up any stray backdrops when modal closes
+document.addEventListener('hidden.bs.modal', function() {
+    if (!document.querySelector('.modal.show')) {
+        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('padding-right');
+        document.body.style.removeProperty('overflow');
+    }
+});
+
+/**
+ * 2. SAFE AJAX ACTION SUBMISSION HANDLER
+ */
 if (!window.handleAjaxActionSubmit) {
     window.handleAjaxActionSubmit = async function(e, form) {
         e.preventDefault();
@@ -564,6 +652,12 @@ if (!window.handleAjaxActionSubmit) {
                     modalInstance.hide();
                 }
             }
+
+            // Immediately destroy lingering backdrops to avoid grey overlay lock
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style.removeProperty('overflow');
+            document.body.style.removeProperty('padding-right');
 
             // Dynamically refresh master queue without page reload
             if (typeof fetchQueueWithParams === 'function') {
