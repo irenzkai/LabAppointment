@@ -26,57 +26,74 @@
                 </li>
 
                 @auth
-                    <li class="nav-item">
-                        <a class="nav-link {{ request()->routeIs('appointments.*') && request('view') !== 'queue' ? 'active' : '' }}" href="{{ route('appointments.index') }}">
-                            APPOINTMENTS
-                        </a>
-                    </li>
+                    @if(Auth::user()->isEmployee())
+                        {{-- Patient Side: Personal Appointments for Staff/Admin --}}
+                        <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('appointments.*') && request('view') === 'patient' ? 'active' : '' }}" href="{{ route('appointments.index', ['view' => 'patient']) }}">
+                                MY APPOINTMENTS
+                            </a>
+                        </li>
+
+                        {{-- Admin/Staff Side: Master Clinical Queue --}}
+                        <li class="nav-item">
+                            <a class="nav-link {{ (request()->routeIs('appointments.index') && (request('view') === 'queue' || (!request('view') && !request()->routeIs('appointments.create')))) || request()->routeIs('appointments.encode') || request()->routeIs('appointments.edit-details') ? 'active' : '' }}" href="{{ route('appointments.index', ['view' => 'queue']) }}">
+                                MASTER QUEUE
+                            </a>
+                        </li>
+                    @else
+                        {{-- Patient Side: Standard Appointments for Patients --}}
+                        <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('appointments.*') ? 'active' : '' }}" href="{{ route('appointments.index') }}">
+                                APPOINTMENTS
+                            </a>
+                        </li>
+                    @endif
 
                     {{-- Admin Dropdown --}}
                     @if(Auth::user()->isAdmin())
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle {{ request()->routeIs('admin.*') || (request()->routeIs('appointments.index') && request('view') === 'queue') || request()->routeIs('services.manage') ? 'active' : '' }}" href="#" id="adminMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <a class="nav-link dropdown-toggle {{ request()->routeIs('admin.*') || request()->routeIs('services.manage') ? 'active' : '' }}" href="#" id="adminMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 ADMIN PANEL
                             </a>
                             <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary mt-2" aria-labelledby="adminMenuDropdown">
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('admin.panel') }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('admin.panel') ? 'active' : '' }}" href="{{ route('admin.panel') }}">
                                         <i class="bi bi-speedometer2 me-2 text-accent"></i>Panel Overview
                                     </a>
                                 </li>
                                 <li><hr class="dropdown-divider border-secondary border-opacity-50"></li>
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('admin.users.index') }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
                                         <i class="bi bi-person-gear me-2 text-accent"></i>Manage Users
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('appointments.index', ['view' => 'queue']) }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('appointments.index') && request('view') === 'queue' ? 'active' : '' }}" href="{{ route('appointments.index', ['view' => 'queue']) }}">
                                         <i class="bi bi-kanban me-2 text-accent"></i>Master Queue
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('services.manage') }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('services.manage') ? 'active' : '' }}" href="{{ route('services.manage') }}">
                                         <i class="bi bi-list-stars me-2 text-accent"></i>Services List
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('admin.payment-providers.index') }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('admin.payment-providers.*') ? 'active' : '' }}" href="{{ route('admin.payment-providers.index') }}">
                                         <i class="bi bi-qr-code-scan me-2 text-accent"></i>Payment QRs
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('admin.appointment-settings') }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('admin.appointment-settings') ? 'active' : '' }}" href="{{ route('admin.appointment-settings') }}">
                                         <i class="bi bi-clock-history me-2 text-accent"></i>Schedule Editor
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('admin.logs') }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('admin.logs') ? 'active' : '' }}" href="{{ route('admin.logs') }}">
                                         <i class="bi bi-shield-check me-2 text-danger"></i>Audit Logs
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('admin.reports') }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('admin.reports') ? 'active' : '' }}" href="{{ route('admin.reports') }}">
                                         <i class="bi bi-file-earmark-bar-graph me-2 text-accent"></i>Reports & Exports
                                     </a>
                                 </li>
@@ -85,38 +102,38 @@
                     @elseif(Auth::user()->isEmployee())
                         {{-- Staff Dropdown --}}
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle {{ request()->routeIs('staff.panel') || (request()->routeIs('appointments.index') && request('view') === 'queue') || request()->routeIs('services.manage') || request()->routeIs('admin.payment-providers.*') || request()->routeIs('admin.appointment-settings') || request()->routeIs('admin.users.*') ? 'active' : '' }}" href="#" id="staffMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <a class="nav-link dropdown-toggle {{ request()->routeIs('staff.panel') || request()->routeIs('services.manage') || request()->routeIs('admin.payment-providers.*') || request()->routeIs('admin.appointment-settings') || request()->routeIs('admin.users.*') ? 'active' : '' }}" href="#" id="staffMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 STAFF PANEL
                             </a>
                             <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary mt-2" aria-labelledby="staffMenuDropdown">
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('staff.panel') }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('staff.panel') ? 'active' : '' }}" href="{{ route('staff.panel') }}">
                                         <i class="bi bi-speedometer2 me-2 text-accent"></i>Panel Overview
                                     </a>
                                 </li>
                                 <li><hr class="dropdown-divider border-secondary border-opacity-50"></li>
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('admin.users.index') }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('admin.users.*') ? 'active' : '' }}" href="{{ route('admin.users.index') }}">
                                         <i class="bi bi-people me-2 text-accent"></i>User List
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('appointments.index', ['view' => 'queue']) }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('appointments.index') && request('view') === 'queue' ? 'active' : '' }}" href="{{ route('appointments.index', ['view' => 'queue']) }}">
                                         <i class="bi bi-kanban me-2 text-accent"></i>Master Queue
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('services.manage') }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('services.manage') ? 'active' : '' }}" href="{{ route('services.manage') }}">
                                         <i class="bi bi-list-stars me-2 text-accent"></i>Services List
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('admin.payment-providers.index') }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('admin.payment-providers.*') ? 'active' : '' }}" href="{{ route('admin.payment-providers.index') }}">
                                         <i class="bi bi-qr-code-scan me-2 text-accent"></i>Payment QRs
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item small py-2" href="{{ route('admin.appointment-settings') }}">
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('admin.appointment-settings') ? 'active' : '' }}" href="{{ route('admin.appointment-settings') }}">
                                         <i class="bi bi-clock-history me-2 text-accent"></i>Schedule Editor
                                     </a>
                                 </li>
@@ -258,6 +275,11 @@
                             <li>
                                 <a class="dropdown-item small py-2" href="{{ route('main') }}">
                                     <i class="bi bi-house me-2"></i> Main Menu
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item small py-2 {{ request()->routeIs('appointments.index') && request('view') === 'patient' ? 'active' : '' }}" href="{{ route('appointments.index', Auth::user()->isEmployee() ? ['view' => 'patient'] : []) }}">
+                                    <i class="bi bi-calendar-check me-2"></i> My Appointments
                                 </a>
                             </li>
                             <li>
@@ -470,7 +492,7 @@
 
                 @auth
                     <li>
-                        <a href="{{ route('appointments.index') }}" class="mobile-nav-link {{ request()->routeIs('appointments.index') && request('view') !== 'queue' ? 'active' : '' }}">
+                        <a href="{{ route('appointments.index', Auth::user()->isEmployee() ? ['view' => 'patient'] : []) }}" class="mobile-nav-link {{ request()->routeIs('appointments.index') && (request('view') === 'patient' || (!Auth::user()->isEmployee() && !request('view'))) ? 'active' : '' }}">
                             <i class="bi bi-calendar-check"></i>
                             <span>My Appointments</span>
                         </a>
@@ -506,7 +528,7 @@
                             </a>
                         </li>
                         <li>
-                            <a href="{{ route('appointments.index', ['view' => 'queue']) }}" class="mobile-nav-link {{ request('view') === 'queue' ? 'active' : '' }}">
+                            <a href="{{ route('appointments.index', ['view' => 'queue']) }}" class="mobile-nav-link {{ request('view') === 'queue' || (request()->routeIs('appointments.index') && !request('view')) ? 'active' : '' }}">
                                 <i class="bi bi-kanban"></i>
                                 <span>Master Queue</span>
                             </a>
@@ -559,7 +581,7 @@
                             </a>
                         </li>
                         <li>
-                            <a href="{{ route('appointments.index', ['view' => 'queue']) }}" class="mobile-nav-link {{ request('view') === 'queue' ? 'active' : '' }}">
+                            <a href="{{ route('appointments.index', ['view' => 'queue']) }}" class="mobile-nav-link {{ request('view') === 'queue' || (request()->routeIs('appointments.index') && !request('view')) ? 'active' : '' }}">
                                 <i class="bi bi-kanban"></i>
                                 <span>Master Queue</span>
                             </a>

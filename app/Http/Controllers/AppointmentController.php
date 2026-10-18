@@ -332,7 +332,7 @@ class AppointmentController extends Controller
                 $staff->notify(new AppointmentNotification([
                     'title' => 'New Booking Request',
                     'message' => "Patient: {$appointment->patient_name} for " . date('M d', strtotime($appointment->appointment_date)),
-                    'url' => route('appointments.index'),
+                    'url' => route('appointments.index', ['view' => 'queue']),
                     'type' => 'info'
                 ]));
                 event(new NotificationSent($staff->id, 'New Booking Request', "Patient: {$appointment->patient_name} for " . date('M d', strtotime($appointment->appointment_date))));
@@ -349,7 +349,9 @@ class AppointmentController extends Controller
                 ], 200);
             }
 
-            return redirect()->route('appointments.index')->with('success', 'Appointment successfully requested!');
+            // Redirect staff to patient view so they immediately see their own new booking
+            $redirectParams = Auth::user()->isEmployee() ? ['view' => 'patient'] : [];
+            return redirect()->route('appointments.index', $redirectParams)->with('success', 'Appointment successfully requested!');
         } catch (\Exception $e) {
             DB::rollback();
             if (isset($data['referral_note'])) Storage::disk('public')->delete($data['referral_note']);
@@ -376,12 +378,14 @@ class AppointmentController extends Controller
         if (!$isOwner) abort(403, 'Unauthorized action.');
 
         if ($appointment->status === 'released') {
-            return redirect()->route('appointments.index')->with('error', 'Released appointments are locked and cannot be modified.');
+            $redirectParams = $user->isEmployee() ? ['view' => 'patient'] : [];
+            return redirect()->route('appointments.index', $redirectParams)->with('error', 'Released appointments are locked and cannot be modified.');
         }
 
         $isExpired = $appointment->isExpired();
         if (!($appointment->status === 'returned' || $appointment->status === 'canceled' || $isExpired)) {
-            return redirect()->route('appointments.index')->with('error', 'This appointment is currently not eligible for resubmission.');
+            $redirectParams = $user->isEmployee() ? ['view' => 'patient'] : [];
+            return redirect()->route('appointments.index', $redirectParams)->with('error', 'This appointment is currently not eligible for resubmission.');
         }
 
         $services = Service::where('is_available', true)->orderBy('name')->get();
@@ -412,7 +416,8 @@ class AppointmentController extends Controller
             if ($request->expectsJson() && ! $request->acceptsHtml()) {
                 return response()->json(['message' => 'Released appointments cannot be updated.'], 403);
             }
-            return redirect()->route('appointments.index')->with('error', 'Released appointments cannot be updated.');
+            $redirectParams = $user->isEmployee() ? ['view' => 'patient'] : [];
+            return redirect()->route('appointments.index', $redirectParams)->with('error', 'Released appointments cannot be updated.');
         }
 
         $isBulk = !is_null($appointment->batch_id);
@@ -459,8 +464,8 @@ class AppointmentController extends Controller
         if (!$isBulk) {
             $rules['payment_method'] = 'required|string';
             $rules['referral_note'] = 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240';
-            $isReceiptRequired = false;
 
+            $isReceiptRequired = false;
             if ($request->payment_method === 'Cashless' && $appointment->payment_status !== 'paid') {
                 if (in_array($appointment->status, ['canceled', 'returned']) || in_array($appointment->payment_status, ['invalid', 'refunded'])) {
                     if (!$appointment->payment_receipt || $request->input('remove_receipt') === '1') {
@@ -468,7 +473,6 @@ class AppointmentController extends Controller
                     }
                 }
             }
-
             $rules['payment_receipt'] = $isReceiptRequired ? 'required|file|mimes:pdf,jpg,jpeg,png|max:10240' : 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240';
         }
 
@@ -509,7 +513,7 @@ class AppointmentController extends Controller
             ? $appointment->payment_status 
             : (($appointment->status === 'canceled' && $appointment->payment_status === 'paid') ? 'paid' : 'unpaid');
 
-        $patientEmail = $request->filled('patient_email')
+        $patientEmail = $request->filled('patient_email') 
             ? strtolower(trim($request->patient_email))
             : ($appointment->patient_email ?: (Auth::check() ? strtolower(Auth::user()->email) : null));
 
@@ -574,7 +578,7 @@ class AppointmentController extends Controller
             $staff->notify(new AppointmentNotification([
                 'title' => 'Resubmitted Booking',
                 'message' => "Patient: {$appointment->patient_name} has corrected and resubmitted their appointment.",
-                'url' => route('appointments.index'),
+                'url' => route('appointments.index', ['view' => 'queue']),
                 'type' => 'info'
             ]));
             event(new NotificationSent($staff->id, 'Resubmitted Booking', "Patient: {$appointment->patient_name} has corrected and resubmitted their appointment."));
@@ -590,7 +594,9 @@ class AppointmentController extends Controller
             ], 200);
         }
 
-        return redirect()->route('appointments.index')->with('success', 'Appointment resubmitted for approval.');
+        // Redirect staff back to their patient view
+        $redirectParams = $user->isEmployee() ? ['view' => 'patient'] : [];
+        return redirect()->route('appointments.index', $redirectParams)->with('success', 'Appointment resubmitted for approval.');
     }
 
     public function updateStatus(Request $request, Appointment $appointment)
@@ -625,7 +631,7 @@ class AppointmentController extends Controller
                         $patient->notify(new AppointmentNotification([
                             'title' => 'Appointment Approved',
                             'message' => "Your laboratory appointment scheduled for {$dateFormatted} at {$timeFormatted} has been approved.",
-                            'url' => route('appointments.index'),
+                            'url' => route('appointments.index', ['view' => 'patient']),
                             'type' => 'success'
                         ]));
                         event(new NotificationSent($patient->id, 'Appointment Approved', "Your laboratory appointment scheduled for {$dateFormatted} at {$timeFormatted} has been approved."));
@@ -633,7 +639,7 @@ class AppointmentController extends Controller
                         $patient->notify(new AppointmentNotification([
                             'title' => 'Appointment Returned',
                             'message' => "Your appointment scheduled for {$dateFormatted} at {$timeFormatted} requires corrections: \"{$request->return_reason}\"",
-                            'url' => route('appointments.index'),
+                            'url' => route('appointments.index', ['view' => 'patient']),
                             'type' => 'danger'
                         ]));
                         event(new NotificationSent($patient->id, 'Appointment Returned', "Your appointment scheduled for {$dateFormatted} at {$timeFormatted} requires corrections."));
@@ -651,7 +657,7 @@ class AppointmentController extends Controller
                     $appointment->user->notify(new AppointmentNotification([
                         'title' => 'Appointment Approved',
                         'message' => "Your laboratory appointment scheduled for {$dateFormatted} at {$timeFormatted} has been approved.",
-                        'url' => route('appointments.index'),
+                        'url' => route('appointments.index', ['view' => 'patient']),
                         'type' => 'success'
                     ]));
                     event(new NotificationSent($patient->id, 'Appointment Approved', "Your laboratory appointment scheduled for {$dateFormatted} at {$timeFormatted} has been approved."));
@@ -659,7 +665,7 @@ class AppointmentController extends Controller
                     $appointment->user->notify(new AppointmentNotification([
                         'title' => 'Appointment Returned',
                         'message' => "Your appointment scheduled for {$dateFormatted} at {$timeFormatted} requires corrections: \"{$request->return_reason}\"",
-                        'url' => route('appointments.index'),
+                        'url' => route('appointments.index', ['view' => 'patient']),
                         'type' => 'danger'
                     ]));
                     event(new NotificationSent($patient->id, 'Appointment Returned', "Your appointment scheduled for {$dateFormatted} at {$timeFormatted} requires corrections."));
@@ -791,7 +797,7 @@ class AppointmentController extends Controller
                 $patient->notify(new AppointmentNotification([
                     'title' => 'Retesting Required',
                     'message' => "Your clinical sample requires a recollect due to: \"{$retestReason}\". Please return to the Medscreen Diagnostic Laboratory for retesting.",
-                    'url' => route('appointments.index'),
+                    'url' => route('appointments.index', ['view' => 'patient']),
                     'type' => 'danger'
                 ]));
                 event(new NotificationSent($patient->id, 'Retesting Required', "Your sample requires a recollect. Please return to the lab."));
@@ -879,7 +885,7 @@ class AppointmentController extends Controller
             $patient->notify(new AppointmentNotification([
                 'title' => 'Sampling Completed',
                 'message' => "Your clinical laboratory sampling is complete. Your results are currently being processed in our lab." . $estTimeText,
-                'url' => route('appointments.index'),
+                'url' => route('appointments.index', ['view' => 'patient']),
                 'type' => 'info'
             ]));
             event(new NotificationSent($patient->id, 'Sampling Completed', "Your clinical laboratory sampling is complete. Your results are currently being processed in our lab."));
@@ -985,7 +991,6 @@ class AppointmentController extends Controller
         $mName = $request->patient_middle_name;
         $lName = $request->patient_last_name;
         $suffix = $request->filled('patient_suffix') ? strtoupper($request->patient_suffix) : '';
-
         $fullName = $request->patient_first_name . ($mName && strtoupper($mName) !== 'N/A' ? ' ' . $mName : '') . ' ' . $lName;
         if (!empty($suffix)) $fullName .= ' ' . $suffix;
 
@@ -1049,14 +1054,18 @@ class AppointmentController extends Controller
     public function cancel(Request $request, Appointment $appointment)
     {
         $user = Auth::user();
-        if ($user->isEmployee()) {
-            abort(403, 'Employees/Staff are not authorized to cancel appointments.');
-        }
 
         $isOwner = ($appointment->user_id === $user->id)
-            || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email));
+            || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email))
+            || ($appointment->dependent_id && $user->dependents()->where('id', $appointment->dependent_id)->exists());
 
-        if (!$isOwner) {
+        // Employees/Staff are strictly barred from canceling OTHER patients' appointments,
+        // but CAN cancel their OWN personal/family bookings as patients.
+        if ($user->isEmployee() && ! $isOwner) {
+            abort(403, 'Employees/Staff are not authorized to cancel other patients\' appointments.');
+        }
+
+        if (! $isOwner) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -1231,7 +1240,8 @@ class AppointmentController extends Controller
     {
         $user = Auth::user();
         $isOwner = ($appointment->user_id === $user->id)
-            || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email));
+            || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email))
+            || ($appointment->dependent_id && $user->dependents()->where('id', $appointment->dependent_id)->exists());
 
         if (!$isOwner) abort(403);
 

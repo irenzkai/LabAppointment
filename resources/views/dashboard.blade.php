@@ -101,7 +101,7 @@
                                 style="width: 32px; height: 32px; padding: 0;">
                             <i class="bi bi-arrow-clockwise" id="refresh-icon" style="font-size: 0.95rem;"></i>
                         </button>
-                        <a href="{{ route('appointments.index') }}" class="text-accent small text-decoration-none fw-bold ms-2 hover-accent" style="color: var(--brand-accent) !important; font-size: 0.75rem;">
+                        <a href="{{ route('appointments.index', Auth::user()->isEmployee() ? ['view' => 'patient'] : []) }}" class="text-accent small text-decoration-none fw-bold ms-2 hover-accent" style="color: var(--brand-accent) !important; font-size: 0.75rem;">
                             VIEW ALL &rarr;
                         </a>
                     </div>
@@ -138,7 +138,10 @@
                                         $isMaker = (Auth::id() == $app->user_id);
                                         $targetRoute = ($app->batch_id && !$isMaker)
                                             ? route('patient.history', ['id' => $app->id])
-                                            : route('appointments.index', ['id' => $app->id]);
+                                            : route('appointments.index', array_merge(
+                                                ['id' => $app->id],
+                                                Auth::user()->isEmployee() ? ['view' => 'patient'] : []
+                                            ));
                                     @endphp
                                     <tr class="border-bottom align-middle appointment-row-hover" style="cursor: pointer; border-color: var(--border-color) !important;" onclick="window.location.href='{{ $targetRoute }}'">
                                         <td class="ps-4 py-3">
