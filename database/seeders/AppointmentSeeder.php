@@ -34,8 +34,8 @@ class AppointmentSeeder extends Seeder
         }
 
         $p1 = $patients[0]; // Juan Dela Cruz
-        $p2 = $patients[1] ?? $patients[0]; // Maria Clara
-        $p3 = $patients[2] ?? $patients[0]; // Pedro Penduko
+        $p2 = $patients[1] ?? $patients[0]; // Maria Clara Peñaranda
+        $p3 = $patients[2] ?? $patients[0]; // Pedro Penduko Jr
         $p4 = $patients[3] ?? $patients[0]; // Ana Silang-Santos
 
         // 3. Ensure sample minor dependents exist for family bookings
@@ -69,19 +69,24 @@ class AppointmentSeeder extends Seeder
             ]
         );
 
-        // 4. Fetch standard laboratory services
-        $fbs = Service::where('name', 'like', '%FBS%')->first() ?? Service::first();
-        $bun = Service::where('name', 'like', '%BUN%')->first() ?? $fbs;
-        $cbc = Service::where('name', 'like', '%CBC%')->first() ?? $fbs;
+        // 4. Fetch catalog of active clinical services
+        $availableServices = Service::where('is_available', true)->get();
+        if ($availableServices->isEmpty()) {
+            $availableServices = Service::all();
+        }
 
-        $servicePool = [$fbs, $bun, $cbc];
+        $fbs = $availableServices->firstWhere('name', 'FBS / RBS') ?? $availableServices->first();
+        $bun = $availableServices->firstWhere('name', 'BUN') ?? $fbs;
+        $cbc = $availableServices->firstWhere('name', 'CBC with Platelet') ?? $fbs;
+        $uri = $availableServices->firstWhere('name', 'Urinalysis') ?? $fbs;
+        $lipid = $availableServices->firstWhere('name', 'Lipid Profile Individual') ?? $fbs;
 
-        // 5. Helper function to create appointments with exact historical timestamps
+        $servicePool = [$fbs, $bun, $cbc, $uri, $lipid];
+
+        // 5. Helper function to create non-expiring Tested Cash appointments
         $createAppointment = function (
             User $user,
             Service $service,
-            string $status,
-            string $paymentStatus,
             Carbon $dateTime,
             array $extras = []
         ) {
@@ -101,6 +106,7 @@ class AppointmentSeeder extends Seeder
             $app->user_id = $user->id;
             $app->dependent_id = $extras['dependent_id'] ?? null;
             $app->organization_name = $extras['organization_name'] ?? null;
+
             // Strictly cap batch_id to 10 characters maximum
             $app->batch_id = isset($extras['batch_id']) ? substr((string)$extras['batch_id'], 0, 10) : null;
 
@@ -123,191 +129,127 @@ class AppointmentSeeder extends Seeder
             $app->patient_city = $extras['patient_city'] ?? ($user->city ?? 'CITY OF GENERAL SANTOS');
             $app->patient_province = $extras['patient_province'] ?? ($user->province ?? 'SOUTH COTABATO');
 
-            // Set to Cash only (prevents blank/missing cashless payment receipts)
+            // Strictly Cash and Paid: no empty receipts, no pending debt
             $app->payment_method = 'Cash';
-            $app->payment_status = $paymentStatus;
-            $app->payment_amount = ($paymentStatus === 'paid') ? (float)$service->price : 0.00;
-            $app->status = $status;
+            $app->payment_status = 'paid';
+            $app->payment_amount = (float)$service->price;
+
+            // Strictly TESTED: Prevents dynamic expiration and requires no dummy PDF attachments
+            $app->status = 'tested';
             $app->deleted_by_patient = false;
+            $app->return_reason = null;
+            $app->cancellation_reason = null;
 
-            $app->return_reason = $extras['return_reason'] ?? null;
-            $app->cancellation_reason = $extras['cancellation_reason'] ?? null;
+            // Complete clinical sampling timestamps
+            $app->tested_at = $dateTime->copy()->addMinutes(20);
+            $app->result_estimated_at = $dateTime->copy()->addHours(2);
 
-            if ($status === 'tested') {
-                $app->tested_at = $dateTime->copy()->addMinutes(20);
-                $app->result_estimated_at = $dateTime->copy()->addHours(2);
-            }
-
-            // Preserve explicit historical timestamp values
+            // Historical creation timestamps
             $app->timestamps = false;
             $app->created_at = $dateTime;
-            $app->updated_at = $dateTime->copy()->addMinutes(30);
+            $app->updated_at = $dateTime->copy()->addMinutes(25);
             $app->save();
 
-            // Link the service
+            // Attach diagnostic service to pivot table
             $app->services()->sync([$service->id]);
 
             return $app;
         };
 
-        $now = Carbon::now();
+        // =========================================================================
+        // 1. HISTORICAL RANGE: NOVEMBER 2024 TO JUNE 2026 (At least 2 per month)
+        // =========================================================================
+        $startMonth = Carbon::create(2024, 11, 1, 8, 0, 0);
+        $endMonth = Carbon::create(2026, 6, 1, 8, 0, 0);
+
+        $currentCursor = $startMonth->copy();
+        $batchCounter = 10;
+
+        while ($currentCursor->lessThanOrEqualTo($endMonth)) {
+            $year = $currentCursor->year;
+            $month = $currentCursor->month;
+
+            // --- Entry 1: Personal Appointment (First half of month) ---
+            $date1 = Carbon::create($year, $month, 6, 8, 30, 0);
+            $svc1 = $servicePool[($year + $month) % count($servicePool)];
+            $user1 = $patients[($month) % $patients->count()];
+            $createAppointment($user1, $svc1, $date1);
+
+            // --- Entry 2: Family Dependent Appointment (Mid-month) ---
+            $date2 = Carbon::create($year, $month, 14, 10, 0, 0);
+            $svc2 = $servicePool[($year + $month + 1) % count($servicePool)];
+            $isDep1 = ($month % 2 === 0);
+            $targetDep = $isDep1 ? $dep1 : $dep2;
+            $parentUser = $isDep1 ? $p1 : $p2;
+
+            $createAppointment($parentUser, $svc2, $date2, [
+                'dependent_id' => $targetDep->id,
+                'patient_first_name' => $targetDep->first_name,
+                'patient_middle_name' => $targetDep->middle_name,
+                'patient_last_name' => $targetDep->last_name,
+                'patient_suffix' => $targetDep->suffix,
+                'patient_sex' => $targetDep->sex,
+                'patient_birthdate' => $targetDep->birthdate ? Carbon::parse($targetDep->birthdate)->format('Y-m-d') : '2015-05-15',
+            ]);
+
+            // --- Entry 3: Personal Appointment (Second half of month) ---
+            $date3 = Carbon::create($year, $month, 21, 13, 30, 0);
+            $svc3 = $servicePool[($year + $month + 2) % count($servicePool)];
+            $user3 = $patients[($month + 1) % $patients->count()];
+            $createAppointment($user3, $svc3, $date3);
+
+            // --- Entry 4: Corporate / Bulk Group Appointment (Alternating months) ---
+            if ($month % 2 === 1) {
+                $batchCode = 'B' . substr($year, -2) . sprintf('%02d', $month) . Str::upper(Str::random(3)); // Max 8 chars
+                $date4 = Carbon::create($year, $month, 27, 11, 0, 0);
+
+                $createAppointment($p3, $cbc, $date4, [
+                    'organization_name' => 'DOLE PHILIPPINES',
+                    'batch_id' => $batchCode,
+                    'patient_first_name' => 'ROBERTO',
+                    'patient_middle_name' => 'GARCIA',
+                    'patient_last_name' => 'VALENCIA',
+                    'patient_email' => "valencia{$batchCounter}@dole.com",
+                    'patient_phone' => '09171234561',
+                ]);
+
+                $createAppointment($p3, $fbs, $date4, [
+                    'organization_name' => 'DOLE PHILIPPINES',
+                    'batch_id' => $batchCode,
+                    'patient_first_name' => 'CARMINA',
+                    'patient_middle_name' => 'LOPEZ',
+                    'patient_last_name' => 'TAN',
+                    'patient_email' => "tan{$batchCounter}@dole.com",
+                    'patient_phone' => '09171234562',
+                    'patient_sex' => 'Female',
+                ]);
+
+                $batchCounter++;
+            }
+
+            $currentCursor->addMonth();
+        }
+
+        // =========================================================================
+        // 2. TODAY'S APPOINTMENTS (Keeps Live Queue, Stats, & Dashboards Populated)
+        // =========================================================================
         $today = Carbon::today();
 
-        // =========================================================================
-        // 1. TODAY'S APPOINTMENTS (Populates Today's Metrics, Daily Reports & Queue)
-        // =========================================================================
+        $appToday1 = $createAppointment($p1, $fbs, $today->copy()->setTime(8, 0, 0));
+        ActivityLog::record('TESTED', 'Sampling completed and details verified', $appToday1->patient_name, $appToday1->id);
 
-        // Personal Bookings (Self) - Cash Only, No Encoded/Released
-        $app1 = $createAppointment($p1, $fbs, 'pending', 'unpaid', $today->copy()->setTime(8, 0));
-        ActivityLog::record('BOOKED', 'Appointment booked for testing', $app1->patient_name, $app1->id);
+        $appToday2 = $createAppointment($p2, $bun, $today->copy()->setTime(9, 30, 0));
+        $appToday3 = $createAppointment($p3, $cbc, $today->copy()->setTime(11, 0, 0));
 
-        $createAppointment($p2, $bun, 'approved', 'unpaid', $today->copy()->setTime(9, 0));
-        $createAppointment($p3, $fbs, 'tested', 'paid', $today->copy()->setTime(10, 0));
-        $createAppointment($p4, $cbc, 'tested', 'paid', $today->copy()->setTime(11, 0));
-
-        $createAppointment($p1, $bun, 'retest', 'paid', $today->copy()->setTime(13, 0), [
-            'return_reason' => 'Specimen hemolyzed during collection. Recollection required.',
-        ]);
-
-        $createAppointment($p2, $fbs, 'canceled', 'unpaid', $today->copy()->setTime(14, 0), [
-            'cancellation_reason' => 'Patient called to cancel due to personal conflict.',
-        ]);
-
-        // Family Dependent Bookings (Cash Only)
-        $createAppointment($p1, $bun, 'approved', 'paid', $today->copy()->setTime(9, 30), [
+        // Today's Family Dependent Booking
+        $createAppointment($p1, $uri, $today->copy()->setTime(14, 0, 0), [
             'dependent_id' => $dep1->id,
             'patient_first_name' => $dep1->first_name,
             'patient_middle_name' => $dep1->middle_name,
             'patient_last_name' => $dep1->last_name,
             'patient_suffix' => $dep1->suffix,
             'patient_sex' => $dep1->sex,
-            'patient_birthdate' => $dep1->birthdate,
+            'patient_birthdate' => $dep1->birthdate ? Carbon::parse($dep1->birthdate)->format('Y-m-d') : '2015-05-15',
         ]);
-
-        $createAppointment($p2, $fbs, 'returned', 'unpaid', $today->copy()->setTime(10, 30), [
-            'dependent_id' => $dep2->id,
-            'patient_first_name' => $dep2->first_name,
-            'patient_middle_name' => $dep2->middle_name,
-            'patient_last_name' => $dep2->last_name,
-            'patient_sex' => $dep2->sex,
-            'patient_birthdate' => $dep2->birthdate,
-            'return_reason' => 'Doctor referral note is missing. Please attach a prescription.',
-        ]);
-
-        // Bulk / Corporate Batch Bookings (batch_id is strictly <= 10 characters)
-        $batchId = 'DOLE' . strtoupper(Str::random(5)); // Exactly 9 chars
-        $createAppointment($p3, $bun, 'tested', 'paid', $today->copy()->setTime(11, 30), [
-            'organization_name' => 'DOLE PHILIPPINES INC.',
-            'batch_id' => $batchId,
-            'patient_first_name' => 'ROBERTO',
-            'patient_middle_name' => 'GARCIA',
-            'patient_last_name' => 'VALENCIA',
-            'patient_email' => 'r.valencia@dole.com',
-            'patient_phone' => '09171234561',
-        ]);
-
-        $createAppointment($p3, $fbs, 'tested', 'paid', $today->copy()->setTime(11, 30), [
-            'organization_name' => 'DOLE PHILIPPINES INC.',
-            'batch_id' => $batchId,
-            'patient_first_name' => 'CARMINA',
-            'patient_middle_name' => 'LOPEZ',
-            'patient_last_name' => 'TAN',
-            'patient_email' => 'c.tan@dole.com',
-            'patient_phone' => '09171234562',
-            'patient_sex' => 'Female',
-        ]);
-
-        // =========================================================================
-        // 2. PAST 7 DAYS (Daily Analytics Chart & Naturally Expired Bookings)
-        // =========================================================================
-
-        for ($d = 1; $d <= 6; $d++) {
-            $pastDay = $now->copy()->subDays($d);
-            $service = $servicePool[$d % count($servicePool)];
-            $user = $patients[$d % $patients->count()];
-
-            // Tested appointment (Cash & Paid) - Does NOT expire
-            $createAppointment($user, $service, 'tested', 'paid', $pastDay->copy()->setTime(9, 0));
-
-            // Unprogressed appointments scheduled >24 hours ago (These naturally register as EXPIRED)
-            if ($d >= 2 && $d <= 4) {
-                $createAppointment($user, $fbs, 'pending', 'unpaid', $pastDay->copy()->setTime(8, 0));
-            }
-
-            // Returned and canceled historical appointments
-            if ($d === 3) {
-                $createAppointment($user, $bun, 'returned', 'unpaid', $pastDay->copy()->setTime(13, 0), [
-                    'return_reason' => 'Patient did not comply with required 10-hour fasting.',
-                ]);
-            }
-            if ($d === 5) {
-                $createAppointment($user, $cbc, 'canceled', 'unpaid', $pastDay->copy()->setTime(15, 0), [
-                    'cancellation_reason' => 'Appointment canceled by patient.',
-                ]);
-            }
-        }
-
-        // =========================================================================
-        // 3. PAST 6 MONTHS (Monthly Reports & 6-Month Rolling Analytics Chart)
-        // =========================================================================
-
-        for ($m = 1; $m <= 5; $m++) {
-            $monthDate = $now->copy()->subMonths($m)->startOfMonth();
-
-            // Scatter 4-5 appointments across the month (Cash only, tested/approved/canceled)
-            $daysInMonth = [4, 11, 17, 24];
-            foreach ($daysInMonth as $idx => $dayNum) {
-                $appTimestamp = $monthDate->copy()->addDays($dayNum)->setTime(10, 0);
-                $service = $servicePool[$idx % count($servicePool)];
-                $user = $patients[$idx % $patients->count()];
-
-                $statuses = ['tested', 'tested', 'approved', 'canceled'];
-                $status = $statuses[$idx % count($statuses)];
-                $paymentStatus = ($status === 'canceled') ? 'unpaid' : 'paid';
-
-                $createAppointment(
-                    $user,
-                    $service,
-                    $status,
-                    $paymentStatus,
-                    $appTimestamp
-                );
-            }
-
-            // Historical corporate batch entry per month (batch_id <= 10 characters)
-            $batchCode = 'B' . $m . strtoupper(Str::random(6)); // 8 chars
-            $createAppointment($p1, $bun, 'tested', 'paid', $monthDate->copy()->addDays(20)->setTime(9, 0), [
-                'organization_name' => 'SAN MIGUEL CORP GSC',
-                'batch_id' => $batchCode,
-                'patient_first_name' => 'EDUARDO',
-                'patient_middle_name' => 'DELA',
-                'patient_last_name' => 'ROSA',
-                'patient_email' => "eduardo{$m}@smc.com.ph",
-            ]);
-        }
-
-        // =========================================================================
-        // 4. PAST 4 YEARS (Yearly Master Reports & 5-Year Analytics Bar Chart)
-        // =========================================================================
-
-        for ($y = 1; $y <= 4; $y++) {
-            $yearBase = $now->copy()->subYears($y);
-
-            // Seed 4 distributed appointments across quarters of each year (Tested & Paid Cash)
-            $quarterMonths = [2, 5, 8, 11];
-            foreach ($quarterMonths as $qIdx => $monthNum) {
-                $yearTimestamp = $yearBase->copy()->month($monthNum)->day(15)->setTime(10, 0);
-                $service = $servicePool[$qIdx % count($servicePool)];
-                $user = $patients[$qIdx % $patients->count()];
-
-                $createAppointment(
-                    $user,
-                    $service,
-                    'tested',
-                    'paid',
-                    $yearTimestamp
-                );
-            }
-        }
     }
 }
