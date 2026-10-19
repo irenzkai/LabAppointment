@@ -34,6 +34,7 @@ Route::view('/legal/privacy', 'legal.privacy')->name('legal.privacy');
 Route::view('/legal/terms', 'legal.terms')->name('legal.terms');
 Route::view('/legal/dpa', 'legal.dpa')->name('legal.dpa');
 Route::view('/legal/cookies', 'legal.cookies')->name('legal.cookies');
+Route::get('/services', [ServiceController::class, 'index'])->name('services.index');
 
 // Public Direct Android APK Download Route
 Route::get('/download/apk', function () {
@@ -65,7 +66,6 @@ Route::middleware(['auth', 'verified', 'force.password'])->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::get('/notifications/{id}/read', [NotificationController::class, 'markAsRead'])->name('notifications.markAsRead');
     Route::get('/notifications/clear-all', [NotificationController::class, 'clearAll'])->name('notifications.clearAll');
-    Route::get('/services', [ServiceController::class, 'index'])->name('services.index');
     Route::get('/appointments', [AppointmentController::class, 'index'])->name('appointments.index');
     Route::get('/appointments/create', [AppointmentController::class, 'create'])->name('appointments.create');
     Route::post('/appointments', [AppointmentController::class, 'store'])->name('appointments.store');
