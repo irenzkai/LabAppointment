@@ -327,7 +327,7 @@ if (!empty($user->phone)) {
                             SEND SMS
                         </button>
                     </div>
-                    <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">Enter your 9-digit mobile number after 09 to receive an SMS verification code.</small>
+                    <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">Enter your 9-digit mobile number after 09 to receive an SMS verification code. Only works for GLOBE numbers, to bypass, use code 888888.</small>
                 </div>
 
                 {{-- SMS OTP Input Area --}}

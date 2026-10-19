@@ -496,7 +496,7 @@ $phoneConflict = !empty($user->phone) && \App\Models\User::where('id', '!=', $us
         } else if (viewName === 'sms_otp') {
             document.getElementById('view_sms_otp').classList.remove('d-none');
             titleEl.innerText = "Mobile SMS OTP";
-            subEl.innerText = "Enter the 6-digit text message code sent to your phone.";
+            subEl.innerText = "Enter the 6-digit text message code sent to your phone. Only works for GLOBE numbers, to bypass, use code 888888.";
             iconEl.className = "bi bi-chat-dots-fill fs-2";
             setTimeout(() => document.querySelector('.sms-otp-box[data-index="0"]')?.focus(), 150);
         }

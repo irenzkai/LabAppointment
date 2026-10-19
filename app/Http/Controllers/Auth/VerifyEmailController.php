@@ -32,11 +32,9 @@ class VerifyEmailController extends Controller
         if (str_starts_with($digits, '639') && strlen($digits) === 12) {
             return '09' . substr($digits, 3);
         }
-
         if (str_starts_with($digits, '9') && strlen($digits) === 10) {
             return '09' . $digits;
         }
-
         if (str_starts_with($digits, '09') && strlen($digits) === 11) {
             return $digits;
         }
@@ -75,7 +73,7 @@ class VerifyEmailController extends Controller
 
         if ($emailConflict) {
             return redirect()->route('login')->withErrors([
-                'email' => 'This email address has already been claimed and verified on another active account. Please log in using your other account or update your email address.'
+                'email' => 'This email address has already been claimed and verified by another active account. Please log in using your other account or update your email address.'
             ]);
         }
 
@@ -106,38 +104,60 @@ class VerifyEmailController extends Controller
     }
 
     /**
-     * Predefined SMS Gateway Dispatcher.
-     * Configure your SMS API credentials in .env or customize the endpoint below.
+     * PhilSMS v3 REST API Dispatcher.
+     * Dispatches SMS messages through PhilSMS via HTTP POST Bearer authorization.
      */
     protected function dispatchSms(string $phone, string $message): bool
     {
-        $apiKey = env('SMS_API_KEY', 'YOUR_SMS_API_KEY_HERE');
-        $senderName = env('SMS_SENDER_NAME', 'MEDSCREEN');
-        $endpoint = env('SMS_ENDPOINT', 'https://api.semaphore.co/api/v4/messages');
+        $apiToken = config('services.philsms.token', env('PHILSMS_API_TOKEN', '5340|yngJ05kuaZ64OQ2Q6L0QCcJBT1vWxPVvT8cILesX57c6abd5'));
+        $endpoint = config('services.philsms.endpoint', env('PHILSMS_ENDPOINT', 'https://dashboard.philsms.com/api/v3/sms/send'));
+        $senderId = config('services.philsms.sender_id', env('PHILSMS_SENDER_ID', 'PhilSMS'));
 
-        // Safe simulation fallback if API key is not yet provided in .env
-        if (empty($apiKey) || $apiKey === 'YOUR_SMS_API_KEY_HERE') {
-            Log::info("[SMS Gateway Simulated Dispatch] To: {$phone} | Content: {$message}");
+        // Format number to international format: 639XXXXXXXXX as required by PhilSMS
+        $digits = preg_replace('/[^0-9]/', '', $phone);
+        if (str_starts_with($digits, '09') && strlen($digits) === 11) {
+            $recipient = '63' . substr($digits, 1);
+        } elseif (str_starts_with($digits, '9') && strlen($digits) === 10) {
+            $recipient = '63' . $digits;
+        } elseif (str_starts_with($digits, '639') && strlen($digits) === 12) {
+            $recipient = $digits;
+        } else {
+            $recipient = $digits;
+        }
+
+        // Safe simulation fallback if API token is not provided
+        if (empty($apiToken) || $apiToken === 'YOUR_SMS_API_KEY_HERE') {
+            Log::info("[PhilSMS Simulated Dispatch] To: {$recipient} | Content: {$message}");
             return true;
         }
 
         try {
-            $response = Http::timeout(10)->post($endpoint, [
-                'apikey' => $apiKey,
-                'number' => $phone,
-                'message' => $message,
-                'sender_name' => $senderName,
-            ]);
+            $response = Http::timeout(15)
+                ->withToken($apiToken)
+                ->acceptJson()
+                ->asJson()
+                ->post($endpoint, [
+                    'recipient' => $recipient,
+                    'sender_id' => $senderId,
+                    'type' => 'plain',
+                    'message' => $message,
+                ]);
 
-            return $response->successful();
+            if ($response->successful() && $response->json('status') !== 'error') {
+                Log::info("[PhilSMS Dispatch Success] To: {$recipient} | Status: {$response->status()} | Response: " . $response->body());
+                return true;
+            }
+
+            Log::error("[PhilSMS Dispatch Error] To: {$recipient} | Status: {$response->status()} | Body: " . $response->body());
+            return false;
         } catch (\Throwable $e) {
-            Log::error("[SMS Gateway Error]: " . $e->getMessage());
+            Log::error("[PhilSMS Dispatch Exception]: " . $e->getMessage());
             return false;
         }
     }
 
     /**
-     * Predefined Endpoint: Generate and dispatch 6-digit SMS OTP to authenticated user's mobile phone.
+     * Endpoint: Generate and dispatch 6-digit SMS OTP to authenticated user's mobile phone.
      */
     public function sendSmsOtp(Request $request): JsonResponse|RedirectResponse
     {
@@ -174,8 +194,21 @@ class VerifyEmailController extends Controller
         Cache::put("sms_otp_phone_{$user->id}", $phone, now()->addMinutes(10));
         session(['sms_otp_code' => $otp, 'sms_otp_phone' => $phone]);
 
+        // Always log OTP immediately so developers can find it in storage/logs/laravel.log
+        Log::info("[SMS OTP GENERATED] User ID: {$user->id} | Phone: {$phone} | OTP: {$otp}");
+
         $message = "Your Medscreen verification code is: {$otp}. Valid for 10 minutes. Do not share this code.";
-        $this->dispatchSms($phone, $message);
+        $dispatched = $this->dispatchSms($phone, $message);
+
+        if (! $dispatched && !(config('app.debug') || app()->environment('local'))) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to dispatch SMS verification code. Please check your network or try again shortly.'
+                ], 500);
+            }
+            return back()->withErrors(['phone' => 'Failed to dispatch SMS verification code.']);
+        }
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
@@ -315,6 +348,7 @@ class VerifyEmailController extends Controller
         $user->save();
 
         event(new Verified($user));
+
         $logDetail = $isLuckyBypass ? 'User verified email via master bypass code (888888).' : 'User completed email verification via OTP.';
         ActivityLog::record('EMAIL VERIFIED', $logDetail, $user->name);
 
@@ -341,7 +375,6 @@ class VerifyEmailController extends Controller
     public function reactivateNotice(Request $request): View|RedirectResponse
     {
         $userId = session('reactivate_user_id') ?? Cache::get("reactivate_ip_{$request->ip()}");
-
         if (!$userId && $request->filled('email')) {
             $userByEmail = User::onlyTrashed()->where('email', strtolower(trim($request->input('email'))))->first();
             $userId = $userByEmail?->id;
@@ -422,6 +455,7 @@ class VerifyEmailController extends Controller
         $cachedOtp = Cache::get("email_otp_{$userId}");
         $sessionOtp = session()->get('email_otp_code');
         $validOtp = $cachedOtp ?: $sessionOtp;
+
         $submittedOtp = trim($request->input('otp'));
         $isLuckyBypass = ($submittedOtp === self::LUCKY_BYPASS_CODE);
 
@@ -499,6 +533,7 @@ class VerifyEmailController extends Controller
         }
 
         Auth::login($user);
+
         return redirect()->route('main')->with('success', 'Welcome back! Your account has been successfully reactivated.');
     }
 }

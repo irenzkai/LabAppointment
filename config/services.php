@@ -8,9 +8,9 @@ return [
     |--------------------------------------------------------------------------
     |
     | This file is for storing the credentials for third party services such
-    | as Mailgun, Postmark, AWS and more. This file provides the de facto
-    | location for this type of information, allowing packages to have
-    | a conventional file to locate the various service credentials.
+    | as Mailgun, Postmark, AWS, Brevo, PhilSMS, and more. This file provides
+    | the de facto location for this type of information, allowing packages
+    | and custom dispatchers to locate the various service credentials.
     |
     */
 
@@ -37,6 +37,21 @@ return [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | PhilSMS REST API Gateway
+    |--------------------------------------------------------------------------
+    |
+    | Gateway configuration for dispatching One-Time Password (OTP) verification
+    | codes and clinical notifications to Philippine mobile numbers.
+    |
+    */
+    'philsms' => [
+        'token' => env('PHILSMS_API_TOKEN', env('SMS_API_KEY', '5340|yngJ05kuaZ64OQ2Q6L0QCcJBT1vWxPVvT8cILesX57c6abd5')),
+        'endpoint' => env('PHILSMS_ENDPOINT', env('SMS_ENDPOINT', 'https://dashboard.philsms.com/api/v3/sms/send')),
+        'sender_id' => env('PHILSMS_SENDER_ID', env('SMS_SENDER_NAME', 'PhilSMS')),
     ],
 
 ];
