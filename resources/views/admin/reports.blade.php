@@ -2,18 +2,21 @@
 @section('title', 'Reports & Export Console')
 
 @section('content')
-<div class="container-fluid text-start py-4" id="reports-console-root">
+<div class="container-fluid text-start py-3 py-sm-4 px-3 px-sm-4" id="reports-console-root">
     {{-- Console Top Header --}}
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
-        <div>
-            <h2 class="text-accent fw-bold mb-1 uppercase tracking-tight" style="font-size: 1.85rem; letter-spacing: 1px;">
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-3 mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
+        <div class="me-sm-3 flex-grow-1">
+            <h2 class="text-accent fw-bold mb-1 uppercase tracking-tight fs-3 fs-md-2" style="letter-spacing: 1px;">
                 <i class="bi bi-file-earmark-bar-graph-fill me-2"></i>Reports & Export Console
             </h2>
             <p class="text-secondary small mb-0">Generate clinical and financial summaries, export CSV spreadsheets, and print official records.</p>
         </div>
-        <a href="{{ route('admin.panel') }}" class="btn btn-outline-secondary btn-sm fw-bold uppercase px-3 py-2 align-self-start align-self-md-center">
-            <i class="bi bi-arrow-left me-1"></i> Back to Panel
-        </a>
+        <div class="flex-shrink-0 back-panel-box">
+            <a href="{{ route('admin.panel') }}" class="btn btn-outline-secondary btn-sm fw-bold uppercase px-3 py-2 text-decoration-none d-inline-flex align-items-center gap-1.5" style="border-radius: 8px; white-space: nowrap;">
+                <i class="bi bi-arrow-left"></i>
+                <span>Back to Panel</span>
+            </a>
+        </div>
     </div>
 
     {{-- Top Navigation Tabs --}}
@@ -155,12 +158,12 @@
                         </div>
                     </div>
 
-                    <div class="d-grid gap-2">
-                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerExport('tx')">
+                    <div class="d-flex flex-column flex-sm-row flex-lg-column gap-2">
+                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2 flex-grow-1" onclick="triggerExport('tx')">
                             <i class="bi bi-download"></i>
                             <span>Export CSV</span>
                         </button>
-                        <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerPrint()">
+                        <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2 flex-grow-1" onclick="triggerPrint()">
                             <i class="bi bi-printer-fill"></i>
                             <span>Print Preview</span>
                         </button>
@@ -241,12 +244,12 @@
                     </table>
                 </div>
 
-                <div class="card-footer bg-card border-top border-secondary border-opacity-10 py-3 px-4 no-print">
-                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
-                        <div class="small text-muted" id="txPaginationInfo">
+                <div class="card-footer bg-card border-top border-secondary border-opacity-10 py-3 px-3 px-sm-4 no-print">
+                    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-center gap-3">
+                        <div class="small text-muted text-center text-sm-start" id="txPaginationInfo">
                             Showing <span id="txStart" class="fw-bold text-main">1</span> to <span id="txEnd" class="fw-bold text-main">10</span> of <span id="txTotal" class="fw-bold text-main">{{ $transactions->count() }}</span> entries
                         </div>
-                        <ul class="pagination pagination-sm mb-0" id="txPaginationNav"></ul>
+                        <ul class="pagination pagination-sm mb-0 justify-content-center justify-content-sm-end flex-wrap" id="txPaginationNav"></ul>
                     </div>
                 </div>
             </div>
@@ -356,12 +359,12 @@
                         </div>
                     </div>
 
-                    <div class="d-grid gap-2">
-                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerExport('app')">
+                    <div class="d-flex flex-column flex-sm-row flex-lg-column gap-2">
+                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2 flex-grow-1" onclick="triggerExport('app')">
                             <i class="bi bi-download"></i>
                             <span>Export CSV</span>
                         </button>
-                        <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerPrint()">
+                        <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2 flex-grow-1" onclick="triggerPrint()">
                             <i class="bi bi-printer-fill"></i>
                             <span>Print Preview</span>
                         </button>
@@ -437,12 +440,12 @@
                     </table>
                 </div>
 
-                <div class="card-footer bg-card border-top border-secondary border-opacity-10 py-3 px-4 no-print">
-                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
-                        <div class="small text-muted" id="appPaginationInfo">
+                <div class="card-footer bg-card border-top border-secondary border-opacity-10 py-3 px-3 px-sm-4 no-print">
+                    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-center gap-3">
+                        <div class="small text-muted text-center text-sm-start" id="appPaginationInfo">
                             Showing <span id="appStart" class="fw-bold text-main">1</span> to <span id="appEnd" class="fw-bold text-main">10</span> of <span id="appTotal" class="fw-bold text-main">{{ $appointments->count() }}</span> entries
                         </div>
-                        <ul class="pagination pagination-sm mb-0" id="appPaginationNav"></ul>
+                        <ul class="pagination pagination-sm mb-0 justify-content-center justify-content-sm-end flex-wrap" id="appPaginationNav"></ul>
                     </div>
                 </div>
             </div>
@@ -514,12 +517,12 @@
                         </div>
                     </div>
 
-                    <div class="d-grid gap-2">
-                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerExport('svc')">
+                    <div class="d-flex flex-column flex-sm-row flex-lg-column gap-2">
+                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2 flex-grow-1" onclick="triggerExport('svc')">
                             <i class="bi bi-download"></i>
                             <span>Export CSV</span>
                         </button>
-                        <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerPrint()">
+                        <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2 flex-grow-1" onclick="triggerPrint()">
                             <i class="bi bi-printer-fill"></i>
                             <span>Print Preview</span>
                         </button>
@@ -585,12 +588,12 @@
                     </table>
                 </div>
 
-                <div class="card-footer bg-card border-top border-secondary border-opacity-10 py-3 px-4 no-print">
+                <div class="card-footer bg-card border-top border-secondary border-opacity-10 py-3 px-3 px-sm-4 no-print">
                     <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
-                        <div class="small text-muted" id="svcPaginationInfo">
+                        <div class="small text-muted text-center text-sm-start" id="svcPaginationInfo">
                             Showing <span id="svcStart" class="fw-bold text-main">1</span> to <span id="svcEnd" class="fw-bold text-main">10</span> of <span id="svcTotal" class="fw-bold text-main">{{ $services->count() }}</span> entries
                         </div>
-                        <ul class="pagination pagination-sm mb-0" id="svcPaginationNav"></ul>
+                        <ul class="pagination pagination-sm mb-0 justify-content-center justify-content-sm-end flex-wrap" id="svcPaginationNav"></ul>
                     </div>
                 </div>
             </div>
@@ -662,12 +665,12 @@
                         </div>
                     </div>
 
-                    <div class="d-grid gap-2">
-                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerExport('acc')">
+                    <div class="d-flex flex-column flex-sm-row flex-lg-column gap-2">
+                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2 flex-grow-1" onclick="triggerExport('acc')">
                             <i class="bi bi-download"></i>
                             <span>Export CSV</span>
                         </button>
-                        <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerPrint()">
+                        <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2 flex-grow-1" onclick="triggerPrint()">
                             <i class="bi bi-printer-fill"></i>
                             <span>Print Preview</span>
                         </button>
@@ -725,12 +728,12 @@
                     </table>
                 </div>
 
-                <div class="card-footer bg-card border-top border-secondary border-opacity-10 py-3 px-4 no-print">
+                <div class="card-footer bg-card border-top border-secondary border-opacity-10 py-3 px-3 px-sm-4 no-print">
                     <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
-                        <div class="small text-muted" id="accPaginationInfo">
+                        <div class="small text-muted text-center text-sm-start" id="accPaginationInfo">
                             Showing <span id="accStart" class="fw-bold text-main">1</span> to <span id="accEnd" class="fw-bold text-main">10</span> of <span id="accTotal" class="fw-bold text-main">{{ $accounts->count() }}</span> entries
                         </div>
-                        <ul class="pagination pagination-sm mb-0" id="accPaginationNav"></ul>
+                        <ul class="pagination pagination-sm mb-0 justify-content-center justify-content-sm-end flex-wrap" id="accPaginationNav"></ul>
                     </div>
                 </div>
             </div>
@@ -837,12 +840,12 @@
                         </div>
                     </div>
 
-                    <div class="d-grid gap-2">
-                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerExport('log')">
+                    <div class="d-flex flex-column flex-sm-row flex-lg-column gap-2">
+                        <button type="button" class="btn btn-outline-accent btn-sm fw-bold uppercase py-2.5 d-inline-flex align-items-center justify-content-center gap-2 flex-grow-1" onclick="triggerExport('log')">
                             <i class="bi bi-download"></i>
                             <span>Export CSV</span>
                         </button>
-                        <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2" onclick="triggerPrint()">
+                        <button type="button" class="btn btn-accent btn-sm fw-bold uppercase shadow-sm py-2.5 d-inline-flex align-items-center justify-content-center gap-2 flex-grow-1" onclick="triggerPrint()">
                             <i class="bi bi-printer-fill"></i>
                             <span>Print Preview</span>
                         </button>
@@ -862,7 +865,7 @@
                                 </th>
                                 <th style="width: 14%;">Date & Time</th>
                                 <th style="width: 15%;">Performer</th>
-                                <th style="width: 18%;">Action Event</th>
+                                <th style="width: 18%;">Event Action</th>
                                 <th style="width: 15%;">Target Patient</th>
                                 <th class="pe-4" style="width: 38%;">Justification / Audit Reason</th>
                             </tr>
@@ -904,12 +907,12 @@
                     </table>
                 </div>
 
-                <div class="card-footer bg-card border-top border-secondary border-opacity-10 py-3 px-4 no-print">
-                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
-                        <div class="small text-muted" id="logPaginationInfo">
+                <div class="card-footer bg-card border-top border-secondary border-opacity-10 py-3 px-3 px-sm-4 no-print">
+                    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-center gap-3">
+                        <div class="small text-muted text-center text-sm-start" id="logPaginationInfo">
                             Showing <span id="logStart" class="fw-bold text-main">1</span> to <span id="logEnd" class="fw-bold text-main">10</span> of <span id="logTotal" class="fw-bold text-main">{{ $logs->count() }}</span> entries
                         </div>
-                        <ul class="pagination pagination-sm mb-0" id="logPaginationNav"></ul>
+                        <ul class="pagination pagination-sm mb-0 justify-content-center justify-content-sm-end flex-wrap" id="logPaginationNav"></ul>
                     </div>
                 </div>
             </div>
@@ -943,6 +946,21 @@
     transform: none !important;
 }
 
+/* Explicit Width Containment for Header Actions */
+.back-panel-box a {
+    width: auto !important;
+}
+
+@media (max-width: 575.98px) {
+    .back-panel-box {
+        width: 100% !important;
+    }
+    .back-panel-box a {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+}
+
 .sticky-sidebar-col {
     position: relative;
 }
@@ -959,6 +977,15 @@
     border: 1.5px solid var(--border-color) !important;
     padding: 1.25rem !important;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+}
+
+@media (max-width: 991.98px) {
+    .sticky-controls-sidebar {
+        position: static !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+        margin-bottom: 1.5rem;
+    }
 }
 
 .sticky-controls-sidebar::-webkit-scrollbar {
@@ -1000,7 +1027,7 @@
 .sticky-controls-sidebar .form-control-sm:focus,
 .sticky-controls-sidebar .form-select-sm:focus {
     border-color: var(--brand-accent) !important;
-    box-shadow: 0 0 0 3px rgba(25, 211, 140, 0.15) !important;
+    box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.15) !important;
 }
 
 .custom-search-group {
@@ -1038,6 +1065,12 @@ table.report-table {
     width: 100% !important;
     border-collapse: collapse !important;
     color: var(--text-main);
+}
+
+@media (max-width: 1199.98px) {
+    table.report-table {
+        min-width: 880px !important;
+    }
 }
 
 table.report-table thead th {

@@ -34,29 +34,29 @@
     $showPreview = $isReadonly || $hasReportScan;
 @endphp
 
-<div class="container text-start animate-page pt-4" id="radio-workstation-root">
+<div class="container text-start animate-page pt-4 px-3 px-sm-4" id="radio-workstation-root">
 
     {{-- 1. HEADER SECTION --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
         <div>
-            <h2 class="text-accent fw-bold mb-0 uppercase">
+            <h2 class="text-accent fw-bold mb-0 uppercase fs-3 fs-md-2">
                 @if($isVerified) REVIEW MODE @elseif($isReadonly) VERIFICATION MODE @else RADIOLOGY WORKSTATION @endif
             </h2>
-            <p class="text-secondary small mb-0 uppercase">Patient: <span class="fw-bold" style="color: var(--text-main);">{{ $appointment->patient_name }}</span> | Status: <span class="text-accent">{{ strtoupper($status) }}</span></p>
+            <p class="text-secondary small mb-0 uppercase text-break">Patient: <span class="fw-bold" style="color: var(--text-main);">{{ $appointment->patient_name }}</span> | Status: <span class="text-accent">{{ strtoupper($status) }}</span></p>
         </div>
-        <div class="d-flex gap-2 align-items-center">
-            <a href="{{ route('appointments.encode', $appointment->id) }}" class="btn btn-sm btn-outline-secondary px-4 py-2 fw-bold text-uppercase" style="color: var(--text-muted) !important; border-color: var(--border-color) !important; border-radius: 8px;">BACK TO HUB</a>
+        <div class="d-flex flex-wrap gap-2 align-items-center w-100 w-md-auto justify-content-start justify-content-md-end">
+            <a href="{{ route('appointments.encode', $appointment->id) }}" class="btn btn-sm btn-outline-secondary px-3 px-sm-4 py-2 fw-bold text-uppercase flex-grow-1 flex-md-grow-0 text-center" style="color: var(--text-muted) !important; border-color: var(--border-color) !important; border-radius: 8px;">BACK TO HUB</a>
 
             @if(!$isReadonly)
-                <button type="submit" form="radioForm" class="btn-custom btn-accent px-5 shadow-lg">SAVE & SEND TO HUB</button>
+                <button type="submit" form="radioForm" class="btn-custom btn-accent px-4 px-sm-5 py-2 shadow-lg flex-grow-1 flex-md-grow-0 text-center">SAVE & SEND TO HUB</button>
             @else
                 @if($status !== 'verified' || Auth::user()->isLabTech())
-                    <button type="button" data-bs-toggle="modal" data-bs-target="#returnModal" class="btn-custom btn-outline-danger px-4">RETURN FOR RE-EDIT</button>
+                    <button type="button" data-bs-toggle="modal" data-bs-target="#returnModal" class="btn-custom btn-outline-danger px-3 px-sm-4 py-2 flex-grow-1 flex-md-grow-0 text-center">RETURN FOR RE-EDIT</button>
                 @endif
 
                 @if($status == 'encoded')
                     @can('isLabTech')
-                        <button type="button" data-bs-toggle="modal" data-bs-target="#verifyModal" class="btn-custom btn-accent px-5 shadow-lg">VERIFY & APPROVE</button>
+                        <button type="button" data-bs-toggle="modal" data-bs-target="#verifyModal" class="btn-custom btn-accent px-4 px-sm-5 py-2 shadow-lg flex-grow-1 flex-md-grow-0 text-center">VERIFY & APPROVE</button>
                     @endcan
                 @endif
             @endif
@@ -66,9 +66,9 @@
     {{-- 2. CORRECTION ALERT --}}
     @if($res && $res->radio_return_reason && $status != 'verified')
         <div class="alert-clinical p-3 mb-4 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
-            <div class="d-flex align-items-center mb-1">
-                <i class="bi bi-exclamation-triangle-fill fs-4 me-3 text-danger"></i>
-                <div>
+            <div class="d-flex align-items-start mb-1 gap-2">
+                <i class="bi bi-exclamation-triangle-fill fs-4 me-2 text-danger flex-shrink-0"></i>
+                <div class="text-break">
                     <div class="fw-bold small uppercase">Verifier Correction Request:</div>
                     <div class="small italic">"{{ $res->radio_return_reason }}"</div>
                 </div>
@@ -83,8 +83,8 @@
         <div class="row g-4">
 
             {{-- SIDEBAR: METADATA & CLINICAL SIGNATORIES --}}
-            <div class="col-md-4" id="sidebar-container">
-                <div class="card p-3 border-secondary bg-card mb-3 shadow-sm" id="sidebar-card" style="background-color: var(--bg-card); color: var(--text-main);">
+            <div class="col-12 col-lg-4" id="sidebar-container">
+                <div class="card p-3 p-sm-4 border-secondary bg-card mb-3 shadow-sm" id="sidebar-card" style="background-color: var(--bg-card); color: var(--text-main);">
                     <h6 class="text-accent mb-3 small fw-bold uppercase">Radiology Metadata</h6>
 
                     {{-- Case # Field (Always Required & Always Visible) --}}
@@ -99,7 +99,7 @@
 
                     {{-- READ-ONLY PATIENT PROFILE SNAPSHOT CARD WITH EDIT LINK --}}
                     <div class="mb-3 p-3 rounded border border-secondary border-opacity-10" style="background-color: rgba(0,0,0,0.02);">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
                             <small class="text-secondary smaller fw-bold uppercase">Patient Profile</small>
                             @if(!$isReadonly && auth()->user()->isEmployee())
                                 <a href="{{ route('appointments.edit-details', $appointment->id) }}?from=radio" class="btn btn-sm btn-outline-accent py-0.5 px-2 smaller uppercase fw-bold" style="font-size: 0.68rem;" title="Edit Patient Details">
@@ -107,7 +107,7 @@
                                 </a>
                             @endif
                         </div>
-                        <div class="text-main fw-bold small mb-1">{{ strtoupper($appointment->patient_name) }}</div>
+                        <div class="text-main fw-bold small mb-1 text-break">{{ strtoupper($appointment->patient_name) }}</div>
                         <div class="text-secondary smaller mb-1">{{ $appointment->patient_age }} YRS / {{ strtoupper($appointment->patient_sex) }}</div>
                         <div class="text-muted smaller text-break" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
 
@@ -173,15 +173,15 @@
             </div>
 
             {{-- MAIN WORKSTATION PANEL --}}
-            <div class="col-md-8" id="main-panel-container">
+            <div class="col-12 col-lg-8" id="main-panel-container">
 
                 {{-- Prominent Dual-Column Upload Control Center --}}
                 @if(!$isReadonly)
                     <div class="row g-3 mb-4" id="upload-control-center">
                         {{-- 1. Patient X-Ray Upload Box --}}
-                        <div class="col-md-6 {{ $hasXray ? 'd-none' : '' }}" id="xray-image-upload-box">
-                            <div class="card p-3 h-100 text-center" style="background-color: rgba(220, 53, 69, 0.02); border: 2px dashed rgba(220, 53, 69, 0.25) !important; border-radius: 12px;">
-                                <h6 class="text-danger fw-bold mb-1 uppercase"><i class="bi bi-camera-fill me-2 fs-5"></i>Patient X-Ray Scan (Required)</h6>
+                        <div class="col-12 col-md-6 {{ $hasXray ? 'd-none' : '' }}" id="xray-image-upload-box">
+                            <div class="card p-3 p-sm-4 h-100 text-center" style="background-color: rgba(220, 53, 69, 0.02); border: 2px dashed rgba(220, 53, 69, 0.25) !important; border-radius: 12px;">
+                                <h6 class="text-danger fw-bold mb-1 uppercase fs-6"><i class="bi bi-camera-fill me-2 fs-5"></i>Patient X-Ray Scan (Required)</h6>
                                 <p class="text-secondary small mb-3">Select the raw patient chest radiologic snapshot file.</p>
                                 <input type="file" name="xray_image" id="xray_input" class="form-control form-control-sm @error('xray_image') is-invalid @enderror" onchange="previewXray(this)" {{ !$hasXray ? 'required' : '' }}>
                                 <div class="invalid-feedback d-none" id="err_xray_image"></div>
@@ -195,9 +195,9 @@
                         </div>
 
                         {{-- 2. Optional Report PDF Scan Override --}}
-                        <div class="col-md-6 {{ $hasReportScan ? 'd-none' : '' }}" id="report-scan-upload-box">
-                            <div class="card p-3 h-100 text-center" style="background-color: rgba(255, 193, 7, 0.02); border: 2px dashed rgba(255, 193, 7, 0.25) !important; border-radius: 12px;">
-                                <h6 class="text-warning fw-bold mb-1 uppercase"><i class="bi bi-file-earmark-arrow-up-fill me-2 fs-5"></i>Report PDF Scan (Optional)</h6>
+                        <div class="col-12 col-md-6 {{ $hasReportScan ? 'd-none' : '' }}" id="report-scan-upload-box">
+                            <div class="card p-3 p-sm-4 h-100 text-center" style="background-color: rgba(255, 193, 7, 0.02); border: 2px dashed rgba(255, 193, 7, 0.25) !important; border-radius: 12px;">
+                                <h6 class="text-warning fw-bold mb-1 uppercase fs-6"><i class="bi bi-file-earmark-arrow-up-fill me-2 fs-5"></i>Report PDF Scan (Optional)</h6>
                                 <p class="text-secondary small mb-3">Uploading a scanned report hides the manual text fields below.</p>
                                 <input type="file" name="radio_scan" id="report_scan_input" class="form-control form-control-sm @error('radio_scan') is-invalid @enderror" onchange="toggleScanPriority(this)">
                                 <div class="invalid-feedback d-none" id="err_radio_scan"></div>
@@ -214,23 +214,23 @@
 
                 {{-- TOP: X-RAY IMAGE INTERACTIVE PREVIEW --}}
                 <div id="xray-viewer-card" class="card border-secondary bg-card mb-4 overflow-hidden shadow-lg {{ !$hasXray ? 'd-none' : '' }}">
-                    <div class="bg-danger text-white p-2 px-3 fw-bold small uppercase d-flex justify-content-between">
+                    <div class="bg-danger text-white p-2 px-3 fw-bold small uppercase d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
                         <span><i class="bi bi-camera-fill me-2"></i>Patient X-Ray Preview</span>
                         @if(!$isReadonly)
-                            <button type="button" class="btn btn-sm btn-dark fw-bold px-3" onclick="removeXray()">REMOVE</button>
+                            <button type="button" class="btn btn-sm btn-dark fw-bold px-3 w-100 w-sm-auto" onclick="removeXray()">REMOVE</button>
                         @endif
                     </div>
-                    <div class="p-2 text-center" style="background-color: rgba(0,0,0,0.03) !important;">
+                    <div class="p-2 p-sm-3 text-center" style="background-color: rgba(0,0,0,0.03) !important;">
                         {{-- Image container with click-to-zoom --}}
-                        <div id="xrayImageContainer" class="position-relative d-inline-block image-preview-wrapper {{ $hasXray && $isXrayImage ? '' : 'd-none' }}" style="cursor: zoom-in;" onclick="zoomQR('{{ $hasXray && $isXrayImage ? Storage::url($res->xray_image) : '' }}')">
-                            <img id="xrayPreview" src="{{ $hasXray && $isXrayImage ? Storage::url($res->xray_image) : '#' }}" class="img-fluid rounded shadow-sm" style="max-height: 450px; object-fit: contain; border: 1px solid var(--border-color);">
+                        <div id="xrayImageContainer" class="position-relative d-inline-block image-preview-wrapper w-100 {{ $hasXray && $isXrayImage ? '' : 'd-none' }}" style="cursor: zoom-in;" onclick="zoomQR('{{ $hasXray && $isXrayImage ? Storage::url($res->xray_image) : '' }}')">
+                            <img id="xrayPreview" src="{{ $hasXray && $isXrayImage ? Storage::url($res->xray_image) : '#' }}" class="img-fluid rounded shadow-sm w-100" style="max-height: 450px; object-fit: contain; border: 1px solid var(--border-color);">
                             <div class="position-absolute top-50 start-50 translate-middle zoom-overlay d-flex flex-column align-items-center justify-content-center text-white">
                                 <i class="bi bi-zoom-in fs-1"></i>
                                 <span class="fw-bold mt-2">CLICK TO ZOOM FULLSCREEN</span>
                             </div>
                         </div>
                         {{-- PDF fallback iframe --}}
-                        <div id="xrayPdfContainer" class="position-relative {{ $hasXray && !$isXrayImage ? '' : 'd-none' }}" style="cursor: zoom-in;" onclick="viewXrayFullscreen()">
+                        <div id="xrayPdfContainer" class="position-relative w-100 {{ $hasXray && !$isXrayImage ? '' : 'd-none' }}" style="cursor: zoom-in;" onclick="viewXrayFullscreen()">
                             <iframe id="xrayViewer" src="{{ $hasXray && !$isXrayImage ? Storage::url($res->xray_image) : '' }}" class="w-100 rounded-bottom border border-secondary bg-card" style="min-height: 500px; border: none; pointer-events: none;"></iframe>
                             <div class="position-absolute top-0 start-0 w-100 h-100"></div>
                         </div>
@@ -241,12 +241,12 @@
                 <div id="report-workstation">
                     {{-- MANUAL FINDINGS --}}
                     @if(!$isReadonly)
-                        <div id="manual-panel" class="card p-4 border-secondary bg-card shadow-lg {{ $hasReportScan ? 'd-none' : '' }}">
+                        <div id="manual-panel" class="card p-3 p-sm-4 border-secondary bg-card shadow-lg {{ $hasReportScan ? 'd-none' : '' }}">
                             <h6 class="border-bottom border-secondary border-opacity-25 pb-2 mb-3 uppercase small fw-bold" style="color: var(--text-main);">Manual Findings Entry</h6>
 
                             <div class="mb-4">
                                 <label class="text-secondary smaller fw-bold mb-1 uppercase">Findings</label>
-                                <textarea name="radio_data[findings]" id="findings_field" class="form-control p-3 @error('radio_data.findings') is-invalid @enderror" rows="10" placeholder="Type findings..." {{ $hasReportScan ? 'disabled' : 'required' }}>{{ old('radio_data.findings', $res->radio_data['findings'] ?? ($res->radiologyReport?->findings ?? '')) }}</textarea>
+                                <textarea name="radio_data[findings]" id="findings_field" class="form-control p-3 @error('radio_data.findings') is-invalid @enderror" rows="8" placeholder="Type findings..." {{ $hasReportScan ? 'disabled' : 'required' }}>{{ old('radio_data.findings', $res->radio_data['findings'] ?? ($res->radiologyReport?->findings ?? '')) }}</textarea>
                                 <div class="invalid-feedback d-none" id="err_findings"></div>
                                 @error('radio_data.findings')
                                     <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
@@ -255,7 +255,7 @@
 
                             <div>
                                 <label class="text-secondary smaller fw-bold mb-1 uppercase">Impression</label>
-                                <input type="text" name="radio_data[impression]" id="impression_field" class="form-control py-3 fw-bold @error('radio_data.impression') is-invalid @enderror" value="{{ old('radio_data.impression', $res->radio_data['impression'] ?? ($res->radiologyReport?->impression ?? '')) }}" placeholder="Final clinical impression" {{ $hasReportScan ? 'disabled' : 'required' }}>
+                                <input type="text" name="radio_data[impression]" id="impression_field" class="form-control py-2.5 py-sm-3 fw-bold @error('radio_data.impression') is-invalid @enderror" value="{{ old('radio_data.impression', $res->radio_data['impression'] ?? ($res->radiologyReport?->impression ?? '')) }}" placeholder="Final clinical impression" {{ $hasReportScan ? 'disabled' : 'required' }}>
                                 <div class="invalid-feedback d-none" id="err_impression"></div>
                                 @error('radio_data.impression')
                                     <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
@@ -266,8 +266,8 @@
 
                     {{-- REPORT SCAN PREVIEW --}}
                     <div id="scan-preview-zone" class="{{ $showPreview ? '' : 'd-none' }} shadow-lg">
-                        <div class="bg-warning text-dark p-2 px-3 fw-bold d-flex justify-content-between align-items-center rounded-top">
-                            <span>
+                        <div class="bg-warning text-dark p-2 px-3 fw-bold d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2 rounded-top">
+                            <span class="small">
                                 @if($isReadonly)
                                     @if($hasReportScan) <i class="bi bi-file-earmark-pdf-fill me-2"></i>PHYSICAL SCAN FILE @else <i class="bi bi-file-pdf me-2"></i>GENERATED CLINICAL PDF PREVIEW @endif
                                 @else
@@ -275,14 +275,14 @@
                                 @endif
                             </span>
                             @if(!$isReadonly)
-                                <button type="button" class="btn btn-sm btn-dark fw-bold px-3" onclick="removeScan()">REMOVE & RESTORE FORM</button>
+                                <button type="button" class="btn btn-sm btn-dark fw-bold px-3 w-100 w-sm-auto" onclick="removeScan()">REMOVE & RESTORE FORM</button>
                             @endif
                         </div>
-                        <div class="card border-warning border-top-0 rounded-0 rounded-bottom overflow-hidden shadow bg-card p-3 text-center d-flex justify-content-center align-items-center" style="min-height: 500px;">
+                        <div class="card border-warning border-top-0 rounded-0 rounded-bottom overflow-hidden shadow bg-card p-2 p-sm-3 text-center d-flex justify-content-center align-items-center" style="min-height: 500px;">
                             @if($hasReportScan)
                                 @if($isImage)
-                                    <div id="imagePreviewContainer" class="position-relative d-inline-block image-preview-wrapper" style="cursor: zoom-in;" onclick="zoomQR('{{ Storage::url($scanPath) }}')">
-                                        <img id="imagePreviewImg" src="{{ Storage::url($scanPath) }}" class="img-fluid rounded shadow-sm" style="max-height: 800px; object-fit: contain; border: 1px solid var(--border-color);">
+                                    <div id="imagePreviewContainer" class="position-relative d-inline-block image-preview-wrapper w-100" style="cursor: zoom-in;" onclick="zoomQR('{{ Storage::url($scanPath) }}')">
+                                        <img id="imagePreviewImg" src="{{ Storage::url($scanPath) }}" class="img-fluid rounded shadow-sm w-100" style="max-height: 800px; object-fit: contain; border: 1px solid var(--border-color);">
                                         <div class="position-absolute top-50 start-50 translate-middle zoom-overlay d-flex flex-column align-items-center justify-content-center text-white">
                                             <i class="bi bi-zoom-in fs-1"></i>
                                             <span class="fw-bold mt-2">CLICK TO ZOOM FULLSCREEN</span>
@@ -292,16 +292,16 @@
                                         <iframe id="reportViewer" src="" class="w-100 h-100 rounded-bottom border border-warning bg-card" style="min-height: 700px; border: none;"></iframe>
                                     </div>
                                 @else
-                                    <div id="reportPdfContainer" class="position-relative w-100">
+                                    <div id="reportPdfContainer" class="position-relative w-100 h-100">
                                         <iframe id="reportViewer" src="{{ Storage::url($res->radio_scan) }}" class="w-100 rounded-bottom border border-warning bg-card" style="min-height: 700px; border: none;"></iframe>
                                     </div>
                                 @endif
                             @else
                                 {{-- Fallback newly selected preview --}}
-                                <div id="imagePreviewContainer" class="position-relative d-inline-block image-preview-wrapper d-none" style="cursor: zoom-in;">
-                                    <img id="imagePreviewImg" src="" class="img-fluid rounded shadow-sm" style="max-height: 800px; object-fit: contain; border: 1px solid var(--border-color);">
+                                <div id="imagePreviewContainer" class="position-relative d-inline-block image-preview-wrapper d-none w-100" style="cursor: zoom-in;">
+                                    <img id="imagePreviewImg" src="" class="img-fluid rounded shadow-sm w-100" style="max-height: 800px; object-fit: contain; border: 1px solid var(--border-color);">
                                 </div>
-                                <div id="reportPdfContainer" class="position-relative w-100 {{ $isReadonly ? '' : 'd-none' }}">
+                                <div id="reportPdfContainer" class="position-relative w-100 h-100 {{ $isReadonly ? '' : 'd-none' }}">
                                     <iframe id="reportViewer" src="{{ route('appointments.result.access', [$appointment->id, 'radio', 'preview']) }}" class="w-100 rounded-bottom border border-warning bg-card" style="min-height: 800px; border: none;"></iframe>
                                 </div>
                             @endif
@@ -319,7 +319,7 @@
 <!-- VERIFY MODAL -->
 <div class="modal fade" id="verifyModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
-        <form action="{{ route('workstation.verify', [$appointment->id, 'radio']) }}" method="POST" class="modal-content shadow-lg p-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+        <form action="{{ route('workstation.verify', [$appointment->id, 'radio']) }}" method="POST" class="modal-content shadow-lg p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
             @csrf
             <h5 class="text-neon fw-bold mb-1 uppercase">Clinical Verification</h5>
             <p class="text-secondary small mb-4">Enter your name to verify that the uploaded medical scans match this clinical record.</p>
@@ -327,9 +327,9 @@
                 <label class="smaller text-secondary fw-bold mb-1 uppercase">Verifier Name</label>
                 <input type="text" name="sig_name" class="form-control" value="{{ auth()->user()->name }}" required>
             </div>
-            <div class="d-flex gap-2">
-                <button type="button" class="btn btn-outline-secondary flex-grow-1" data-bs-dismiss="modal">CANCEL</button>
-                <button type="submit" class="btn btn-accent flex-grow-1 fw-bold uppercase">Approve & Hub Release</button>
+            <div class="d-flex flex-column flex-sm-row gap-2">
+                <button type="button" class="btn btn-outline-secondary flex-grow-1 py-2.5" data-bs-dismiss="modal">CANCEL</button>
+                <button type="submit" class="btn btn-accent flex-grow-1 py-2.5 fw-bold uppercase">Approve & Hub Release</button>
             </div>
         </form>
     </div>
@@ -338,7 +338,7 @@
 <!-- RETURN MODAL -->
 <div class="modal fade" id="returnModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
-        <form action="{{ route('workstation.return', $appointment->id) }}?type=radio" method="POST" id="radioReturnForm" class="modal-content shadow-lg p-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+        <form action="{{ route('workstation.return', $appointment->id) }}?type=radio" method="POST" id="radioReturnForm" class="modal-content shadow-lg p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
             @csrf
             <h5 class="text-danger fw-bold uppercase mb-1">Return to Encoder</h5>
             <p class="text-secondary small mb-3">Provide a reason for returning this report for corrections.</p>
@@ -360,9 +360,9 @@
                     <small class="text-muted smaller italic">Minimum 5 characters required for validation.</small>
                 </div>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-column flex-sm-row gap-2">
                 <button type="button" class="btn btn-outline-secondary flex-grow-1 py-2.5" data-bs-dismiss="modal">CANCEL</button>
-                <button type="submit" class="btn btn-danger w-100 py-3 fw-bold uppercase">Confirm Return</button>
+                <button type="submit" class="btn btn-danger flex-grow-1 py-2.5 fw-bold uppercase">Confirm Return</button>
             </div>
         </form>
     </div>
@@ -534,7 +534,7 @@ function toggleScanPriority(input) {
                 document.getElementById('report-scan-upload-box').classList.add('d-none');
             }
             document.getElementById('scan-preview-zone').classList.remove('d-none');
-            document.getElementById('main-panel-container').className = 'col-md-8';
+            document.getElementById('main-panel-container').className = 'col-12 col-lg-8';
         };
         reader.readAsDataURL(file);
     }
@@ -576,7 +576,7 @@ function removeScan() {
     }
     document.getElementById('scan-preview-zone').classList.add('d-none');
 
-    document.getElementById('main-panel-container').className = 'col-md-8';
+    document.getElementById('main-panel-container').className = 'col-12 col-lg-8';
 }
 window.removeScan = removeScan;
 
@@ -610,7 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (sidebarContainer) sidebarContainer.classList.add('d-none');
 
         setManualFieldsRequired(false);
-        document.getElementById('main-panel-container').className = 'col-md-8';
+        document.getElementById('main-panel-container').className = 'col-12 col-lg-8';
     } else {
         setManualFieldsRequired(true);
     }
@@ -791,6 +791,11 @@ document.addEventListener('DOMContentLoaded', () => {
 #radio-workstation-root .is-invalid {
     border-color: #ff4d4d !important;
     box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.15) !important;
+}
+@media (max-width: 767.98px) {
+    #reportViewer, #xrayViewer {
+        min-height: 450px !important;
+    }
 }
 </style>
 @endpush

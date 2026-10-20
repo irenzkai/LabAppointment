@@ -23,29 +23,29 @@
     $showPreview = $isReadonly || $hasScan;
 @endphp
 
-<div class="container text-start animate-page pt-4" id="custom-workstation-root">
+<div class="container text-start animate-page pt-4 px-3 px-sm-4" id="custom-workstation-root">
 
     {{-- 1. HEADER SECTION --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
         <div>
-            <h2 class="text-accent fw-bold mb-0 uppercase">
+            <h2 class="text-accent fw-bold mb-0 uppercase fs-3 fs-md-2">
                 @if($isVerified) REVIEW MODE @elseif($isReadonly) VERIFICATION MODE @else {{ strtoupper($customRes->name) }} WORKSTATION @endif
             </h2>
-            <p class="text-secondary small mb-0 uppercase">Patient: <span class="fw-bold" style="color: var(--text-main);">{{ strtoupper($appointment->patient_name) }}</span> | Ref: <span class="text-accent">#{{ $appointment->id }}</span></p>
+            <p class="text-secondary small mb-0 uppercase text-break">Patient: <span class="fw-bold" style="color: var(--text-main);">{{ strtoupper($appointment->patient_name) }}</span> | Ref: <span class="text-accent">#{{ $appointment->id }}</span></p>
         </div>
-        <div class="d-flex gap-2 align-items-center">
-            <a href="{{ route('appointments.encode', $appointment->id) }}" class="btn btn-sm btn-outline-secondary px-4 py-2 fw-bold text-uppercase" style="color: var(--text-muted) !important; border-color: var(--border-color) !important; border-radius: 8px;">BACK TO HUB</a>
+        <div class="d-flex flex-wrap gap-2 align-items-center w-100 w-md-auto justify-content-start justify-content-md-end">
+            <a href="{{ route('appointments.encode', $appointment->id) }}" class="btn btn-sm btn-outline-secondary px-3 px-sm-4 py-2 fw-bold text-uppercase flex-grow-1 flex-md-grow-0 text-center" style="color: var(--text-muted) !important; border-color: var(--border-color) !important; border-radius: 8px;">BACK TO HUB</a>
 
             @if(!$isReadonly)
-                <button type="submit" form="customForm" class="btn-custom btn-accent px-5 shadow-lg">SAVE & SEND TO HUB</button>
+                <button type="submit" form="customForm" class="btn-custom btn-accent px-4 px-sm-5 py-2 shadow-lg flex-grow-1 flex-md-grow-0 text-center">SAVE & SEND TO HUB</button>
             @else
                 @if($status !== 'verified' || Auth::user()->isLabTech())
-                    <button type="button" data-bs-toggle="modal" data-bs-target="#returnModal" class="btn-custom btn-outline-danger px-4">RETURN FOR RE-EDIT</button>
+                    <button type="button" data-bs-toggle="modal" data-bs-target="#returnModal" class="btn-custom btn-outline-danger px-3 px-sm-4 py-2 flex-grow-1 flex-md-grow-0 text-center">RETURN FOR RE-EDIT</button>
                 @endif
 
                 @if($status == 'encoded')
                     @can('isLabTech')
-                        <button type="button" data-bs-toggle="modal" data-bs-target="#verifyModal" class="btn-custom btn-accent px-5 shadow-lg">VERIFY & APPROVE</button>
+                        <button type="button" data-bs-toggle="modal" data-bs-target="#verifyModal" class="btn-custom btn-accent px-4 px-sm-5 py-2 shadow-lg flex-grow-1 flex-md-grow-0 text-center">VERIFY & APPROVE</button>
                     @endcan
                 @endif
             @endif
@@ -55,9 +55,9 @@
     {{-- 2. CORRECTION ALERT --}}
     @if($customRes->return_reason && $status != 'verified')
         <div class="alert-clinical p-3 mb-4 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
-            <div class="d-flex align-items-center mb-1">
-                <i class="bi bi-exclamation-triangle-fill fs-4 me-3 text-danger"></i>
-                <div>
+            <div class="d-flex align-items-start mb-1 gap-2">
+                <i class="bi bi-exclamation-triangle-fill fs-4 me-2 text-danger flex-shrink-0"></i>
+                <div class="text-break">
                     <div class="fw-bold small uppercase">Verifier Correction Request:</div>
                     <div class="small italic">"{{ $customRes->return_reason }}"</div>
                 </div>
@@ -72,8 +72,8 @@
         <div class="row g-4">
 
             {{-- SIDEBAR: METADATA & PATIENT PROFILE --}}
-            <div class="col-md-4" id="sidebar-container">
-                <div class="card p-3 border-secondary bg-card mb-3 shadow-sm" id="sidebar-card" style="background-color: var(--bg-card); color: var(--text-main);">
+            <div class="col-12 col-lg-4" id="sidebar-container">
+                <div class="card p-3 p-sm-4 border-secondary bg-card mb-3 shadow-sm" id="sidebar-card" style="background-color: var(--bg-card); color: var(--text-main);">
                     <h6 class="text-accent mb-3 small fw-bold uppercase">{{ $customRes->name }} Metadata</h6>
 
                     {{-- Cert No. / Reference No. (Always Required & Always Visible) --}}
@@ -88,7 +88,7 @@
 
                     {{-- READ-ONLY PATIENT PROFILE SNAPSHOT CARD WITH EDIT LINK --}}
                     <div class="mb-3 p-3 rounded border border-secondary border-opacity-10" style="background-color: rgba(0,0,0,0.02);">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
                             <small class="text-secondary smaller fw-bold uppercase">Patient Profile</small>
                             @if(!$isReadonly && auth()->user()->isEmployee())
                                 <a href="{{ route('appointments.edit-details', $appointment->id) }}?from=custom" class="btn btn-sm btn-outline-accent py-0.5 px-2 smaller uppercase fw-bold" style="font-size: 0.68rem;" title="Edit Patient Details">
@@ -96,7 +96,7 @@
                                 </a>
                             @endif
                         </div>
-                        <div class="text-main fw-bold small mb-1">{{ strtoupper($appointment->patient_name) }}</div>
+                        <div class="text-main fw-bold small mb-1 text-break">{{ strtoupper($appointment->patient_name) }}</div>
                         <div class="text-secondary smaller mb-1">{{ $appointment->patient_age }} YRS / {{ strtoupper($appointment->patient_sex) }}</div>
                         <div class="text-muted smaller text-break" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
                     </div>
@@ -104,16 +104,16 @@
             </div>
 
             {{-- MAIN WORKSTATION PANEL --}}
-            <div class="col-md-8" id="main-panel-container">
+            <div class="col-12 col-lg-8" id="main-panel-container">
 
                 {{-- Prominent Scan Dropzone --}}
                 @if(!$isReadonly)
-                    <div class="card p-5 text-center shadow-lg mb-4 {{ $hasScan ? 'd-none' : '' }}" id="upload-zone" style="background-color: var(--bg-card); border: 2px dashed rgba(25, 211, 140, 0.25) !important; border-radius: 12px; color: var(--text-main);">
-                        <i class="bi bi-file-earmark-arrow-up-fill text-accent display-1 mb-3"></i>
-                        <h4 class="fw-bold uppercase" style="color: var(--text-main);">Upload {{ $customRes->name }} Scan</h4>
+                    <div class="card p-4 p-sm-5 text-center shadow-lg mb-4 {{ $hasScan ? 'd-none' : '' }}" id="upload-zone" style="background-color: var(--bg-card); border: 2px dashed rgba(25, 211, 140, 0.25) !important; border-radius: 12px; color: var(--text-main);">
+                        <i class="bi bi-file-earmark-arrow-up-fill text-accent display-2 display-sm-1 mb-3"></i>
+                        <h4 class="fw-bold uppercase fs-5 fs-sm-4" style="color: var(--text-main);">Upload {{ $customRes->name }} Scan</h4>
                         <p class="text-secondary mb-4 small">Attach the official PDF document or image scan for this worksheet.</p>
 
-                        <div class="mx-auto" style="max-width: 450px;">
+                        <div class="mx-auto w-100" style="max-width: 450px;">
                             <input type="file" name="scan_file" id="custom_scan_input" class="form-control form-control-lg @error('scan_file') is-invalid @enderror" onchange="previewScan(this)" {{ !$hasScan ? 'required' : '' }}>
                             <div class="invalid-feedback d-none" id="err_scan_file"></div>
                             @error('scan_file')
@@ -125,17 +125,17 @@
 
                 {{-- SCAN PREVIEW PANEL --}}
                 <div id="scan-preview-zone" class="{{ $showPreview ? '' : 'd-none' }} shadow-lg mb-4">
-                    <div class="bg-warning text-dark p-2 px-3 fw-bold d-flex justify-content-between align-items-center rounded-top">
-                        <span><i class="bi bi-eye-fill me-2"></i>OFFICIAL {{ strtoupper($customRes->name) }} SCAN PREVIEW</span>
+                    <div class="bg-warning text-dark p-2 px-3 fw-bold d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2 rounded-top">
+                        <span class="small"><i class="bi bi-eye-fill me-2"></i>OFFICIAL {{ strtoupper($customRes->name) }} SCAN PREVIEW</span>
                         @if(!$isReadonly)
-                            <button type="button" id="remove_scan_btn" class="btn btn-sm btn-dark fw-bold px-3" onclick="removeScan()">REMOVE & RESTORE FORM</button>
+                            <button type="button" id="remove_scan_btn" class="btn btn-sm btn-dark fw-bold px-3 w-100 w-sm-auto" onclick="removeScan()">REMOVE & RESTORE FORM</button>
                         @endif
                     </div>
-                    <div class="card border-warning border-top-0 rounded-0 rounded-bottom overflow-hidden shadow bg-card p-3 text-center d-flex justify-content-center align-items-center" style="min-height: 500px;">
+                    <div class="card border-warning border-top-0 rounded-0 rounded-bottom overflow-hidden shadow bg-card p-2 p-sm-3 text-center d-flex justify-content-center align-items-center" style="min-height: 500px;">
 
                         {{-- Image Preview Container --}}
-                        <div id="imagePreviewContainer" class="position-relative d-inline-block image-preview-wrapper {{ $hasScan && $isImage ? '' : 'd-none' }}" style="cursor: zoom-in;" onclick="zoomQR('{{ $hasScan && $isImage ? Storage::url($scanPath) : '' }}')">
-                            <img id="imagePreviewImg" src="{{ $hasScan && $isImage ? Storage::url($scanPath) : '' }}" class="img-fluid rounded shadow-sm" style="max-height: 800px; object-fit: contain; border: 1px solid var(--border-color);">
+                        <div id="imagePreviewContainer" class="position-relative d-inline-block image-preview-wrapper w-100 {{ $hasScan && $isImage ? '' : 'd-none' }}" style="cursor: zoom-in;" onclick="zoomQR('{{ $hasScan && $isImage ? Storage::url($scanPath) : '' }}')">
+                            <img id="imagePreviewImg" src="{{ $hasScan && $isImage ? Storage::url($scanPath) : '' }}" class="img-fluid rounded shadow-sm w-100" style="max-height: 800px; object-fit: contain; border: 1px solid var(--border-color);">
                             <div class="position-absolute top-50 start-50 translate-middle zoom-overlay d-flex flex-column align-items-center justify-content-center text-white">
                                 <i class="bi bi-zoom-in fs-1"></i>
                                 <span class="fw-bold mt-2">CLICK TO ZOOM FULLSCREEN</span>
@@ -159,7 +159,7 @@
 <!-- VERIFY MODAL -->
 <div class="modal fade" id="verifyModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
-        <form action="{{ route('workstation.custom.verify', [$appointment->id, $customRes->id]) }}" method="POST" class="modal-content shadow-lg p-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+        <form action="{{ route('workstation.custom.verify', [$appointment->id, $customRes->id]) }}" method="POST" class="modal-content shadow-lg p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
             @csrf
             <h5 class="text-neon fw-bold mb-1 uppercase">Clinical Verification</h5>
             <p class="text-secondary small mb-4">Enter your name to sign-off and approve this {{ $customRes->name }} worksheet.</p>
@@ -167,9 +167,9 @@
                 <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Verifier Full Name</label>
                 <input type="text" name="sig_name" class="form-control" value="{{ auth()->user()->name }}" required>
             </div>
-            <div class="d-flex gap-2">
-                <button type="button" class="btn btn-outline-secondary flex-grow-1" data-bs-dismiss="modal">CANCEL</button>
-                <button type="submit" class="btn btn-neon flex-grow-1 fw-bold uppercase">Approve & Sign</button>
+            <div class="d-flex flex-column flex-sm-row gap-2">
+                <button type="button" class="btn btn-outline-secondary flex-grow-1 py-2.5" data-bs-dismiss="modal">CANCEL</button>
+                <button type="submit" class="btn btn-neon flex-grow-1 py-2.5 fw-bold uppercase">Approve & Sign</button>
             </div>
         </form>
     </div>
@@ -178,7 +178,7 @@
 <!-- RETURN MODAL -->
 <div class="modal fade" id="returnModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
-        <form action="{{ route('workstation.custom.return', [$appointment->id, $customRes->id]) }}" method="POST" id="customReturnForm" class="modal-content shadow-lg p-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+        <form action="{{ route('workstation.custom.return', [$appointment->id, $customRes->id]) }}" method="POST" id="customReturnForm" class="modal-content shadow-lg p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
             @csrf
             <h5 class="text-danger fw-bold uppercase">Return to Encoder</h5>
             <p class="text-secondary small mb-3">Provide a reason for returning this {{ $customRes->name }} worksheet for corrections.</p>
@@ -198,9 +198,9 @@
                 <textarea id="reason_textarea" class="form-control shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" rows="4" placeholder="Identify the specific correction needed..."></textarea>
                 <div class="mt-2"><small class="text-muted smaller italic">Minimum 5 characters required for validation.</small></div>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-column flex-sm-row gap-2">
                 <button type="button" class="btn btn-outline-secondary flex-grow-1 py-2.5" data-bs-dismiss="modal">CANCEL</button>
-                <button type="submit" class="btn btn-danger w-100 py-3 fw-bold uppercase">Confirm Return</button>
+                <button type="submit" class="btn btn-danger flex-grow-1 py-2.5 fw-bold uppercase">Confirm Return</button>
             </div>
         </form>
     </div>
@@ -277,7 +277,7 @@ function removeScan() {
     }
 
     document.getElementById('upload-zone')?.classList.remove('d-none');
-    document.getElementById('scan-preview-zone').classList.add('d-none');
+    document.getElementById('scan-preview-zone')?.classList.add('d-none');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -390,6 +390,11 @@ document.addEventListener('DOMContentLoaded', () => {
 #custom-workstation-root .is-invalid {
     border-color: #ff4d4d !important;
     box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.15) !important;
+}
+@media (max-width: 767.98px) {
+    #scanViewer {
+        min-height: 480px !important;
+    }
 }
 </style>
 @endpush

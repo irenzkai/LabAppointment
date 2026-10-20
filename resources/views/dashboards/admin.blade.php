@@ -1,28 +1,28 @@
 @extends('layouts.app')
 @section('title', 'Admin Panel')
 @section('content')
-<div class="container text-start animate-page py-4">
+<div class="container-fluid text-start animate-page py-3 py-sm-4 px-3 px-sm-4">
     {{-- Admin Header --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
-        <div>
-            <h2 class="text-accent fw-bold mb-0 uppercase tracking-tighter">System Administrator Panel</h2>
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3 mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
+        <div class="me-lg-3 flex-grow-1">
+            <h2 class="text-accent fw-bold mb-1 uppercase tracking-tighter fs-3 fs-md-2" style="letter-spacing: 1px;">System Administrator Panel</h2>
             <p class="text-secondary small mb-0">System-wide control console: User administration, revenue reports, booking trends, and audit logs.</p>
         </div>
-        <div class="d-flex gap-2">
-            <a href="{{ route('admin.reports') }}" class="btn btn-accent fw-bold btn-sm py-2 px-3 uppercase shadow-sm">
+        <div class="d-flex flex-wrap gap-2 align-items-center w-100 w-lg-auto justify-content-start justify-content-lg-end">
+            <a href="{{ route('admin.reports') }}" class="btn btn-accent fw-bold btn-sm py-2 px-3 uppercase shadow-sm flex-grow-1 flex-md-grow-0 text-center text-nowrap">
                 <i class="bi bi-file-earmark-bar-graph-fill me-1.5"></i> Reports & Exports
             </a>
-            <a href="{{ route('admin.users.index') }}" class="btn btn-outline-accent fw-bold btn-sm py-2 px-3 uppercase">
+            <a href="{{ route('admin.users.index') }}" class="btn btn-outline-accent fw-bold btn-sm py-2 px-3 uppercase flex-grow-1 flex-md-grow-0 text-center text-nowrap">
                 <i class="bi bi-people-fill me-1.5"></i> Manage Users
             </a>
-            <a href="{{ route('admin.logs') }}" class="btn btn-outline-accent fw-bold btn-sm py-2 px-3 uppercase">
+            <a href="{{ route('admin.logs') }}" class="btn btn-outline-accent fw-bold btn-sm py-2 px-3 uppercase flex-grow-1 flex-md-grow-0 text-center text-nowrap">
                 <i class="bi bi-shield-lock-fill me-1.5"></i> Audit Logs
             </a>
         </div>
     </div>
 
     {{-- Admin Quick Access Navigation Toolbar (Single Row with Side Scroller) --}}
-    <div class="d-flex flex-nowrap overflow-auto gap-3 pb-2 mb-4 custom-scroll">
+    <div class="d-flex flex-nowrap overflow-auto gap-3 pb-2 mb-4 custom-scroll" style="-webkit-overflow-scrolling: touch;">
         <div style="min-width: 160px; flex: 1 0 160px;">
             <a href="{{ route('admin.users.index') }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
                 <div class="text-center">
@@ -83,24 +83,24 @@
 
     {{-- Financial & Revenue Summary Cards --}}
     <div class="row g-3 mb-4">
-        <div class="col-md-4">
-            <div class="card p-4 border-start border-4 border-success bg-card shadow-sm text-start">
+        <div class="col-12 col-sm-6 col-md-4">
+            <div class="card p-3 p-sm-4 border-start border-4 border-success bg-card shadow-sm text-start h-100">
                 <small class="text-secondary fw-bold uppercase fs-x-small mb-1"><i class="bi bi-cash-stack text-success me-1"></i> Total Gross Revenue</small>
-                <h2 class="text-accent fw-bold mb-1">₱{{ number_format($totalRevenue, 2) }}</h2>
+                <h2 class="text-accent fw-bold mb-1 fs-3 fs-md-2">₱{{ number_format($totalRevenue, 2) }}</h2>
                 <span class="text-muted smaller">*Cumulative paid transactions</span>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card p-4 border-start border-4 border-accent bg-card shadow-sm text-start">
+        <div class="col-12 col-sm-6 col-md-4">
+            <div class="card p-3 p-sm-4 border-start border-4 border-accent bg-card shadow-sm text-start h-100">
                 <small class="text-secondary fw-bold uppercase fs-x-small mb-1"><i class="bi bi-calendar-check text-accent me-1"></i> This Month's Revenue</small>
-                <h2 class="text-accent fw-bold mb-1">₱{{ number_format($monthlyRevenue, 2) }}</h2>
+                <h2 class="text-accent fw-bold mb-1 fs-3 fs-md-2">₱{{ number_format($monthlyRevenue, 2) }}</h2>
                 <span class="text-accent small fw-semibold">Current Billing Month</span>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card p-4 border-start border-4 border-info bg-card shadow-sm text-start">
+        <div class="col-12 col-sm-12 col-md-4">
+            <div class="card p-3 p-sm-4 border-start border-4 border-info bg-card shadow-sm text-start h-100">
                 <small class="text-secondary fw-bold uppercase fs-x-small mb-1"><i class="bi bi-clock-history text-info me-1"></i> Today's Revenue</small>
-                <h2 class="text-info fw-bold mb-1">₱{{ number_format($todayRevenue, 2) }}</h2>
+                <h2 class="text-info fw-bold mb-1 fs-3 fs-md-2">₱{{ number_format($todayRevenue, 2) }}</h2>
                 <span class="text-info small fw-semibold">Settled Collections Today</span>
             </div>
         </div>
@@ -108,28 +108,28 @@
 
     {{-- System User Account Summary Grid --}}
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card p-3 border-start border-4 border-accent bg-card shadow-sm text-start">
-                <small class="text-secondary fw-bold uppercase fs-x-small mb-1">Total System Accounts</small>
-                <h3 class="text-main fw-bold mb-0">{{ $userRoleBreakdown['total'] }}</h3>
+        <div class="col-6 col-md-3">
+            <div class="card p-2.5 p-sm-3 border-start border-4 border-accent bg-card shadow-sm text-start h-100">
+                <small class="text-secondary fw-bold uppercase fs-x-small mb-1 text-truncate d-block">Total Accounts</small>
+                <h3 class="text-main fw-bold mb-0 fs-4 fs-sm-3">{{ $userRoleBreakdown['total'] }}</h3>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card p-3 border-start border-4 border-info bg-card shadow-sm text-start">
-                <small class="text-secondary fw-bold uppercase fs-x-small mb-1">Patient Accounts</small>
-                <h3 class="text-info fw-bold mb-0">{{ $userRoleBreakdown['patient'] }}</h3>
+        <div class="col-6 col-md-3">
+            <div class="card p-2.5 p-sm-3 border-start border-4 border-info bg-card shadow-sm text-start h-100">
+                <small class="text-secondary fw-bold uppercase fs-x-small mb-1 text-truncate d-block">Patients</small>
+                <h3 class="text-info fw-bold mb-0 fs-4 fs-sm-3">{{ $userRoleBreakdown['patient'] }}</h3>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card p-3 border-start border-4 border-warning bg-card shadow-sm text-start">
-                <small class="text-secondary fw-bold uppercase fs-x-small mb-1">Staff / LabTech Personnel</small>
-                <h3 class="text-warning fw-bold mb-0">{{ $userRoleBreakdown['staff'] }}</h3>
+        <div class="col-6 col-md-3">
+            <div class="card p-2.5 p-sm-3 border-start border-4 border-warning bg-card shadow-sm text-start h-100">
+                <small class="text-secondary fw-bold uppercase fs-x-small mb-1 text-truncate d-block">Staff / Lab Techs</small>
+                <h3 class="text-warning fw-bold mb-0 fs-4 fs-sm-3">{{ $userRoleBreakdown['staff'] }}</h3>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card p-3 border-start border-4 border-danger bg-card shadow-sm text-start">
-                <small class="text-secondary fw-bold uppercase fs-x-small mb-1">System Administrators</small>
-                <h3 class="text-danger fw-bold mb-0">{{ $userRoleBreakdown['admin'] }}</h3>
+        <div class="col-6 col-md-3">
+            <div class="card p-2.5 p-sm-3 border-start border-4 border-danger bg-card shadow-sm text-start h-100">
+                <small class="text-secondary fw-bold uppercase fs-x-small mb-1 text-truncate d-block">Administrators</small>
+                <h3 class="text-danger fw-bold mb-0 fs-4 fs-sm-3">{{ $userRoleBreakdown['admin'] }}</h3>
             </div>
         </div>
     </div>
@@ -137,9 +137,9 @@
     {{-- Main Visual Analytics: Booking Trends & Status Distribution --}}
     <div class="row g-4 mb-4">
         {{-- Booking Trends Graph --}}
-        <div class="col-lg-6">
-            <div class="card p-4 border-secondary bg-card shadow-sm h-100 text-start">
-                <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="col-12 col-lg-6">
+            <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm h-100 text-start">
+                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2 mb-3">
                     <h6 class="text-accent fw-bold uppercase small mb-0">
                         <i class="bi bi-graph-up-arrow me-1.5"></i> <span id="trendChartTitle">Monthly</span> Booking Trends
                     </h6>
@@ -149,17 +149,17 @@
                         <button type="button" class="btn btn-outline-accent" id="btnTrendYearly" onclick="switchTrendTimeframe('yearly')">Yearly</button>
                     </div>
                 </div>
-                <div style="height: 280px;">
+                <div style="height: 280px; position: relative;">
                     <canvas id="monthlyTrendChart"></canvas>
                 </div>
             </div>
         </div>
 
         {{-- Appointment Status Distribution Chart --}}
-        <div class="col-lg-6">
-            <div class="card p-4 border-secondary bg-card shadow-sm h-100 text-start">
+        <div class="col-12 col-lg-6">
+            <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm h-100 text-start">
                 <h6 class="text-accent fw-bold uppercase small mb-3"><i class="bi bi-donut-chart-fill me-1.5"></i>Appointment Status Distribution</h6>
-                <div style="height: 280px;" class="d-flex justify-content-center">
+                <div style="height: 280px; position: relative;" class="d-flex justify-content-center">
                     <canvas id="statusDoughnutChart"></canvas>
                 </div>
             </div>
@@ -169,14 +169,14 @@
     {{-- Workflows & User Role Distribution --}}
     <div class="row g-4 mb-4">
         {{-- Appointments Needing Action Table --}}
-        <div class="col-lg-7">
+        <div class="col-12 col-lg-7">
             <div class="card p-0 border-secondary bg-card shadow-sm text-start overflow-hidden h-100">
-                <div class="p-3 bg-brand-dark border-bottom border-secondary d-flex justify-content-between align-items-center">
+                <div class="p-3 bg-brand-dark border-bottom border-secondary d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
                     <h6 class="text-accent fw-bold mb-0 uppercase small"><i class="bi bi-exclamation-circle-fill me-1.5"></i> Appointments Needing Action</h6>
-                    <a href="{{ route('appointments.index', ['view' => 'queue', 'status' => 'needs_action']) }}" class="text-accent small fw-bold text-decoration-none">Master Queue &rarr;</a>
+                    <a href="{{ route('appointments.index', ['view' => 'queue', 'status' => 'needs_action']) }}" class="text-accent small fw-bold text-decoration-none text-nowrap">Master Queue &rarr;</a>
                 </div>
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0" style="color: var(--text-main);">
+                    <table class="table table-hover align-middle mb-0" style="color: var(--text-main); min-width: 540px;">
                         <thead class="small uppercase bg-black text-secondary" style="font-size: 0.7rem;">
                             <tr>
                                 <th class="ps-3 py-2">Patient / Entity</th>
@@ -190,14 +190,14 @@
                                 <tr class="border-secondary border-opacity-10">
                                     <td class="ps-3">
                                         <div class="d-flex align-items-center gap-2 flex-wrap">
-                                            <span class="fw-bold text-main small">{{ $app->batch_id && $app->organization_name ? strtoupper($app->organization_name) : $app->patient_name }}</span>
+                                            <span class="fw-bold text-main small text-break">{{ $app->batch_id && $app->organization_name ? strtoupper($app->organization_name) : $app->patient_name }}</span>
                                             @if($app->batch_id)
                                                 <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-1.5 py-0.5 rounded uppercase" style="font-size: 0.6rem;">BULK</span>
                                             @elseif($app->dependent_id)
                                                 <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-1.5 py-0.5 rounded uppercase" style="font-size: 0.6rem;">DEPENDENT</span>
                                             @endif
                                         </div>
-                                        <div class="text-muted x-small mt-0.5" style="font-size: 0.65rem;">
+                                        <div class="text-muted x-small mt-0.5 text-break" style="font-size: 0.65rem;">
                                             Ref: #{{ $app->id }}
                                             @if($app->batch_id)
                                                 <span class="mx-1">&bull;</span><span class="text-secondary font-monospace">BATCH #{{ $app->batch_id }}</span>
@@ -207,16 +207,16 @@
                                             @endif
                                         </div>
                                     </td>
-                                    <td>
+                                    <td class="text-nowrap">
                                         <div class="small fw-semibold">{{ $app->appointment_date ? $app->appointment_date->format('M d, Y') : 'N/A' }}</div>
                                         <small class="text-accent">{{ date('h:i A', strtotime($app->time_slot)) }}</small>
                                     </td>
                                     <td>
-                                        <span class="badge border border-warning text-warning uppercase px-2 py-1 small">
+                                        <span class="badge border border-warning text-warning uppercase px-2 py-1 small text-nowrap">
                                             {{ strtoupper($app->status) }}
                                         </span>
                                     </td>
-                                    <td class="pe-3 text-end">
+                                    <td class="pe-3 text-end text-nowrap">
                                         <a href="{{ route('appointments.index', ['view' => 'queue', 'id' => $app->id]) }}" class="btn btn-sm btn-accent fw-bold uppercase">
                                             View
                                         </a>
@@ -234,10 +234,10 @@
         </div>
 
         {{-- System Account Distribution Chart --}}
-        <div class="col-lg-5">
-            <div class="card p-4 border-secondary bg-card shadow-sm h-100 text-start">
+        <div class="col-12 col-lg-5">
+            <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm h-100 text-start">
                 <h6 class="text-accent fw-bold uppercase small mb-3"><i class="bi bi-people-fill me-1.5"></i> System Account Distribution</h6>
-                <div style="height: 280px;" class="d-flex justify-content-center">
+                <div style="height: 280px; position: relative;" class="d-flex justify-content-center">
                     <canvas id="userRolesDoughnutChart"></canvas>
                 </div>
             </div>
@@ -247,19 +247,19 @@
     {{-- LATEST FINANCIAL TRANSACTIONS --}}
     <div class="card p-0 border-secondary bg-card shadow-lg mb-5 text-start overflow-hidden">
         {{-- Card Header --}}
-        <div class="d-flex justify-content-between align-items-center p-3 px-4 border-bottom" style="background-color: var(--brand-dark); border-color: var(--border-color) !important;">
+        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2 p-3 px-sm-4 border-bottom" style="background-color: var(--brand-dark); border-color: var(--border-color) !important;">
             <h5 class="text-accent fw-bold mb-0 uppercase tracking-tight small d-flex align-items-center">
                 <i class="bi bi-receipt me-2 fs-5"></i>Latest Financial Transactions
             </h5>
             <div>
-                <a href="{{ route('admin.reports', ['type' => 'transactions']) }}" class="btn btn-outline-accent btn-sm fw-bold uppercase">
+                <a href="{{ route('admin.reports', ['type' => 'transactions']) }}" class="btn btn-outline-accent btn-sm fw-bold uppercase text-nowrap">
                     <i class="bi bi-eye-fill me-1"></i> Full Real-Time Report View &rarr;
                 </a>
             </div>
         </div>
         {{-- Table --}}
         <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0" id="transactionsTable" style="color: var(--text-main);">
+            <table class="table table-hover align-middle mb-0" id="transactionsTable" style="color: var(--text-main); min-width: 780px;">
                 <thead class="small uppercase bg-black text-secondary" style="font-size: 0.7rem;">
                     <tr>
                         <th class="ps-4 py-3">DATE (M/D/Y)</th>
@@ -278,17 +278,17 @@
                             $txAmount = $tx->payment_amount ?: $tx->totalPrice();
                         @endphp
                         <tr class="border-secondary border-opacity-10 tx-row">
-                            <td class="ps-4 small fw-semibold">{{ $txDateFormatted }}</td>
-                            <td class="font-monospace text-accent small">#{{ $tx->id }}</td>
+                            <td class="ps-4 small fw-semibold text-nowrap">{{ $txDateFormatted }}</td>
+                            <td class="font-monospace text-accent small text-nowrap">#{{ $tx->id }}</td>
                             <td>
                                 <div class="d-flex align-items-center gap-2 flex-wrap">
-                                    <span class="fw-bold uppercase small">{{ $tx->batch_id && $tx->organization_name ? strtoupper($tx->organization_name) : $tx->patient_name }}</span>
+                                    <span class="fw-bold uppercase small text-break">{{ $tx->batch_id && $tx->organization_name ? strtoupper($tx->organization_name) : $tx->patient_name }}</span>
                                     @if($tx->batch_id)
                                         <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-1.5 py-0.5 rounded uppercase" style="font-size: 0.6rem;">BULK</span>
                                     @endif
                                 </div>
                                 @if($tx->batch_id)
-                                    <div class="text-muted x-small mt-0.5" style="font-size: 0.65rem;">
+                                    <div class="text-muted x-small mt-0.5 text-break" style="font-size: 0.65rem;">
                                         BATCH #{{ $tx->batch_id }}
                                         @if($tx->organization_name && $tx->patient_name && $tx->patient_name !== $tx->organization_name)
                                             <span class="mx-1">&bull;</span><span>{{ $tx->patient_name }}</span>
@@ -297,13 +297,13 @@
                                 @endif
                             </td>
                             <td class="small text-secondary">{{ Str::limit($tx->services->pluck('name')->implode(', '), 40) }}</td>
-                            <td class="small">{{ $tx->payment_method }}</td>
-                            <td>
+                            <td class="small text-nowrap">{{ $tx->payment_method }}</td>
+                            <td class="text-nowrap">
                                 <span class="badge border {{ $tx->payment_status === 'paid' ? 'border-success text-success bg-success bg-opacity-10' : ($tx->payment_status === 'refunded' ? 'border-info text-info bg-info bg-opacity-10' : 'border-warning text-warning bg-warning bg-opacity-10') }} uppercase px-2 py-1 small">
                                     {{ strtoupper($tx->payment_status) }}
                                 </span>
                             </td>
-                            <td class="pe-4 text-end fw-bold text-accent">₱{{ number_format($txAmount, 2) }}</td>
+                            <td class="pe-4 text-end fw-bold text-accent text-nowrap">₱{{ number_format($txAmount, 2) }}</td>
                         </tr>
                     @empty
                         <tr>
@@ -317,12 +317,12 @@
 
     {{-- Latest System Activity Logs --}}
     <div class="card p-0 border-secondary bg-card shadow-lg mb-5 text-start overflow-hidden">
-        <div class="p-3 bg-brand-dark border-bottom border-secondary d-flex justify-content-between align-items-center">
+        <div class="p-3 bg-brand-dark border-bottom border-secondary d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
             <h6 class="text-danger fw-bold mb-0 uppercase small"><i class="bi bi-shield-lock-fill me-1.5"></i> Latest System Audit Logs</h6>
-            <a href="{{ route('admin.logs') }}" class="text-accent small fw-bold text-decoration-none">Full Audit History &rarr;</a>
+            <a href="{{ route('admin.logs') }}" class="text-accent small fw-bold text-decoration-none text-nowrap">Full Audit History &rarr;</a>
         </div>
         <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0" style="color: var(--text-main);">
+            <table class="table table-hover align-middle mb-0" style="color: var(--text-main); min-width: 720px;">
                 <thead class="small uppercase bg-black text-secondary" style="font-size: 0.7rem;">
                     <tr>
                         <th class="ps-4 py-3">Performer</th>
@@ -336,17 +336,17 @@
                     @forelse($latestLogs as $log)
                         <tr class="border-secondary border-opacity-10">
                             <td class="ps-4 py-2.5">
-                                <div class="fw-bold uppercase small">{{ $log->user->name ?? 'System/Deleted' }}</div>
+                                <div class="fw-bold uppercase small text-break">{{ $log->user->name ?? 'System/Deleted' }}</div>
                                 <small class="text-muted fs-x-small">{{ strtoupper($log->user->role ?? 'N/A') }}</small>
                             </td>
-                            <td>
+                            <td class="text-nowrap">
                                 <span class="badge border border-info text-info fw-bold small uppercase px-2 py-1">
                                     {{ $log->action }}
                                 </span>
                             </td>
-                            <td class="small fw-bold uppercase">{{ $log->patient_name }}</td>
-                            <td class="small text-muted italic">{{ Str::limit($log->reason, 50) }}</td>
-                            <td class="pe-4 text-end small text-secondary">
+                            <td class="small fw-bold uppercase text-break">{{ $log->patient_name }}</td>
+                            <td class="small text-muted italic text-break">{{ Str::limit($log->reason, 50) }}</td>
+                            <td class="pe-4 text-end small text-secondary text-nowrap">
                                 {{ $log->created_at->format('M d, Y | h:i A') }}
                             </td>
                         </tr>
@@ -365,6 +365,8 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    const isMobileViewport = window.innerWidth < 768;
+
     // 1. Dynamic Appointment Booking Trends Chart (Daily / Monthly / Yearly)
     const trendDataMap = {
         daily: {
@@ -466,8 +468,8 @@ document.addEventListener('DOMContentLoaded', () => {
             maintainAspectRatio: false,
             plugins: {
                 legend: { 
-                    position: 'right', 
-                    labels: { color: '#94a3b8', font: { size: 12, weight: 'bold' }, padding: 10 } 
+                    position: isMobileViewport ? 'bottom' : 'right', 
+                    labels: { color: '#94a3b8', font: { size: 11, weight: 'bold' }, padding: 8 } 
                 },
                 tooltip: {
                     enabled: true,
@@ -476,11 +478,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     bodyColor: '#ffffff',
                     borderColor: '#19d38c',
                     borderWidth: 1.5,
-                    padding: 14,
+                    padding: 12,
                     boxPadding: 6,
                     usePointStyle: true,
-                    titleFont: { size: 14, weight: 'bold' },
-                    bodyFont: { size: 14, weight: 'bold' },
+                    titleFont: { size: 13, weight: 'bold' },
+                    bodyFont: { size: 13, weight: 'bold' },
                     callbacks: {
                         label: function(context) {
                             const label = context.label || '';
@@ -516,8 +518,8 @@ document.addEventListener('DOMContentLoaded', () => {
             maintainAspectRatio: false,
             plugins: {
                 legend: { 
-                    position: 'right', 
-                    labels: { color: '#94a3b8', font: { size: 12, weight: 'bold' }, padding: 10 } 
+                    position: isMobileViewport ? 'bottom' : 'right', 
+                    labels: { color: '#94a3b8', font: { size: 11, weight: 'bold' }, padding: 8 } 
                 },
                 tooltip: {
                     enabled: true,
@@ -526,11 +528,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     bodyColor: '#ffffff',
                     borderColor: '#19d38c',
                     borderWidth: 1.5,
-                    padding: 14,
+                    padding: 12,
                     boxPadding: 6,
                     usePointStyle: true,
-                    titleFont: { size: 14, weight: 'bold' },
-                    bodyFont: { size: 14, weight: 'bold' },
+                    titleFont: { size: 13, weight: 'bold' },
+                    bodyFont: { size: 13, weight: 'bold' },
                     callbacks: {
                         label: function(context) {
                             const label = context.label || '';

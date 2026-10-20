@@ -1,21 +1,24 @@
 @extends('layouts.app')
 @section('title', 'Edit Account - ' . $user->name)
 @section('content')
-<div class="container text-start animate-page py-4" id="editUserContainer">
+<div class="container text-start animate-page py-3 py-sm-4 px-3 px-sm-4" id="editUserContainer">
     <div class="row justify-content-center">
-        <div class="col-lg-10">
-            <div class="card p-4 p-md-5 border-secondary bg-card shadow-lg">
+        <div class="col-12 col-lg-10">
+            <div class="card p-3 p-sm-4 p-md-5 border-secondary bg-card shadow-lg">
                 {{-- Header --}}
-                <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary border-opacity-25 pb-3">
-                    <div>
-                        <h2 class="text-accent fw-bold mb-0 uppercase tracking-tight" style="font-size: 1.85rem; letter-spacing: 1px;">
+                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-3 mb-4 border-bottom border-secondary border-opacity-25 pb-3">
+                    <div class="me-sm-3 flex-grow-1">
+                        <h2 class="text-accent fw-bold mb-1 uppercase tracking-tight fs-3 fs-md-2" style="letter-spacing: 1px;">
                             <i class="bi bi-pencil-square me-2"></i>Edit Account: {{ strtoupper($user->name) }}
                         </h2>
                         <p class="text-secondary mb-0 small">Update identity, PSGC address, access roles, security overrides, and family dependents.</p>
                     </div>
-                    <a href="{{ route('admin.users.index') }}" class="btn-custom btn-cancel-custom px-4 py-2 fw-bold text-uppercase text-decoration-none">
-                        <i class="bi bi-arrow-left me-1"></i> Back to Directory
-                    </a>
+                    <div class="flex-shrink-0 back-directory-box">
+                        <a href="{{ route('admin.users.index') }}" class="btn-custom btn-cancel-custom px-3.5 py-2 fw-bold text-uppercase text-decoration-none d-inline-flex align-items-center gap-1.5" style="border-radius: 8px; font-size: 0.75rem; white-space: nowrap;">
+                            <i class="bi bi-arrow-left"></i>
+                            <span>Back to Directory</span>
+                        </a>
+                    </div>
                 </div>
 
                 @if ($errors->any())
@@ -32,14 +35,14 @@
                 @endif
 
                 {{-- Tabs: Main Profile vs Family Dependents --}}
-                <ul class="nav nav-pills mb-4 gap-2" id="userEditTabs" role="tablist">
+                <ul class="nav nav-pills mb-4 gap-2 flex-wrap" id="userEditTabs" role="tablist">
                     <li class="nav-item">
-                        <button class="nav-link active px-4 py-2 small uppercase fw-bold" id="btn-profile" data-bs-toggle="pill" data-bs-target="#tab-main-profile" type="button">
+                        <button class="nav-link active px-3 px-sm-4 py-2 small uppercase fw-bold text-center" id="btn-profile" data-bs-toggle="pill" data-bs-target="#tab-main-profile" type="button">
                             Account Profile & Security
                         </button>
                     </li>
                     <li class="nav-item">
-                        <button class="nav-link px-4 py-2 small uppercase fw-bold" id="btn-dependents" data-bs-toggle="pill" data-bs-target="#tab-dependents" type="button">
+                        <button class="nav-link px-3 px-sm-4 py-2 small uppercase fw-bold text-center" id="btn-dependents" data-bs-toggle="pill" data-bs-target="#tab-dependents" type="button">
                             Family Dependents ({{ $user->dependents->count() }})
                         </button>
                     </li>
@@ -55,32 +58,32 @@
                             {{-- 1. Identity --}}
                             <h6 class="text-accent mb-3 small fw-bold uppercase">1. Personal Identity</h6>
                             <div class="row g-3 mb-4">
-                                <div class="col-md-3">
+                                <div class="col-12 col-sm-6 col-md-3">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">First Name</label>
                                     <input type="text" name="first_name" id="first_name" class="form-control uppercase" value="{{ old('first_name', $user->first_name) }}" required>
                                     <div class="invalid-feedback d-none" id="err_first_name"></div>
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-12 col-sm-6 col-md-3">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Middle Name</label>
                                     <input type="text" name="middle_name" id="middle_name" class="form-control uppercase" value="{{ old('middle_name', $user->middle_name) }}">
                                     <div class="invalid-feedback d-none" id="err_middle_name"></div>
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-12 col-sm-6 col-md-3">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Last Name</label>
                                     <input type="text" name="last_name" id="last_name" class="form-control uppercase" value="{{ old('last_name', $user->last_name) }}" required>
                                     <div class="invalid-feedback d-none" id="err_last_name"></div>
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-12 col-sm-6 col-md-3">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Suffix (Opt.)</label>
                                     <input type="text" name="suffix" id="suffix" class="form-control uppercase" value="{{ old('suffix', $user->suffix) }}" placeholder="e.g. JR">
                                     <div class="invalid-feedback d-none" id="err_suffix"></div>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-12 col-sm-6 col-md-4">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Birthdate</label>
                                     <input type="date" name="birthdate" id="birthdate" class="form-control" value="{{ $user->birthdate ? $user->birthdate->format('Y-m-d') : '' }}" required max="{{ date('Y-m-d') }}">
                                     <div class="invalid-feedback d-none" id="err_birthdate"></div>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-12 col-sm-6 col-md-4">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Sex</label>
                                     <select name="sex" id="sex" class="form-select" required>
                                         <option value="Male" {{ $user->sex === 'Male' ? 'selected' : '' }}>Male</option>
@@ -88,7 +91,7 @@
                                     </select>
                                     <div class="invalid-feedback d-none" id="err_sex"></div>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-12 col-sm-12 col-md-4">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Contact Phone</label>
                                     <div class="input-group">
                                         <span class="input-group-text border-secondary bg-secondary bg-opacity-25 text-main fw-bold">09</span>
@@ -106,28 +109,28 @@
                             {{-- 2. Address --}}
                             <h6 class="text-accent mb-3 small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3">2. PSGC Residential Address</h6>
                             <div class="row g-3 mb-4">
-                                <div class="col-md-6">
+                                <div class="col-12 col-sm-6">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Province</label>
                                     <select id="edit_prov" name="province" class="form-select" onchange="fetchEditCities(this.value)" required>
                                         <option value="">Select Province</option>
                                     </select>
                                     <div class="invalid-feedback d-none" id="err_province"></div>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-12 col-sm-6">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">City / Municipality</label>
                                     <select id="edit_city" name="city" class="form-select" onchange="fetchEditBarangays(this.value)" disabled required>
                                         <option value="">Select Province First</option>
                                     </select>
                                     <div class="invalid-feedback d-none" id="err_city"></div>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-12 col-sm-6">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Barangay</label>
                                     <select id="edit_brgy" name="barangay" class="form-select" disabled required>
                                         <option value="">Select City First</option>
                                     </select>
                                     <div class="invalid-feedback d-none" id="err_barangay"></div>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-12 col-sm-6">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Street / House No.</label>
                                     <input type="text" name="street" id="edit_street" class="form-control uppercase" value="{{ old('street', $user->street) }}" required>
                                     <div class="invalid-feedback d-none" id="err_street"></div>
@@ -140,28 +143,28 @@
                             </h6>
 
                             {{-- Real-time Current Verification Status Badges --}}
-                            <div class="p-3 rounded border border-secondary border-opacity-25 bg-secondary bg-opacity-10 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
-                                <div class="d-flex align-items-center gap-3">
+                            <div class="p-3 rounded border border-secondary border-opacity-25 bg-secondary bg-opacity-10 mb-3 d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between gap-3">
+                                <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center gap-3 w-100">
                                     <div>
                                         <span class="d-block smaller text-muted uppercase fw-bold" style="font-size: 0.65rem;">Current Email Status:</span>
                                         @if($user->email_verified_at)
-                                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2.5 small fw-bold">
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2.5 small fw-bold text-wrap">
                                                 <i class="bi bi-patch-check-fill me-1"></i>VERIFIED ({{ \Carbon\Carbon::parse($user->email_verified_at)->format('M d, Y') }})
                                             </span>
                                         @else
-                                            <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2.5 small fw-bold">
+                                            <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2.5 small fw-bold text-nowrap">
                                                 <i class="bi bi-exclamation-triangle-fill me-1"></i>UNVERIFIED
                                             </span>
                                         @endif
                                     </div>
-                                    <div class="border-start border-secondary border-opacity-25 ps-3">
+                                    <div class="status-phone-divider ps-sm-3 pt-2 pt-sm-0 border-top border-top-sm-0">
                                         <span class="d-block smaller text-muted uppercase fw-bold" style="font-size: 0.65rem;">Current Phone Status:</span>
                                         @if($user->phone_verified_at)
-                                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2.5 small fw-bold">
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2.5 small fw-bold text-wrap">
                                                 <i class="bi bi-patch-check-fill me-1"></i>VERIFIED ({{ \Carbon\Carbon::parse($user->phone_verified_at)->format('M d, Y') }})
                                             </span>
                                         @else
-                                            <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2.5 small fw-bold">
+                                            <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-1 px-2.5 small fw-bold text-nowrap">
                                                 <i class="bi bi-exclamation-triangle-fill me-1"></i>UNVERIFIED
                                             </span>
                                         @endif
@@ -171,7 +174,7 @@
 
                             <div class="row g-3 mb-4">
                                 {{-- Access Role --}}
-                                <div class="col-md-4">
+                                <div class="col-12 col-md-4">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Role / Access Level</label>
                                     <select name="role" id="role" class="form-select" required>
                                         <option value="user" {{ $user->role === 'user' ? 'selected' : '' }}>Patient / User</option>
@@ -182,7 +185,7 @@
                                 </div>
 
                                 {{-- Email Address --}}
-                                <div class="col-md-4">
+                                <div class="col-12 col-md-4">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">
                                         Email Address
                                         <span id="email_changed_badge" class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-0.5 px-1.5 ms-1 d-none" style="font-size: 0.65rem;">Modified</span>
@@ -192,7 +195,7 @@
                                 </div>
 
                                 {{-- Specific Email Action --}}
-                                <div class="col-md-4">
+                                <div class="col-12 col-md-4">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Email Action</label>
                                     <select name="email_action" id="email_action" class="form-select" onchange="handleEmailActionChange(this.value)">
                                         {{-- Populated dynamically via JS --}}
@@ -208,7 +211,7 @@
                                 </div>
 
                                 {{-- Specific Phone Action --}}
-                                <div class="col-md-6">
+                                <div class="col-12 col-md-6">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">
                                         Phone Action
                                         <span id="phone_changed_badge" class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-0.5 px-1.5 ms-1 d-none" style="font-size: 0.65rem;">Modified</span>
@@ -219,7 +222,7 @@
                                 </div>
 
                                 {{-- Password Modifications --}}
-                                <div class="col-md-6">
+                                <div class="col-12 col-md-6">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Password Modifications</label>
                                     <select name="password_option" id="pass_opt" class="form-select" onchange="toggleManualPass(this.value)">
                                         <option value="" selected>-- Choose Option (Optional) --</option>
@@ -233,11 +236,11 @@
 
                                 <div id="manual_pass_wrapper" class="col-12 d-none">
                                     <div class="row g-2">
-                                        <div class="col-md-6">
+                                        <div class="col-12 col-md-6">
                                             <input type="password" name="password" id="password" class="form-control" placeholder="New temporary password">
                                             <div class="invalid-feedback d-none" id="err_password"></div>
                                         </div>
-                                        <div class="col-md-6">
+                                        <div class="col-12 col-md-6">
                                             <input type="password" name="password_confirmation" id="password_confirmation" class="form-control" placeholder="Confirm temporary password">
                                             <div class="invalid-feedback d-none" id="err_password_confirmation"></div>
                                         </div>
@@ -265,22 +268,22 @@
                                 </div>
                             </div>
 
-                            <div class="d-flex gap-3">
-                                <a href="{{ route('admin.users.index') }}" class="btn-custom btn-cancel-custom w-50 py-3 fw-bold uppercase text-decoration-none text-center">Cancel</a>
-                                <button type="submit" class="btn-custom btn-accent w-50 py-3 fw-bold uppercase shadow-sm">SAVE PROFILE CHANGES</button>
+                            <div class="d-flex flex-column flex-sm-row gap-2 gap-sm-3 mt-4">
+                                <a href="{{ route('admin.users.index') }}" class="btn-custom btn-cancel-custom flex-grow-1 py-2.5 py-sm-3 fw-bold uppercase text-decoration-none text-center">Cancel</a>
+                                <button type="submit" class="btn-custom btn-accent flex-grow-1 py-2.5 py-sm-3 fw-bold uppercase shadow-sm">SAVE PROFILE CHANGES</button>
                             </div>
                         </form>
 
                         {{-- Separate Deactivation / Reactivation Action Card with Warning Modal --}}
-                        <div class="card p-4 border-danger shadow-sm mt-5 text-start" style="background-color: rgba(220, 53, 69, 0.04) !important;">
-                            <div class="d-flex justify-content-between align-items-center">
+                        <div class="card p-3 p-sm-4 border-danger shadow-sm mt-5 text-start" style="background-color: rgba(220, 53, 69, 0.04) !important;">
+                            <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-3">
                                 <div>
                                     <h6 class="text-danger fw-bold uppercase mb-1">
                                         <i class="bi bi-shield-exclamation me-1"></i>Account Status Management
                                     </h6>
                                     <p class="text-secondary small mb-0">Current Status: <strong class="{{ $user->trashed() ? 'text-danger' : 'text-accent' }}">{{ $user->trashed() ? 'DEACTIVATED / SUSPENDED' : 'ACTIVE' }}</strong></p>
                                 </div>
-                                <div>
+                                <div class="flex-shrink-0 status-action-box">
                                     @if($user->trashed())
                                     <button type="button" class="btn btn-success fw-bold uppercase px-4 py-2" data-bs-toggle="modal" data-bs-target="#statusModal">
                                         <i class="bi bi-arrow-counterclockwise me-1"></i> REACTIVATE ACCOUNT
@@ -297,31 +300,34 @@
 
                     {{-- TAB 2: FAMILY DEPENDENTS --}}
                     <div class="tab-pane fade" id="tab-dependents">
-                        <div class="d-flex justify-content-between align-items-center mb-4">
+                        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2 mb-4">
                             <div>
                                 <h6 class="text-accent fw-bold mb-0 uppercase">Dependents linked to {{ $user->name }}</h6>
                                 <small class="text-muted">Add, update, or archive family dependents registered under this patient account.</small>
                             </div>
-                            <a href="{{ route('admin.users.dependents.create', $user->id) }}" class="btn btn-accent btn-sm fw-bold uppercase px-3 py-2">
-                                <i class="bi bi-plus-lg me-1"></i> ADD DEPENDENT
-                            </a>
+                            <div class="flex-shrink-0 add-dep-btn-box">
+                                <a href="{{ route('admin.users.dependents.create', $user->id) }}" class="btn btn-accent btn-sm fw-bold uppercase px-3 py-2 text-nowrap d-inline-flex align-items-center gap-1.5" style="border-radius: 8px;">
+                                    <i class="bi bi-plus-lg"></i>
+                                    <span>ADD DEPENDENT</span>
+                                </a>
+                            </div>
                         </div>
 
                         {{-- Active Dependents Grid --}}
                         <div class="row g-3 mb-4">
                             @forelse($user->dependents->where('deleted_at', null) as $dep)
                             @php $isOver18 = $dep->birthdate && $dep->birthdate->age >= 18; @endphp
-                            <div class="col-md-6 text-start">
-                                <div class="p-3 rounded border {{ $isOver18 ? 'border-warning' : 'border-secondary border-opacity-20' }} d-flex justify-content-between align-items-center h-100 bg-card">
+                            <div class="col-12 col-md-6 text-start">
+                                <div class="p-3 rounded border {{ $isOver18 ? 'border-warning' : 'border-secondary border-opacity-20' }} d-flex justify-content-between align-items-center h-100 bg-card gap-2">
                                     <div>
-                                        <div class="fw-bold text-main small">{{ strtoupper($dep->name) }}</div>
-                                        <small class="text-secondary">{{ strtoupper($dep->relationship) }} | {{ strtoupper($dep->sex) }} | {{ $dep->birthdate ? $dep->birthdate->age : 'N/A' }} YRS OLD</small>
-                                        @if($isOver18) <span class="badge bg-warning text-dark ms-1">18+ (Promotion Eligible)</span> @endif
-                                        <div class="text-accent smaller mt-1"><i class="bi bi-geo-alt-fill me-1"></i>{{ $dep->address }}</div>
+                                        <div class="fw-bold text-main small text-break">{{ strtoupper($dep->name) }}</div>
+                                        <small class="text-secondary d-block">{{ strtoupper($dep->relationship) }} | {{ strtoupper($dep->sex) }} | {{ $dep->birthdate ? $dep->birthdate->age : 'N/A' }} YRS OLD</small>
+                                        @if($isOver18) <span class="badge bg-warning text-dark mt-1">18+ (Promotion Eligible)</span> @endif
+                                        <div class="text-accent smaller mt-1 text-break"><i class="bi bi-geo-alt-fill me-1"></i>{{ $dep->address }}</div>
                                     </div>
 
                                     {{-- 3-Dot Dropdown Menu --}}
-                                    <div class="dropdown">
+                                    <div class="dropdown flex-shrink-0">
                                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle py-1 px-2.5" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                             <i class="bi bi-three-dots-vertical"></i>
                                         </button>
@@ -350,12 +356,12 @@
                             {{-- Promote Dependent Modal with Reason Dropdown Confirmation --}}
                             <div class="modal fade" id="promoteDepModal{{ $dep->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
                                 <div class="modal-dialog modal-dialog-centered">
-                                    <form action="{{ route('admin.users.dependents.promote', [$user->id, $dep->id]) }}" method="POST" class="modal-content border-secondary bg-card text-start p-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                                    <form action="{{ route('admin.users.dependents.promote', [$user->id, $dep->id]) }}" method="POST" class="modal-content border-secondary bg-card text-start p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
                                         @csrf
                                         <h5 class="text-accent fw-bold uppercase mb-2">
                                             <i class="bi bi-arrow-up-circle me-2"></i>Promote Dependent Account
                                         </h5>
-                                        <p class="small text-muted mb-3">
+                                        <p class="small text-muted mb-3 text-break">
                                             Promoting <strong>{{ strtoupper($dep->name) }}</strong> will directly redirect to create an independent user account with historical medical records automatically transitioned.
                                         </p>
                                         <div class="mb-3">
@@ -372,9 +378,9 @@
                                             <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Specify Custom Reason</label>
                                             <textarea id="promote_custom_reason_{{ $dep->id }}" class="form-control" rows="2" placeholder="Provide details regarding the account promotion..."></textarea>
                                         </div>
-                                        <div class="d-flex gap-2 mt-3">
-                                            <button type="button" class="btn btn-outline-secondary w-50 py-2 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-accent w-50 py-2 fw-bold uppercase shadow-sm">Confirm & Create</button>
+                                        <div class="d-flex flex-column flex-sm-row gap-2 mt-3">
+                                            <button type="button" class="btn btn-outline-secondary flex-grow-1 py-2 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-accent flex-grow-1 py-2 fw-bold uppercase shadow-sm">Confirm & Create</button>
                                         </div>
                                     </form>
                                 </div>
@@ -383,10 +389,10 @@
                             {{-- Archive Dependent Modal with Reason --}}
                             <div class="modal fade" id="archiveDepModal{{ $dep->id }}" tabindex="-1">
                                 <div class="modal-dialog modal-dialog-centered">
-                                    <form action="{{ route('admin.users.dependents.destroy', [$user->id, $dep->id]) }}" method="POST" class="modal-content border-danger bg-card text-start p-4">
+                                    <form action="{{ route('admin.users.dependents.destroy', [$user->id, $dep->id]) }}" method="POST" class="modal-content border-danger bg-card text-start p-3 p-sm-4">
                                         @csrf 
                                         @method('DELETE')
-                                        <h5 class="text-danger fw-bold uppercase mb-2">Archive Dependent: {{ $dep->name }}</h5>
+                                        <h5 class="text-danger fw-bold uppercase mb-2 text-break">Archive Dependent: {{ $dep->name }}</h5>
                                         <p class="small text-muted mb-3">This dependent profile will be soft-deleted and moved to the archive directory.</p>
                                         
                                         <div class="mb-3">
@@ -414,13 +420,13 @@
                         <h6 class="text-warning fw-bold mb-3 uppercase small"><i class="bi bi-archive me-1"></i>Archived Dependents (Directory)</h6>
                         <div class="row g-3">
                             @foreach($archivedDeps as $archived)
-                            <div class="col-md-6 text-start">
-                                <div class="p-3 rounded border border-warning border-opacity-30 d-flex justify-content-between align-items-center bg-card">
+                            <div class="col-12 col-md-6 text-start">
+                                <div class="p-3 rounded border border-warning border-opacity-30 d-flex justify-content-between align-items-center bg-card gap-2">
                                     <div>
-                                        <div class="text-warning fw-bold small">{{ strtoupper($archived->name) }}</div>
-                                        <small class="text-secondary">{{ strtoupper($archived->relationship) }} | {{ $archived->birthdate ? $archived->birthdate->age : 'N/A' }} YRS OLD (ARCHIVED)</small>
+                                        <div class="text-warning fw-bold small text-break">{{ strtoupper($archived->name) }}</div>
+                                        <small class="text-secondary d-block">{{ strtoupper($archived->relationship) }} | {{ $archived->birthdate ? $archived->birthdate->age : 'N/A' }} YRS OLD (ARCHIVED)</small>
                                     </div>
-                                    <button type="button" class="btn btn-sm btn-outline-warning py-1 px-3 fw-bold uppercase" data-bs-toggle="modal" data-bs-target="#restoreDepModal{{ $archived->id }}">
+                                    <button type="button" class="btn btn-sm btn-outline-warning py-1 px-3 fw-bold uppercase flex-shrink-0" data-bs-toggle="modal" data-bs-target="#restoreDepModal{{ $archived->id }}">
                                         <i class="bi bi-arrow-counterclockwise me-1"></i> RESTORE
                                     </button>
                                 </div>
@@ -429,12 +435,12 @@
                             {{-- Restore Dependent Modal with Reason Dropdown --}}
                             <div class="modal fade" id="restoreDepModal{{ $archived->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
                                 <div class="modal-dialog modal-dialog-centered">
-                                    <form action="{{ route('admin.users.dependents.restore', [$user->id, $archived->id]) }}" method="POST" class="modal-content border-warning bg-card text-start p-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                                    <form action="{{ route('admin.users.dependents.restore', [$user->id, $archived->id]) }}" method="POST" class="modal-content border-warning bg-card text-start p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
                                         @csrf
                                         <h5 class="text-warning fw-bold uppercase mb-2">
                                             <i class="bi bi-arrow-counterclockwise me-2"></i>Restore Dependent Profile?
                                         </h5>
-                                        <p class="small text-muted mb-3">
+                                        <p class="small text-muted mb-3 text-break">
                                             You are about to reactivate <strong>{{ strtoupper($archived->name) }}</strong> and restore them to active family dependents.
                                         </p>
                                         <div class="mb-3">
@@ -451,9 +457,9 @@
                                             <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Specify Custom Reason</label>
                                             <textarea id="restore_custom_reason_{{ $archived->id }}" class="form-control" rows="2" placeholder="Provide justification for restoring this profile..."></textarea>
                                         </div>
-                                        <div class="d-flex gap-2 mt-3">
-                                            <button type="button" class="btn btn-outline-secondary w-50 py-2 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-warning w-50 py-2 fw-bold uppercase text-dark">Restore Dependent</button>
+                                        <div class="d-flex flex-column flex-sm-row gap-2 mt-3">
+                                            <button type="button" class="btn btn-outline-secondary flex-grow-1 py-2 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-warning flex-grow-1 py-2 fw-bold uppercase text-dark">Restore Dependent</button>
                                         </div>
                                     </form>
                                 </div>
@@ -471,7 +477,7 @@
 {{-- Deactivation / Reactivation Confirmation Modal --}}
 <div class="modal fade" id="statusModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
-        <form action="{{ route('admin.users.toggle-status', $user->id) }}" method="POST" class="modal-content border-secondary bg-card text-start p-4">
+        <form action="{{ route('admin.users.toggle-status', $user->id) }}" method="POST" class="modal-content border-secondary bg-card text-start p-3 p-sm-4">
             @csrf 
             @method('PATCH')
             <h5 class="{{ $user->trashed() ? 'text-success' : 'text-danger' }} fw-bold uppercase mb-2">
@@ -503,6 +509,25 @@
 
 @push('styles')
 <style>
+/* Explicit Width Containment for Header Actions */
+.back-directory-box a {
+    width: auto !important;
+}
+
+@media (max-width: 575.98px) {
+    .back-directory-box,
+    .add-dep-btn-box,
+    .status-action-box {
+        width: 100% !important;
+    }
+    .back-directory-box a,
+    .add-dep-btn-box a,
+    .status-action-box .btn {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+}
+
 .btn-cancel-custom {
     color: var(--text-muted) !important;
     border: 1.5px solid var(--border-color) !important;
@@ -518,11 +543,21 @@
 #editUserContainer .form-control:focus,
 #editUserContainer .form-select:focus {
     border-color: var(--brand-accent) !important;
-    box-shadow: 0 0 0 3px rgba(25, 211, 140, 0.15) !important;
+    box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.15) !important;
 }
 #editUserContainer .is-invalid {
     border-color: #ff4d4d !important;
     box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.15) !important;
+}
+.status-phone-divider {
+    border-left: 1px solid var(--border-color);
+}
+@media (max-width: 575.98px) {
+    .status-phone-divider {
+        border-left: none !important;
+        border-top: 1px solid var(--border-color) !important;
+        width: 100%;
+    }
 }
 </style>
 @endpush

@@ -49,7 +49,7 @@ return [
     |
     */
     'philsms' => [
-        'token' => env('PHILSMS_API_TOKEN', env('SMS_API_KEY', '5340|yngJ05kuaZ64OQ2Q6L0QCcJBT1vWxPVvT8cILesX57c6abd5')),
+        'token' => env('PHILSMS_API_TOKEN', env('SMS_API_KEY')),
         'endpoint' => env('PHILSMS_ENDPOINT', env('SMS_ENDPOINT', 'https://dashboard.philsms.com/api/v3/sms/send')),
         'sender_id' => env('PHILSMS_SENDER_ID', env('SMS_SENDER_NAME', 'PhilSMS')),
     ],

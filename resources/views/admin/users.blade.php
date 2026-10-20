@@ -2,15 +2,15 @@
 @section('title', Auth::user()->role === 'admin' ? 'User Directory' : 'User List')
 
 @section('content')
-<div class="container-fluid text-start animate-page py-2">
+<div class="container-fluid text-start animate-page py-2 px-3 px-sm-4">
     @php
         $isAdmin = (Auth::user()->role === 'admin');
     @endphp
 
     {{-- 1. CONTROL HEADER WITH CONDITIONAL CREATE USER BUTTON --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
-        <div>
-            <h2 class="text-accent fw-bold mb-0 uppercase tracking-tight" style="font-size: 1.85rem; letter-spacing: 1px;">
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-3 mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
+        <div class="me-sm-3 flex-grow-1">
+            <h2 class="text-accent fw-bold mb-1 uppercase tracking-tight fs-3 fs-md-2" style="letter-spacing: 1px;">
                 User Directory
             </h2>
             <p class="text-muted small mb-0" style="color: var(--text-muted) !important;">
@@ -20,38 +20,41 @@
             </p>
         </div>
         @if($isAdmin)
-            <div>
-                <a href="{{ route('admin.users.create') }}" class="btn-custom btn-accent fw-bold btn-sm py-2 px-3 uppercase shadow-sm text-decoration-none">
-                    <i class="bi bi-person-plus-fill me-1.5"></i> CREATE USER
+            <div class="flex-shrink-0 create-user-box">
+                <a href="{{ route('admin.users.create') }}" class="btn btn-accent btn-sm py-2 px-3.5 fw-bold uppercase shadow-sm text-decoration-none d-inline-flex align-items-center gap-2" style="border-radius: 8px; font-size: 0.78rem; letter-spacing: 0.5px; white-space: nowrap;">
+                    <i class="bi bi-person-plus-fill fs-6"></i>
+                    <span>CREATE USER</span>
                 </a>
             </div>
         @else
-            <div>
-                <span class="badge border border-info text-info bg-info bg-opacity-10 px-3 py-2 uppercase small">
+            <div class="flex-shrink-0">
+                <span class="badge border border-info text-info bg-info bg-opacity-10 px-3 py-2 uppercase small text-nowrap">
                     <i class="bi bi-shield-check me-1"></i> Staff Clinical Lab History Access
                 </span>
             </div>
         @endif
     </div>
 
-    {{-- 2. SEARCH & ROLE FILTER TOOLBAR (All role buttons accessible so staff can find anyone) --}}
+    {{-- 2. SEARCH & ROLE FILTER TOOLBAR --}}
     <div class="row g-3 mb-4 align-items-center">
-        <div class="col-md-6 col-lg-5">
-            <div class="input-group input-group-sm border rounded-3 overflow-hidden" style="border-color: var(--border-color) !important;">
-                <span class="input-group-text border-0 text-muted" style="background-color: var(--bg-card); color: var(--text-muted) !important;">
+        {{-- Search Input (Left Column) --}}
+        <div class="col-12 col-md-5">
+            <div class="input-group border rounded-3 overflow-hidden shadow-sm" style="border-color: var(--border-color) !important; background-color: var(--bg-card); height: 38px;">
+                <span class="input-group-text border-0 ps-3" style="background-color: var(--bg-card); color: var(--text-muted) !important;">
                     <i class="bi bi-search"></i>
                 </span>
-                <input type="text" id="userDirectorySearch" class="form-control border-0 shadow-none py-2" style="background-color: var(--bg-card); color: var(--text-main);" placeholder="Search name, email, or phone...">
+                <input type="text" id="userDirectorySearch" class="form-control border-0 shadow-none ps-2" style="background-color: var(--bg-card); color: var(--text-main); font-size: 0.825rem; height: 38px;" placeholder="Search name, email, or phone...">
             </div>
         </div>
 
-        <div class="col-md-6 col-lg-7 text-md-end">
-            <div class="btn-group btn-group-sm shadow-sm" role="group">
-                <button type="button" class="btn btn-accent filter-role-btn active" data-role="all">All</button>
-                <button type="button" class="btn btn-outline-secondary filter-role-btn" data-role="user">Patients</button>
-                <button type="button" class="btn btn-outline-secondary filter-role-btn" data-role="staff">Staff</button>
-                <button type="button" class="btn btn-outline-secondary filter-role-btn" data-role="lab_tech">Lab Tech</button>
-                <button type="button" class="btn btn-outline-secondary filter-role-btn" data-role="admin">Admins</button>
+        {{-- Role Filter Buttons (Right Column) --}}
+        <div class="col-12 col-md-7 text-start text-md-end">
+            <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-md-end" role="group">
+                <button type="button" class="role-filter-btn active filter-role-btn" data-role="all">ALL</button>
+                <button type="button" class="role-filter-btn filter-role-btn" data-role="user">PATIENTS</button>
+                <button type="button" class="role-filter-btn filter-role-btn" data-role="staff">STAFF</button>
+                <button type="button" class="role-filter-btn filter-role-btn" data-role="lab_tech">LAB TECH</button>
+                <button type="button" class="role-filter-btn filter-role-btn" data-role="admin">ADMINS</button>
             </div>
         </div>
     </div>
@@ -59,7 +62,7 @@
     {{-- 3. DIRECTORY TABLE CARD --}}
     <div class="card p-0 border overflow-hidden shadow-sm" style="background-color: var(--bg-card); border-color: var(--border-color) !important; border-radius: 14px;">
         <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0 custom-directory-table" style="color: var(--text-main);">
+            <table class="table table-hover align-middle mb-0 custom-directory-table" style="color: var(--text-main); min-width: 680px;">
                 <thead class="text-muted small uppercase border-bottom" style="background-color: rgba(0, 0, 0, 0.03); border-color: var(--border-color) !important; font-size: 0.72rem;">
                     <tr>
                         <th class="ps-4 py-3" style="width: 38%;">User Profile</th>
@@ -96,13 +99,13 @@
                             
                             <td class="ps-4 py-3">
                                 <div class="d-flex align-items-center gap-3">
-                                    <div class="avatar-circle rounded-circle d-flex align-items-center justify-content-center text-accent fw-bold" 
+                                    <div class="avatar-circle rounded-circle d-flex align-items-center justify-content-center text-accent fw-bold flex-shrink-0" 
                                          style="width: 42px; height: 42px; font-size: 0.85rem; background-color: rgba(25, 211, 140, 0.1); border: 1.5px solid var(--brand-accent);">
                                         {{ $initials ?: 'U' }}
                                     </div>
                                     <div>
-                                        <div class="fw-bold h6 mb-0" style="color: var(--text-main) !important;">{{ strtoupper($user->name) }}</div>
-                                        <div class="text-muted small" style="font-size: 0.72rem; color: var(--text-muted) !important;">
+                                        <div class="fw-bold h6 mb-0 text-break" style="color: var(--text-main) !important;">{{ strtoupper($user->name) }}</div>
+                                        <div class="text-muted small text-break" style="font-size: 0.72rem; color: var(--text-muted) !important;">
                                             {{ $user->email }}
                                             @if($user->phone)
                                                 <span class="mx-1">&bull;</span> {{ $user->phone }}
@@ -113,13 +116,13 @@
                             </td>
 
                             <td>
-                                <span class="badge border {{ $roleClass }} fw-bold small uppercase px-2.5 py-1.5 rounded" style="font-size: 0.65rem;">
+                                <span class="badge border {{ $roleClass }} fw-bold small uppercase px-2.5 py-1.5 rounded text-nowrap" style="font-size: 0.65rem;">
                                     {{ $roleLabel }}
                                 </span>
                             </td>
 
                             <td>
-                                <div class="d-flex align-items-center gap-2">
+                                <div class="d-flex align-items-center gap-2 text-nowrap">
                                     <span class="status-indicator rounded-circle {{ $user->trashed() ? 'bg-danger' : 'bg-success' }}" style="width: 8px; height: 8px; display: inline-block;"></span>
                                     <span class="text-{{ $user->trashed() ? 'danger' : 'success' }} fw-bold small" style="font-size: 0.75rem;">
                                         {{ $user->trashed() ? 'DEACTIVATED' : 'ACTIVE' }}
@@ -127,7 +130,7 @@
                                 </div>
                             </td>
 
-                            <td class="text-end pe-4">
+                            <td class="text-end pe-4 text-nowrap">
                                 <div class="d-flex gap-2 justify-content-end align-items-center">
                                     {{-- CLINICAL LAB HISTORY ACCESS: Accessible by all employees (Staff, Lab Tech, Admin) for ANY profile (including Admins) --}}
                                     @if(Auth::user()->isEmployee())
@@ -186,8 +189,8 @@
                 <input type="hidden" name="target_user_id" id="gate_target_user_id">
                 <input type="hidden" name="access_reason" id="gate_access_reason">
 
-                <div class="modal-body p-4 text-start">
-                    <p class="small mb-3" style="color: var(--text-muted) !important;">
+                <div class="modal-body p-3 p-sm-4 text-start">
+                    <p class="small mb-3 text-break" style="color: var(--text-muted) !important;">
                         You are requesting access to the clinical and laboratory records of <strong id="gate_patient_name" style="color: var(--text-main) !important;"></strong>. In compliance with <strong>Republic Act No. 10173 (Data Privacy Act of 2012)</strong>, please indicate your clinical justification:
                     </p>
                     
@@ -213,9 +216,9 @@
                         <div class="mt-1"><small class="text-muted smaller italic">Minimum 5 characters required for validation.</small></div>
                     </div>
                 </div>
-                <div class="modal-footer border-top py-2.5 p-3 d-flex gap-2" style="border-color: var(--border-color) !important;">
-                    <button type="button" class="btn btn-outline-secondary btn-sm fw-bold uppercase px-3 py-2" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-accent btn-sm fw-bold uppercase px-4 py-2 shadow-sm d-inline-flex align-items-center gap-1.5">
+                <div class="modal-footer border-top py-2.5 p-3 d-flex flex-column flex-sm-row gap-2" style="border-color: var(--border-color) !important;">
+                    <button type="button" class="btn btn-outline-secondary btn-sm fw-bold uppercase px-3 py-2 w-100 w-sm-auto text-center" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-accent btn-sm fw-bold uppercase px-4 py-2 shadow-sm d-inline-flex align-items-center justify-content-center gap-1.5 w-100 w-sm-auto">
                         <i class="bi bi-unlock-fill"></i>
                         <span>Authorize & Open Records</span>
                     </button>
@@ -225,6 +228,66 @@
     </div>
 </div>
 @endsection
+
+@push('styles')
+<style>
+/* Custom Unified Role Filter Buttons */
+.role-filter-btn {
+    height: 38px;
+    padding: 0 16px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-radius: 8px;
+    border: 1.5px solid var(--border-color);
+    background-color: var(--bg-card);
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+    box-shadow: none;
+    outline: none;
+    white-space: nowrap;
+}
+
+.role-filter-btn:hover {
+    color: var(--brand-accent) !important;
+    border-color: var(--brand-accent) !important;
+    background-color: rgba(25, 211, 140, 0.08);
+}
+
+.role-filter-btn.active {
+    background-color: var(--brand-accent) !important;
+    border-color: var(--brand-accent) !important;
+    color: #1c232d !important;
+    font-weight: 800 !important;
+    box-shadow: 0 0 12px rgba(25, 211, 140, 0.25) !important;
+}
+
+/* Explicit Width Containment for Header Actions */
+.create-user-box a {
+    width: auto !important;
+}
+
+@media (max-width: 575.98px) {
+    .create-user-box {
+        width: 100% !important;
+    }
+    .create-user-box a {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+    .role-filter-btn {
+        flex: 1 1 auto;
+        padding: 0 10px;
+        font-size: 0.7rem;
+    }
+}
+</style>
+@endpush
 
 @push('scripts')
 <script>
@@ -256,11 +319,9 @@ document.addEventListener('DOMContentLoaded', () => {
         filterButtons.forEach(btn => {
             btn.addEventListener('click', function() {
                 filterButtons.forEach(b => {
-                    b.classList.remove('btn-accent', 'active');
-                    b.classList.add('btn-outline-secondary');
+                    b.classList.remove('active');
                 });
-                this.classList.remove('btn-outline-secondary');
-                this.classList.add('btn-accent', 'active');
+                this.classList.add('active');
                 currentRoleFilter = this.getAttribute('data-role');
                 applyFilters();
             });

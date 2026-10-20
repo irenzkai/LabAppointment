@@ -32,9 +32,11 @@ class VerifyEmailController extends Controller
         if (str_starts_with($digits, '639') && strlen($digits) === 12) {
             return '09' . substr($digits, 3);
         }
+
         if (str_starts_with($digits, '9') && strlen($digits) === 10) {
             return '09' . $digits;
         }
+
         if (str_starts_with($digits, '09') && strlen($digits) === 11) {
             return $digits;
         }
@@ -109,12 +111,13 @@ class VerifyEmailController extends Controller
      */
     protected function dispatchSms(string $phone, string $message): bool
     {
-        $apiToken = config('services.philsms.token', env('PHILSMS_API_TOKEN', '5340|yngJ05kuaZ64OQ2Q6L0QCcJBT1vWxPVvT8cILesX57c6abd5'));
-        $endpoint = config('services.philsms.endpoint', env('PHILSMS_ENDPOINT', 'https://dashboard.philsms.com/api/v3/sms/send'));
-        $senderId = config('services.philsms.sender_id', env('PHILSMS_SENDER_ID', 'PhilSMS'));
+        $apiToken = config('services.philsms.token');
+        $endpoint = config('services.philsms.endpoint', 'https://dashboard.philsms.com/api/v3/sms/send');
+        $senderId = config('services.philsms.sender_id', 'PhilSMS');
 
         // Format number to international format: 639XXXXXXXXX as required by PhilSMS
         $digits = preg_replace('/[^0-9]/', '', $phone);
+
         if (str_starts_with($digits, '09') && strlen($digits) === 11) {
             $recipient = '63' . substr($digits, 1);
         } elseif (str_starts_with($digits, '9') && strlen($digits) === 10) {
@@ -207,6 +210,7 @@ class VerifyEmailController extends Controller
                     'message' => 'Failed to dispatch SMS verification code. Please check your network or try again shortly.'
                 ], 500);
             }
+
             return back()->withErrors(['phone' => 'Failed to dispatch SMS verification code.']);
         }
 
@@ -251,6 +255,7 @@ class VerifyEmailController extends Controller
                         'message' => 'The entered SMS verification code is incorrect or has expired.'
                     ], 422);
                 }
+
                 return back()->withErrors(['otp' => 'The entered SMS verification code is incorrect or has expired.']);
             }
 
@@ -271,6 +276,7 @@ class VerifyEmailController extends Controller
                         'message' => 'This mobile phone number has already been verified on another account.'
                     ], 422);
                 }
+
                 return back()->withErrors(['phone' => 'This mobile phone number has already been verified on another account.']);
             }
 
@@ -321,6 +327,7 @@ class VerifyEmailController extends Controller
                     'message' => 'This email address has already been verified on another account. Please change your email address to continue.'
                 ], 422);
             }
+
             return back()->withErrors(['email' => 'This email address has already been verified on another account. Please change your email address to continue.']);
         }
 
@@ -335,6 +342,7 @@ class VerifyEmailController extends Controller
                     'message' => 'The entered verification code is incorrect or has expired.'
                 ], 422);
             }
+
             return back()->withErrors(['otp' => 'The entered verification code is incorrect or has expired.']);
         }
 
@@ -375,6 +383,7 @@ class VerifyEmailController extends Controller
     public function reactivateNotice(Request $request): View|RedirectResponse
     {
         $userId = session('reactivate_user_id') ?? Cache::get("reactivate_ip_{$request->ip()}");
+
         if (!$userId && $request->filled('email')) {
             $userByEmail = User::onlyTrashed()->where('email', strtolower(trim($request->input('email'))))->first();
             $userId = $userByEmail?->id;
@@ -385,6 +394,7 @@ class VerifyEmailController extends Controller
         }
 
         $user = User::onlyTrashed()->find($userId);
+
         if (!$user) {
             return redirect()->route('login');
         }
@@ -403,6 +413,7 @@ class VerifyEmailController extends Controller
         if ($emailConflict && $phoneConflict) {
             session()->forget(['reactivate_user_id', 'email_otp_code']);
             Cache::forget("reactivate_ip_{$request->ip()}");
+
             return redirect()->route('login')->withErrors([
                 'email' => 'This account has been permanently retired because its email address and phone number are already verified on another active account.'
             ]);
@@ -411,6 +422,7 @@ class VerifyEmailController extends Controller
         if ($emailConflict) {
             session()->forget(['reactivate_user_id', 'email_otp_code']);
             Cache::forget("reactivate_ip_{$request->ip()}");
+
             return redirect()->route('login')->withErrors([
                 'email' => 'This account cannot be reactivated because its email address has already been claimed and verified by another active account.'
             ]);
@@ -423,6 +435,7 @@ class VerifyEmailController extends Controller
         }
 
         $email = $user->email;
+
         return view('auth.reactivate-account', compact('user', 'email'));
     }
 
@@ -445,6 +458,7 @@ class VerifyEmailController extends Controller
                     'message' => 'No pending reactivation request found. Please log in again to restart verification.',
                 ], 422);
             }
+
             return redirect()->route('login')->withErrors(['email' => 'Session expired. Please log in again.']);
         }
 
@@ -466,6 +480,7 @@ class VerifyEmailController extends Controller
                     'message' => 'The entered verification code is incorrect or has expired.',
                 ], 422);
             }
+
             return back()->withErrors(['otp' => 'The entered verification code is incorrect or has expired.']);
         }
 
@@ -485,12 +500,14 @@ class VerifyEmailController extends Controller
             session()->forget(['reactivate_user_id', 'email_otp_code']);
             Cache::forget("email_otp_{$userId}");
             Cache::forget("reactivate_ip_{$request->ip()}");
+
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'success' => false,
                     'message' => 'This account has been permanently retired because its email address and phone number are already verified on another active account.'
                 ], 422);
             }
+
             return redirect()->route('login')->withErrors([
                 'email' => 'This account has been permanently retired because its email address and phone number are already verified on another active account.'
             ]);
@@ -500,12 +517,14 @@ class VerifyEmailController extends Controller
             session()->forget(['reactivate_user_id', 'email_otp_code']);
             Cache::forget("email_otp_{$userId}");
             Cache::forget("reactivate_ip_{$request->ip()}");
+
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'success' => false,
                     'message' => 'This account cannot be reactivated because its email address has already been claimed and verified by another active account.'
                 ], 422);
             }
+
             return redirect()->route('login')->withErrors([
                 'email' => 'This account cannot be reactivated because its email address has already been claimed and verified by another active account.'
             ]);
@@ -524,6 +543,7 @@ class VerifyEmailController extends Controller
 
         if ($request->expectsJson() || $request->is('api/*')) {
             $token = $user->createToken('mobile-patient-token')->plainTextToken;
+
             return response()->json([
                 'success' => true,
                 'token' => $token,
@@ -534,6 +554,6 @@ class VerifyEmailController extends Controller
 
         Auth::login($user);
 
-        return redirect()->route('main')->with('success', 'Welcome back! Your account has been successfully reactivated.');
+        return redirect()->route('main')->with('success', 'Welcome back! Your account has been reactivated.');
     }
 }

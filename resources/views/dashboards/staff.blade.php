@@ -1,16 +1,17 @@
 @extends('layouts.app')
 @section('title', 'Staff Panel')
 @section('content')
-<div class="container-fluid text-start animate-page py-4">
+<div class="container-fluid text-start animate-page py-3 py-sm-4 px-3 px-sm-4" id="staff-panel-root">
     {{-- Staff Header --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
-        <div>
-            <h2 class="text-accent fw-bold mb-0 uppercase tracking-tighter">Staff Panel</h2>
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-3 mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
+        <div class="me-sm-3 flex-grow-1">
+            <h2 class="text-accent fw-bold mb-1 uppercase tracking-tighter fs-3 fs-md-2" style="letter-spacing: 1px;">Staff Panel</h2>
             <p class="text-secondary small mb-0">Overview of clinical operations, appointment workflows, and patient management.</p>
         </div>
-        <div>
-            <a href="{{ route('appointments.index', ['view' => 'queue']) }}" class="btn btn-accent fw-bold btn-sm py-2 px-3 uppercase">
-                <i class="bi bi-list-check me-1.5"></i> Open Master Queue
+        <div class="flex-shrink-0 queue-btn-box">
+            <a href="{{ route('appointments.index', ['view' => 'queue']) }}" class="btn btn-accent fw-bold btn-sm py-2 px-3.5 uppercase shadow-sm text-decoration-none d-inline-flex align-items-center gap-1.5" style="border-radius: 8px; white-space: nowrap; font-size: 0.78rem;">
+                <i class="bi bi-list-check fs-6"></i>
+                <span>Open Master Queue</span>
             </a>
         </div>
     </div>
@@ -19,55 +20,55 @@
     <div class="row g-3 mb-4 row-cols-2 row-cols-md-3 row-cols-xl-5">
         <div class="col">
             <a href="{{ route('services.manage') }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="text-accent fs-3"><i class="bi bi-list-stars"></i></div>
-                    <div>
-                        <div class="fw-bold text-main small uppercase">Services List</div>
-                        <small class="text-secondary smaller">Add, edit & archive</small>
+                <div class="d-flex align-items-center gap-2 gap-sm-3">
+                    <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-list-stars"></i></div>
+                    <div class="min-w-0">
+                        <div class="fw-bold text-main small uppercase text-truncate">Services List</div>
+                        <small class="text-secondary smaller d-block text-truncate">Add, edit & archive</small>
                     </div>
                 </div>
             </a>
         </div>
         <div class="col">
             <a href="{{ route('appointments.index', ['view' => 'queue']) }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="text-accent fs-3"><i class="bi bi-kanban"></i></div>
-                    <div>
-                        <div class="fw-bold text-main small uppercase">Appointment List</div>
-                        <small class="text-secondary smaller">Approval workflow</small>
+                <div class="d-flex align-items-center gap-2 gap-sm-3">
+                    <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-kanban"></i></div>
+                    <div class="min-w-0">
+                        <div class="fw-bold text-main small uppercase text-truncate">Appointment List</div>
+                        <small class="text-secondary smaller d-block text-truncate">Approval workflow</small>
                     </div>
                 </div>
             </a>
         </div>
         <div class="col">
             <a href="{{ route('admin.users.index') }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="text-accent fs-3"><i class="bi bi-people"></i></div>
-                    <div>
-                        <div class="fw-bold text-main small uppercase">User List</div>
-                        <small class="text-secondary smaller">Lab history archive</small>
+                <div class="d-flex align-items-center gap-2 gap-sm-3">
+                    <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-people"></i></div>
+                    <div class="min-w-0">
+                        <div class="fw-bold text-main small uppercase text-truncate">User List</div>
+                        <small class="text-secondary smaller d-block text-truncate">Lab history archive</small>
                     </div>
                 </div>
             </a>
         </div>
         <div class="col">
             <a href="{{ route('admin.payment-providers.index') }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="text-accent fs-3"><i class="bi bi-qr-code-scan"></i></div>
-                    <div>
-                        <div class="fw-bold text-main small uppercase">Payment QRs</div>
-                        <small class="text-secondary smaller">Gateways & channels</small>
+                <div class="d-flex align-items-center gap-2 gap-sm-3">
+                    <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-qr-code-scan"></i></div>
+                    <div class="min-w-0">
+                        <div class="fw-bold text-main small uppercase text-truncate">Payment QRs</div>
+                        <small class="text-secondary smaller d-block text-truncate">Gateways & channels</small>
                     </div>
                 </div>
             </a>
         </div>
         <div class="col">
             <a href="{{ route('admin.appointment-settings') }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="text-accent fs-3"><i class="bi bi-clock-history"></i></div>
-                    <div>
-                        <div class="fw-bold text-main small uppercase">Schedule Editor</div>
-                        <small class="text-secondary smaller">Operating hours & slots</small>
+                <div class="d-flex align-items-center gap-2 gap-sm-3">
+                    <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-clock-history"></i></div>
+                    <div class="min-w-0">
+                        <div class="fw-bold text-main small uppercase text-truncate">Schedule Editor</div>
+                        <small class="text-secondary smaller d-block text-truncate">Operating hours & slots</small>
                     </div>
                 </div>
             </a>
@@ -76,85 +77,85 @@
 
     {{-- Top Metrics Summary Grid --}}
     <div class="row g-3 mb-4">
-        <div class="col-md-4">
-            <div class="card p-4 border-accent bg-card shadow-sm h-100 text-start">
+        <div class="col-12 col-md-4">
+            <div class="card p-3 p-sm-4 border-accent bg-card shadow-sm h-100 text-start">
                 <small class="text-secondary fw-bold uppercase fs-x-small mb-1">Total Patient Accounts</small>
-                <h2 class="text-main fw-bold mb-1">{{ $totalPatientAccounts }}</h2>
+                <h2 class="text-main fw-bold mb-1 fs-3 fs-md-2">{{ $totalPatientAccounts }}</h2>
                 <span class="text-muted smaller">*Includes staff/admin accounts labeled as patients</span>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card p-4 border-warning bg-card shadow-sm h-100 text-start">
+        <div class="col-12 col-md-4">
+            <div class="card p-3 p-sm-4 border-warning bg-card shadow-sm h-100 text-start">
                 <small class="text-secondary fw-bold uppercase fs-x-small mb-1">Appointments Needing Action</small>
-                <h2 class="text-warning fw-bold mb-1">{{ $needingActionCount }}</h2>
+                <h2 class="text-warning fw-bold mb-1 fs-3 fs-md-2">{{ $needingActionCount }}</h2>
                 <span class="text-warning small fw-semibold">Pending approval, sampling, or verification</span>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card p-4 border-info bg-card shadow-sm h-100 text-start">
+        <div class="col-12 col-md-4">
+            <div class="card p-3 p-sm-4 border-info bg-card shadow-sm h-100 text-start">
                 <small class="text-secondary fw-bold uppercase fs-x-small mb-1">Completed & Released</small>
-                <h2 class="text-info fw-bold mb-1">{{ $statusCounts['released'] }}</h2>
+                <h2 class="text-info fw-bold mb-1 fs-3 fs-md-2">{{ $statusCounts['released'] }}</h2>
                 <span class="text-info small fw-semibold">Results delivered to patients</span>
             </div>
         </div>
     </div>
 
     {{-- Status Breakdown Metrics (Includes Expired Status) --}}
-    <div class="card p-4 border-secondary bg-card shadow-sm mb-4">
+    <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm mb-4">
         <h6 class="text-accent fw-bold uppercase small mb-3"><i class="bi bi-pie-chart-fill me-1.5"></i> Appointment Status Overview</h6>
         <div class="row g-2 text-center">
             <div class="col-6 col-sm-3 col-md-2">
-                <div class="p-2.5 rounded border border-secondary border-opacity-25 bg-secondary bg-opacity-10">
-                    <small class="text-secondary d-block fw-bold fs-x-small uppercase">Pending</small>
-                    <span class="fs-5 fw-bold text-main">{{ $statusCounts['pending'] }}</span>
+                <div class="p-2 p-sm-2.5 rounded border border-secondary border-opacity-25 bg-secondary bg-opacity-10 h-100">
+                    <small class="text-secondary d-block fw-bold fs-x-small uppercase text-truncate">Pending</small>
+                    <span class="fs-6 fs-sm-5 fw-bold text-main">{{ $statusCounts['pending'] }}</span>
                 </div>
             </div>
             <div class="col-6 col-sm-3 col-md-2">
-                <div class="p-2.5 rounded border border-info border-opacity-25 bg-info bg-opacity-10">
-                    <small class="text-info d-block fw-bold fs-x-small uppercase">Approved</small>
-                    <span class="fs-5 fw-bold text-info">{{ $statusCounts['approved'] }}</span>
+                <div class="p-2 p-sm-2.5 rounded border border-info border-opacity-25 bg-info bg-opacity-10 h-100">
+                    <small class="text-info d-block fw-bold fs-x-small uppercase text-truncate">Approved</small>
+                    <span class="fs-6 fs-sm-5 fw-bold text-info">{{ $statusCounts['approved'] }}</span>
                 </div>
             </div>
             <div class="col-6 col-sm-3 col-md-2">
-                <div class="p-2.5 rounded border border-info border-opacity-25 bg-info bg-opacity-10">
-                    <small class="text-info d-block fw-bold fs-x-small uppercase">Tested</small>
-                    <span class="fs-5 fw-bold text-info">{{ $statusCounts['tested'] }}</span>
+                <div class="p-2 p-sm-2.5 rounded border border-info border-opacity-25 bg-info bg-opacity-10 h-100">
+                    <small class="text-info d-block fw-bold fs-x-small uppercase text-truncate">Tested</small>
+                    <span class="fs-6 fs-sm-5 fw-bold text-info">{{ $statusCounts['tested'] }}</span>
                 </div>
             </div>
             <div class="col-6 col-sm-3 col-md-2">
-                <div class="p-2.5 rounded border border-info border-opacity-25 bg-info bg-opacity-10">
-                    <small class="text-info d-block fw-bold fs-x-small uppercase">Encoded</small>
-                    <span class="fs-5 fw-bold text-info">{{ $statusCounts['encoded'] }}</span>
+                <div class="p-2 p-sm-2.5 rounded border border-info border-opacity-25 bg-info bg-opacity-10 h-100">
+                    <small class="text-info d-block fw-bold fs-x-small uppercase text-truncate">Encoded</small>
+                    <span class="fs-6 fs-sm-5 fw-bold text-info">{{ $statusCounts['encoded'] }}</span>
                 </div>
             </div>
             <div class="col-6 col-sm-3 col-md-2">
-                <div class="p-2.5 rounded border border-success border-opacity-25 bg-success bg-opacity-10">
-                    <small class="text-accent d-block fw-bold fs-x-small uppercase">Released</small>
-                    <span class="fs-5 fw-bold text-accent">{{ $statusCounts['released'] }}</span>
+                <div class="p-2 p-sm-2.5 rounded border border-success border-opacity-25 bg-success bg-opacity-10 h-100">
+                    <small class="text-accent d-block fw-bold fs-x-small uppercase text-truncate">Released</small>
+                    <span class="fs-6 fs-sm-5 fw-bold text-accent">{{ $statusCounts['released'] }}</span>
                 </div>
             </div>
             <div class="col-6 col-sm-3 col-md-2">
-                <div class="p-2.5 rounded border border-danger border-opacity-25 bg-danger bg-opacity-10">
-                    <small class="text-danger d-block fw-bold fs-x-small uppercase">Returned</small>
-                    <span class="fs-5 fw-bold text-danger">{{ $statusCounts['returned'] }}</span>
+                <div class="p-2 p-sm-2.5 rounded border border-danger border-opacity-25 bg-danger bg-opacity-10 h-100">
+                    <small class="text-danger d-block fw-bold fs-x-small uppercase text-truncate">Returned</small>
+                    <span class="fs-6 fs-sm-5 fw-bold text-danger">{{ $statusCounts['returned'] }}</span>
                 </div>
             </div>
             <div class="col-6 col-sm-3 col-md-2">
-                <div class="p-2.5 rounded border border-danger border-opacity-25 bg-danger bg-opacity-10">
-                    <small class="text-danger d-block fw-bold fs-x-small uppercase">Retest</small>
-                    <span class="fs-5 fw-bold text-danger">{{ $statusCounts['retest'] }}</span>
+                <div class="p-2 p-sm-2.5 rounded border border-danger border-opacity-25 bg-danger bg-opacity-10 h-100">
+                    <small class="text-danger d-block fw-bold fs-x-small uppercase text-truncate">Retest</small>
+                    <span class="fs-6 fs-sm-5 fw-bold text-danger">{{ $statusCounts['retest'] }}</span>
                 </div>
             </div>
             <div class="col-6 col-sm-3 col-md-2">
-                <div class="p-2.5 rounded border border-secondary border-opacity-25 bg-secondary bg-opacity-10">
-                    <small class="text-muted d-block fw-bold fs-x-small uppercase">Canceled</small>
-                    <span class="fs-5 fw-bold text-muted">{{ $statusCounts['canceled'] }}</span>
+                <div class="p-2 p-sm-2.5 rounded border border-secondary border-opacity-25 bg-secondary bg-opacity-10 h-100">
+                    <small class="text-muted d-block fw-bold fs-x-small uppercase text-truncate">Canceled</small>
+                    <span class="fs-6 fs-sm-5 fw-bold text-muted">{{ $statusCounts['canceled'] }}</span>
                 </div>
             </div>
             <div class="col-6 col-sm-3 col-md-2">
-                <div class="p-2.5 rounded border border-danger border-opacity-25 bg-danger bg-opacity-10">
-                    <small class="text-danger d-block fw-bold fs-x-small uppercase">Expired</small>
-                    <span class="fs-5 fw-bold text-danger">{{ $statusCounts['expired'] }}</span>
+                <div class="p-2 p-sm-2.5 rounded border border-danger border-opacity-25 bg-danger bg-opacity-10 h-100">
+                    <small class="text-danger d-block fw-bold fs-x-small uppercase text-truncate">Expired</small>
+                    <span class="fs-6 fs-sm-5 fw-bold text-danger">{{ $statusCounts['expired'] }}</span>
                 </div>
             </div>
         </div>
@@ -163,9 +164,9 @@
     {{-- Main Visual Analytics & Needing Action Table --}}
     <div class="row g-4 mb-4">
         {{-- Appointments Trend Graph with Dynamic Timeframe Selector --}}
-        <div class="col-lg-6">
-            <div class="card p-4 border-secondary bg-card shadow-sm h-100 text-start">
-                <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="col-12 col-lg-6">
+            <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm h-100 text-start">
+                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2 mb-3">
                     <h6 class="text-accent fw-bold uppercase small mb-0">
                         <i class="bi bi-graph-up-arrow me-1.5"></i> <span id="trendChartTitle">Monthly</span> Booking Trends
                     </h6>
@@ -175,17 +176,17 @@
                         <button type="button" class="btn btn-outline-accent" id="btnTrendYearly" onclick="switchTrendTimeframe('yearly')">Yearly</button>
                     </div>
                 </div>
-                <div style="height: 280px;">
+                <div style="height: 280px; position: relative;">
                     <canvas id="monthlyTrendChart"></canvas>
                 </div>
             </div>
         </div>
 
         {{-- Status Distribution Chart --}}
-        <div class="col-lg-6">
-            <div class="card p-4 border-secondary bg-card shadow-sm h-100 text-start">
+        <div class="col-12 col-lg-6">
+            <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm h-100 text-start">
                 <h6 class="text-accent fw-bold uppercase small mb-3"><i class="bi bi-donut-chart-fill me-1.5"></i>Status Distribution Breakdown</h6>
-                <div style="height: 280px;" class="d-flex justify-content-center">
+                <div style="height: 280px; position: relative;" class="d-flex justify-content-center">
                     <canvas id="statusDoughnutChart"></canvas>
                 </div>
             </div>
@@ -194,12 +195,12 @@
 
     {{-- Appointments Needing Action Table --}}
     <div class="card p-0 border-secondary bg-card shadow-sm mb-5 text-start overflow-hidden">
-        <div class="p-3 bg-brand-dark border-bottom border-secondary d-flex justify-content-between align-items-center">
+        <div class="p-3 bg-brand-dark border-bottom border-secondary d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
             <h6 class="text-accent fw-bold mb-0 uppercase small"><i class="bi bi-exclamation-circle-fill me-1.5"></i> Appointments Needing Action (Latest)</h6>
-            <a href="{{ route('appointments.index', ['view' => 'queue', 'status' => 'needs_action']) }}" class="text-accent small fw-bold text-decoration-none">View All Needing Action &rarr;</a>
+            <a href="{{ route('appointments.index', ['view' => 'queue', 'status' => 'needs_action']) }}" class="text-accent small fw-bold text-decoration-none text-nowrap">View All Needing Action &rarr;</a>
         </div>
         <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0" style="color: var(--text-main);">
+            <table class="table table-hover align-middle mb-0" style="color: var(--text-main); min-width: 580px;">
                 <thead class="small uppercase bg-black text-secondary" style="font-size: 0.7rem;">
                     <tr>
                         <th class="ps-4 py-3">Patient / Entity</th>
@@ -214,14 +215,14 @@
                         <tr class="border-secondary border-opacity-10">
                             <td class="ps-4">
                                 <div class="d-flex align-items-center gap-2 flex-wrap">
-                                    <span class="fw-bold text-main small">{{ $app->batch_id && $app->organization_name ? strtoupper($app->organization_name) : $app->patient_name }}</span>
+                                    <span class="fw-bold text-main small text-break">{{ $app->batch_id && $app->organization_name ? strtoupper($app->organization_name) : $app->patient_name }}</span>
                                     @if($app->batch_id)
                                         <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-1.5 py-0.5 rounded uppercase" style="font-size: 0.6rem;">BULK</span>
                                     @elseif($app->dependent_id)
                                         <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-1.5 py-0.5 rounded uppercase" style="font-size: 0.6rem;">DEPENDENT</span>
                                     @endif
                                 </div>
-                                <div class="text-muted x-small mt-0.5" style="font-size: 0.65rem;">
+                                <div class="text-muted x-small mt-0.5 text-break" style="font-size: 0.65rem;">
                                     Ref: #{{ $app->id }}
                                     @if($app->batch_id)
                                         <span class="mx-1">&bull;</span><span class="text-secondary font-monospace">BATCH #{{ $app->batch_id }}</span>
@@ -231,19 +232,19 @@
                                     @endif
                                 </div>
                             </td>
-                            <td>
+                            <td class="text-nowrap">
                                 <div class="small fw-semibold">{{ $app->appointment_date ? $app->appointment_date->format('M d, Y') : 'N/A' }}</div>
                                 <small class="text-accent">{{ date('h:i A', strtotime($app->time_slot)) }}</small>
                             </td>
-                            <td>
+                            <td class="text-nowrap">
                                 <span class="badge border border-warning text-warning uppercase px-2 py-1 small">
                                     {{ strtoupper($app->status) }}
                                 </span>
                             </td>
-                            <td>
+                            <td class="text-nowrap">
                                 <span class="small fw-semibold">{{ $app->payment_method }} ({{ strtoupper($app->payment_status) }})</span>
                             </td>
-                            <td class="pe-4 text-end">
+                            <td class="pe-4 text-end text-nowrap">
                                 <a href="{{ route('appointments.index', ['view' => 'queue', 'id' => $app->id]) }}" class="btn btn-sm btn-accent fw-bold uppercase">
                                     Process
                                 </a>
@@ -262,10 +263,29 @@
     </div>
 </div>
 
+<style>
+/* Header Action Sizing */
+.queue-btn-box a {
+    width: auto !important;
+}
+
+@media (max-width: 575.98px) {
+    .queue-btn-box {
+        width: 100% !important;
+    }
+    .queue-btn-box a {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+}
+</style>
+
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    const isMobileViewport = window.innerWidth < 768;
+
     // 1. Dynamic Appointment Booking Trends Chart (Daily / Monthly / Yearly)
     const trendDataMap = {
         daily: {
@@ -367,8 +387,8 @@ document.addEventListener('DOMContentLoaded', () => {
             maintainAspectRatio: false,
             plugins: {
                 legend: { 
-                    position: 'right', 
-                    labels: { color: '#94a3b8', font: { size: 12, weight: 'bold' }, padding: 10 } 
+                    position: isMobileViewport ? 'bottom' : 'right', 
+                    labels: { color: '#94a3b8', font: { size: 11, weight: 'bold' }, padding: 8 } 
                 },
                 tooltip: {
                     enabled: true,
@@ -377,11 +397,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     bodyColor: '#ffffff',
                     borderColor: '#19d38c',
                     borderWidth: 1.5,
-                    padding: 14,
+                    padding: 12,
                     boxPadding: 6,
                     usePointStyle: true,
-                    titleFont: { size: 14, weight: 'bold' },
-                    bodyFont: { size: 14, weight: 'bold' },
+                    titleFont: { size: 13, weight: 'bold' },
+                    bodyFont: { size: 13, weight: 'bold' },
                     callbacks: {
                         label: function(context) {
                             const label = context.label || '';

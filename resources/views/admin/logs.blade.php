@@ -5,13 +5,19 @@
 @section('content')
 <style>
     /* Custom pagination styling to match the neon theme */
-    .pagination { margin-bottom: 0; gap: 5px; }
+    .pagination { 
+        margin-bottom: 0; 
+        gap: 4px; 
+        flex-wrap: wrap;
+        justify-content: center;
+    }
     .page-item .page-link { 
         background-color: var(--bg-card) !important; 
         border-color: var(--border-color) !important; 
         color: var(--text-main) !important; 
         padding: 0.5rem 1rem;
         border-radius: 6px;
+        transition: all 0.2s ease-in-out;
     }
     .page-item.active .page-link { 
         background-color: var(--brand-accent) !important; 
@@ -28,18 +34,25 @@
         background-color: rgba(25, 211, 140, 0.08) !important; 
         color: var(--brand-accent) !important; 
     }
+
+    @media (max-width: 575.98px) {
+        .page-item .page-link {
+            padding: 0.35rem 0.65rem;
+            font-size: 0.75rem;
+        }
+    }
 </style>
 
-<div class="row mb-4 align-items-end text-start animate-page">
+<div class="row mb-4 align-items-end text-start animate-page px-2 px-sm-0">
     <div class="col-12 mb-2">
-        <h2 class="text-accent fw-bold mb-0 uppercase tracking-tighter" style="font-size: 1.85rem; letter-spacing: 1px;">System Logs</h2>
+        <h2 class="text-accent fw-bold mb-0 uppercase tracking-tighter fs-3 fs-md-2" style="letter-spacing: 1px;">System Logs</h2>
         <p class="text-secondary small mb-0">Comprehensive history of all internal activities, clinical verifications, and patient handshakes.</p>
     </div>
 </div>
 
 {{-- Search and Filter Controls Panel --}}
-<div class="row g-3 mb-4 align-items-center text-start animate-page">
-    <div class="col-md-5">
+<div class="row g-3 mb-4 align-items-center text-start animate-page px-2 px-sm-0">
+    <div class="col-12 col-md-5">
         {{-- Live search input --}}
         <div class="input-group input-group-sm border border-secondary border-opacity-25 rounded-3 overflow-hidden">
             <span class="input-group-text border-0 text-secondary" style="background-color: var(--bg-card); border-right: none;">
@@ -49,14 +62,14 @@
         </div>
     </div>
     
-    <div class="col-md-7 text-md-end">
+    <div class="col-12 col-md-7 text-start text-md-end">
         {{-- High-contrast, theme-appropriate filter badges --}}
-        <div class="d-inline-flex gap-1.5 flex-wrap">
-            <a href="{{ route('admin.logs') }}" class="btn-custom {{ !request('role') ? 'btn-accent' : 'btn-outline-accent' }} btn-sm uppercase px-3 py-1.5 fw-bold">ALL</a>
-            <a href="{{ route('admin.logs', ['role' => 'admin']) }}" class="btn-custom {{ request('role') == 'admin' ? 'btn-accent' : 'btn-outline-accent' }} btn-sm uppercase px-3 py-1.5 fw-bold">ADMIN</a>
-            <a href="{{ route('admin.logs', ['role' => 'lab_tech']) }}" class="btn-custom {{ request('role') == 'lab_tech' ? 'btn-accent' : 'btn-outline-accent' }} btn-sm uppercase px-3 py-1.5 fw-bold">LAB TECH</a>
-            <a href="{{ route('admin.logs', ['role' => 'staff']) }}" class="btn-custom {{ request('role') == 'staff' ? 'btn-accent' : 'btn-outline-accent' }} btn-sm uppercase px-3 py-1.5 fw-bold">STAFF</a>
-            <a href="{{ route('admin.logs', ['role' => 'user']) }}" class="btn-custom {{ request('role') == 'user' ? 'btn-accent' : 'btn-outline-accent' }} btn-sm uppercase px-3 py-1.5 fw-bold">PATIENTS</a>
+        <div class="d-flex d-md-inline-flex gap-1.5 flex-wrap justify-content-start justify-content-md-end w-100 w-md-auto">
+            <a href="{{ route('admin.logs') }}" class="btn-custom {{ !request('role') ? 'btn-accent' : 'btn-outline-accent' }} btn-sm uppercase px-3 py-1.5 fw-bold flex-grow-1 flex-sm-grow-0 text-center">ALL</a>
+            <a href="{{ route('admin.logs', ['role' => 'admin']) }}" class="btn-custom {{ request('role') == 'admin' ? 'btn-accent' : 'btn-outline-accent' }} btn-sm uppercase px-3 py-1.5 fw-bold flex-grow-1 flex-sm-grow-0 text-center">ADMIN</a>
+            <a href="{{ route('admin.logs', ['role' => 'lab_tech']) }}" class="btn-custom {{ request('role') == 'lab_tech' ? 'btn-accent' : 'btn-outline-accent' }} btn-sm uppercase px-3 py-1.5 fw-bold flex-grow-1 flex-sm-grow-0 text-center">LAB TECH</a>
+            <a href="{{ route('admin.logs', ['role' => 'staff']) }}" class="btn-custom {{ request('role') == 'staff' ? 'btn-accent' : 'btn-outline-accent' }} btn-sm uppercase px-3 py-1.5 fw-bold flex-grow-1 flex-sm-grow-0 text-center">STAFF</a>
+            <a href="{{ route('admin.logs', ['role' => 'user']) }}" class="btn-custom {{ request('role') == 'user' ? 'btn-accent' : 'btn-outline-accent' }} btn-sm uppercase px-3 py-1.5 fw-bold flex-grow-1 flex-sm-grow-0 text-center">PATIENTS</a>
         </div>
     </div>
 </div>
@@ -65,7 +78,7 @@
 <div class="card p-0 border-secondary overflow-hidden shadow-lg animate-page">
     <div class="table-responsive">
         {{-- Removed generic Bootstrap 'table-dark' and replaced with dynamic theme variable mappings --}}
-        <table class="table table-hover mb-0 align-middle" style="color: var(--text-main);">
+        <table class="table table-hover mb-0 align-middle" style="color: var(--text-main); min-width: 720px;">
             <thead class="small uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">
                 <tr>
                     <th class="ps-4 py-3" style="width: 20%;">PERFORMER</th>
@@ -79,8 +92,7 @@
                 @forelse($logs as $log)
                     <tr class="border-secondary border-opacity-10">
                         <td class="ps-4 py-3">
-                            {{-- Changed hardcoded 'text-white' to match active theme variable --}}
-                            <div class="fw-bold uppercase" style="color: var(--text-main);">{{ $log->user->name ?? 'System/Deleted' }}</div>
+                            <div class="fw-bold uppercase text-break" style="color: var(--text-main);">{{ $log->user->name ?? 'System/Deleted' }}</div>
                             @if($log->user)
                                 @php
                                 // Role color mapping with light-mode contrast fallback safety
@@ -117,21 +129,18 @@
                                 default => 'secondary'
                             };
                             @endphp
-                            <span class="badge border border-{{$c}} text-{{$c}} fw-bold small uppercase px-2 py-1">
+                            <span class="badge border border-{{$c}} text-{{$c}} fw-bold small uppercase px-2 py-1 text-nowrap">
                                 {{ $action }}
                             </span>
                         </td>
                         
-                        {{-- Switched text-white to responsive text-main --}}
-                        <td class="small fw-bold uppercase" style="color: var(--text-main);">{{ $log->patient_name }}</td>
+                        <td class="small fw-bold uppercase text-break" style="color: var(--text-main);">{{ $log->patient_name }}</td>
                         
-                        {{-- Switched text-white to responsive text-main --}}
-                        <td class="small italic" style="word-break: break-word; color: var(--text-main);">
+                        <td class="small italic" style="word-break: break-word; color: var(--text-main); min-width: 180px;">
                             "{{ $log->reason }}"
                         </td>
                         
-                        {{-- Removed static text-white constraints on timestamps --}}
-                        <td class="text-end pe-4 local-time-trigger" data-utc="{{ $log->created_at->toIso8601String() }}">
+                        <td class="text-end pe-4 local-time-trigger text-nowrap" data-utc="{{ $log->created_at->toIso8601String() }}">
                             <div class="small fw-bold" style="color: var(--text-main);">{{ $log->created_at->format('M d, Y') }}</div>
                             <div style="font-size: 0.8rem; color: var(--text-muted);">{{ $log->created_at->format('h:i A') }}</div>
                         </td>
@@ -150,8 +159,8 @@
 </div>
 
 {{-- Pagination Footer --}}
-<div class="mt-4 d-flex flex-column align-items-center animate-page">
-    <div class="text-secondary smaller mb-3">
+<div class="mt-4 d-flex flex-column align-items-center animate-page px-2 px-sm-0">
+    <div class="text-secondary smaller mb-3 text-center">
         Showing {{ $logs->firstItem() }} to {{ $logs->lastItem() }} of {{ $logs->total() }} results
     </div>
     {{ $logs->links() }}

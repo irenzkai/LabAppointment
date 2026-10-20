@@ -4,13 +4,14 @@
 /**
  * 1. THEME SWITCHER LOGIC
  * Handles switching between Dark and Light modes and persists choice in LocalStorage.
+ * Default is configured to 'light' mode.
  */
 const themeToggle = document.getElementById('theme-toggle');
 const themeIcon = document.getElementById('theme-icon');
 const htmlElement = document.documentElement;
 
-// Load saved theme on refresh
-const savedTheme = localStorage.getItem('theme') || 'dark';
+// Load saved theme on refresh (defaults to light mode)
+const savedTheme = localStorage.getItem('theme') || 'light';
 htmlElement.setAttribute('data-bs-theme', savedTheme);
 updateIcon(savedTheme);
 

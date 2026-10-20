@@ -62,22 +62,22 @@
      : floatval($appointment->totalPrice());
 @endphp
 
-<div class="container text-start animate-page py-4" id="edit-details-page-root">
+<div class="container text-start animate-page py-4 px-3 px-sm-4" id="edit-details-page-root">
  {{-- HEADER BAR WITH CONTEXT-AWARE BACK LINK --}}
- <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
+ <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
  <div>
- <h2 class="text-accent fw-bold mb-0 uppercase tracking-tight" style="font-size: 1.85rem; letter-spacing: 1px;">
+ <h2 class="text-accent fw-bold mb-0 uppercase tracking-tight fs-3 fs-md-2" style="letter-spacing: 1px;">
  <i class="bi bi-pencil-square me-2"></i>Edit Patient Details & Services
  </h2>
  <p class="text-secondary mb-0 small">Revise demographics, residential address, or diagnostic service requests for Ref #{{ $appointment->id }}.</p>
  </div>
- <div class="d-flex gap-2 align-items-center">
- <button type="button" class="btn btn-reset-custom" onclick="resetReviseForm()">
+ <div class="d-flex flex-wrap gap-2 align-items-center w-100 w-md-auto justify-content-start justify-content-md-end">
+ <button type="button" class="btn btn-reset-custom flex-grow-1 flex-md-grow-0 justify-content-center" onclick="resetReviseForm()">
  <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Edits
  </button>
- <a href="{{ $backUrl }}" class="btn-custom btn-outline-secondary px-4 py-2 fw-bold text-uppercase text-decoration-none btn-cancel-custom" style="font-size: 0.75rem;">
+ <a href="{{ $backUrl }}" class="btn-custom btn-outline-secondary px-3 px-sm-4 py-2 fw-bold text-uppercase text-decoration-none btn-cancel-custom flex-grow-1 flex-md-grow-0 text-center" style="font-size: 0.75rem;">
  <i class="bi bi-arrow-left me-1"></i> {{ $backLabel }}
- </a>
+ </a> 
  </div>
  </div>
 
@@ -90,15 +90,15 @@
  <input type="hidden" name="custom_id" value="{{ $customId }}">
  <div class="row g-4 align-items-stretch">
  {{-- LEFT COLUMN: IDENTITY & ADDRESS --}}
- <div class="col-lg-6 d-flex flex-column gap-4">
+ <div class="col-12 col-lg-6 d-flex flex-column gap-4">
  {{-- 1. Patient Identity Card --}}
- <div class="card p-4 border-secondary bg-card shadow-sm h-100">
+ <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm h-100">
  <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
  <i class="bi bi-person-bounding-box me-2"></i>1. Personal Identity
  </h5>
  <div class="row g-3">
  {{-- First Name --}}
- <div class="col-md-3">
+ <div class="col-12 col-sm-6 col-md-3">
  <div class="d-flex align-items-center mb-1" style="height: 22px;">
  <label class="smaller fw-bold uppercase mb-0 text-nowrap" style="color: var(--text-muted);">First Name</label>
  </div>
@@ -110,7 +110,7 @@
  </div>
 
  {{-- Middle Name (Expanded width + compact switch alignment) --}}
- <div class="col-md-4">
+ <div class="col-12 col-sm-6 col-md-4">
  <div class="d-flex justify-content-between align-items-center mb-1 flex-nowrap" style="height: 22px;">
  <label class="smaller fw-bold mb-0 uppercase text-nowrap" style="color: var(--text-muted);">Middle Name</label>
  <div class="form-check form-switch mb-0 d-inline-flex align-items-center gap-1 ps-0" style="min-height: auto;">
@@ -126,7 +126,7 @@
  </div>
 
  {{-- Last Name --}}
- <div class="col-md-3">
+ <div class="col-12 col-sm-6 col-md-3">
  <div class="d-flex align-items-center mb-1" style="height: 22px;">
  <label class="smaller fw-bold uppercase mb-0 text-nowrap" style="color: var(--text-muted);">Last Name</label>
  </div>
@@ -138,7 +138,7 @@
  </div>
 
  {{-- Suffix (Compact width appropriate for short suffixes) --}}
- <div class="col-md-2">
+ <div class="col-12 col-sm-6 col-md-2">
  <div class="d-flex align-items-center mb-1" style="height: 22px;">
  <label class="smaller fw-bold uppercase mb-0 text-nowrap" style="color: var(--text-muted);">Suffix (Opt.)</label>
  </div>
@@ -153,7 +153,7 @@
  </div>
 
  {{-- Sex --}}
- <div class="col-md-6">
+ <div class="col-12 col-sm-6">
  <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Sex</label>
  <select name="patient_sex" id="patient_sex" class="form-select @error('patient_sex') is-invalid @enderror" required>
  <option value="Male" {{ old('patient_sex', $appointment->patient_sex) === 'Male' ? 'selected' : '' }}>Male</option>
@@ -166,7 +166,7 @@
  </div>
 
  {{-- Birthdate --}}
- <div class="col-md-6">
+ <div class="col-12 col-sm-6">
  <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Birthdate</label>
  <input type="date" name="patient_birthdate" id="revise_bday" class="form-control @error('patient_birthdate') is-invalid @enderror" 
  value="{{ old('patient_birthdate', $appointment->patient_birthdate ? $appointment->patient_birthdate->format('Y-m-d') : '') }}" 
@@ -191,7 +191,7 @@
  $rawPhone = old('patient_phone', $appointment->patient_phone);
  $displayPhone = str_starts_with($rawPhone, '09') ? substr($rawPhone, 2) : $rawPhone;
  @endphp
- <input type="text" id="revise_phone_display" class="form-control py-3 shadow-none @error('patient_phone') is-invalid @enderror" placeholder="171234567" maxlength="9" value="{{ $displayPhone }}" oninput="this.value = this.value.replace(/[^0-9]/g, ''); syncRevisePhone();" required>
+ <input type="text" id="revise_phone_display" class="form-control py-2.5 shadow-none @error('patient_phone') is-invalid @enderror" placeholder="171234567" maxlength="9" value="{{ $displayPhone }}" oninput="this.value = this.value.replace(/[^0-9]/g, ''); syncRevisePhone();" required>
  </div>
  <input type="hidden" name="patient_phone" id="revise_in_phone" value="{{ $rawPhone }}">
  <div class="invalid-feedback d-none" id="err_patient_phone"></div>
@@ -203,16 +203,16 @@
  </div>
 
  {{-- 2. Residential Address Card --}}
- <div class="card p-4 border-secondary bg-card shadow-sm h-100">
+ <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm h-100">
  <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
  <i class="bi bi-geo-alt-fill me-2"></i>2. Residential Address
  </h5>
  <div class="alert alert-clinical p-2.5 mb-3 border border-secondary border-opacity-10 text-start" style="background-color: rgba(0,0,0,0.015); border-radius: 8px;">
  <div class="text-accent fw-bold fs-x-small uppercase tracking-wider mb-1" style="font-size: 0.65rem;">Saved Address on File:</div>
- <div class="text-main small">{{ $appointment->patient_address }}</div>
+ <div class="text-main small text-break">{{ $appointment->patient_address }}</div>
  </div>
  <div class="row g-3">
- <div class="col-md-6">
+ <div class="col-12 col-sm-6">
  <label class="smaller text-muted fw-bold mb-1 uppercase">Province</label>
  <select name="patient_province" id="revise_province" class="form-select @error('patient_province') is-invalid @enderror" required>
  <option value="">Loading Provinces...</option>
@@ -222,7 +222,7 @@
  <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
  @enderror
  </div>
- <div class="col-md-6">
+ <div class="col-12 col-sm-6">
  <label class="smaller text-muted fw-bold mb-1 uppercase">City / Municipality</label>
  <select name="patient_city" id="revise_city" class="form-select @error('patient_city') is-invalid @enderror" disabled required>
  <option value="">Select Province First</option>
@@ -232,7 +232,7 @@
  <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
  @enderror
  </div>
- <div class="col-md-6">
+ <div class="col-12 col-sm-6">
  <label class="smaller text-muted fw-bold mb-1 uppercase">Barangay</label>
  <select name="patient_barangay" id="revise_barangay" class="form-select @error('patient_barangay') is-invalid @enderror" disabled required>
  <option value="">Select City First</option>
@@ -242,7 +242,7 @@
  <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
  @enderror
  </div>
- <div class="col-md-6">
+ <div class="col-12 col-sm-6">
  <label class="smaller text-muted fw-bold mb-1 uppercase">Street / House No.</label>
  <input type="text" name="patient_street" id="revise_street" class="form-control uppercase @error('patient_street') is-invalid @enderror" value="{{ old('patient_street', $appointment->patient_street) }}" required>
  <div class="invalid-feedback d-none" id="err_patient_street"></div>
@@ -255,9 +255,9 @@
  </div>
 
  {{-- RIGHT COLUMN: SERVICES & JUSTIFICATION --}}
- <div class="col-lg-6 d-flex flex-column gap-4">
+ <div class="col-12 col-lg-6 d-flex flex-column gap-4">
  {{-- 3. Services & Billing Card --}}
- <div class="card p-4 border-secondary bg-card shadow-sm h-100">
+ <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm h-100">
  <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
  <i class="bi bi-flask me-2"></i>3. Requested Medical Services & Billing
  </h5>
@@ -266,9 +266,9 @@
  </div>
  <div class="p-3 border rounded row g-2 custom-scroll mb-3" id="services_container" style="max-height: 220px; overflow-y: auto; background-color: var(--bg-main) !important; border: 1.5px solid var(--border-color) !important;">
  @foreach($services as $service)
- <div class="form-check col-md-6 mb-1 revise-service-item">
+ <div class="form-check col-12 col-sm-6 mb-1 revise-service-item">
  <input class="form-check-input service-checkbox" type="checkbox" name="service_ids[]" value="{{ $service->id }}" id="revise_service_{{ $service->id }}" data-price="{{ $service->price }}" {{ in_array($service->id, $currentServiceIds) ? 'checked' : '' }} onchange="updateServicePriceTotal(true)">
- <label class="form-check-label text-main small cursor-pointer" for="revise_service_{{ $service->id }}">
+ <label class="form-check-label text-main small cursor-pointer text-break" for="revise_service_{{ $service->id }}">
  {{ $service->name }} (₱{{ number_format($service->price, 2) }})
  </label>
  </div>
@@ -293,7 +293,7 @@
  </div>
 
  {{-- 4. Administrative Justification Card --}}
- <div class="card p-4 border-secondary bg-card shadow-sm h-100">
+ <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm h-100">
  <h5 class="text-danger fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
  <i class="bi bi-shield-exclamation me-1"></i>4. Administrative Justification
  </h5>
@@ -320,11 +320,11 @@
  </div>
 
  {{-- Submit Action Toolbar --}}
- <div class="d-flex gap-3 mt-4">
- <a href="{{ $backUrl }}" class="btn-custom btn-outline-secondary w-50 py-3 fw-bold uppercase text-decoration-none text-center btn-cancel-custom" style="font-size: 0.85rem;">
+ <div class="d-flex flex-column flex-sm-row gap-2 gap-sm-3 mt-4">
+ <a href="{{ $backUrl }}" class="btn-custom btn-outline-secondary w-100 w-sm-50 py-2.5 py-sm-3 fw-bold uppercase text-decoration-none text-center btn-cancel-custom" style="font-size: 0.85rem;">
  Cancel
  </a>
- <button type="submit" class="btn-custom btn-accent w-50 py-3 fw-bold uppercase shadow-sm">
+ <button type="submit" class="btn-custom btn-accent w-100 w-sm-50 py-2.5 py-sm-3 fw-bold uppercase shadow-sm">
  Save Revisions <i class="bi bi-check-circle-fill ms-1"></i>
  </button>
  </div>

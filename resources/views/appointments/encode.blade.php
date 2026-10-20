@@ -56,11 +56,11 @@
     }
 @endphp
 
-<div id="results-hub-page" class="container text-start animate-page">
+<div id="results-hub-page" class="container text-start animate-page px-3 px-sm-4">
     {{-- 1. HUB HEADER --}}
-    <div class="d-flex justify-content-between align-items-end mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-end gap-3 mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
         <div>
-            <h2 class="text-accent fw-bold mb-0 uppercase tracking-tighter">Results Management Hub</h2>
+            <h2 class="text-accent fw-bold mb-0 uppercase tracking-tighter fs-3 fs-md-2">Results Management Hub</h2>
             <p class="text-secondary small mb-0 uppercase fw-bold" style="letter-spacing: 1px;">Clinical Validation Workflow | Ref: #{{ $appointment->id }}</p>
         </div>
         
@@ -72,23 +72,25 @@
     </div>
 
     {{-- 2. PATIENT CONTEXT BAR (Theme-Aware Details Card with Accordion) --}}
-    <div class="mb-4 p-4 rounded border border-secondary border-opacity-25 shadow-sm" style="background-color: var(--bg-card); color: var(--text-main);">
-        <div class="row align-items-center">
-            <div class="col-md-7 text-start">
-                <h4 class="fw-bold mb-1" style="color: var(--text-main) !important;">{{ strtoupper($appointment->patient_name) }}</h4>
-                <div class="text-secondary smaller fw-bold uppercase">
-                    {{ $appointment->patient_age }} Years Old <span class="mx-2">|</span> 
-                    {{ strtoupper($appointment->patient_sex) }} <span class="mx-2">|</span> 
-                    Tested: {{ $appointment->tested_at ? $appointment->tested_at->format('M d, Y') : 'Processing' }}
+    <div class="mb-4 p-3 p-sm-4 rounded border border-secondary border-opacity-25 shadow-sm" style="background-color: var(--bg-card); color: var(--text-main);">
+        <div class="row align-items-center g-3">
+            <div class="col-12 col-md-7 text-start">
+                <h4 class="fw-bold mb-1 text-break" style="color: var(--text-main) !important;">{{ strtoupper($appointment->patient_name) }}</h4>
+                <div class="text-secondary smaller fw-bold uppercase d-flex flex-wrap align-items-center gap-1">
+                    <span>{{ $appointment->patient_age }} Years Old</span> 
+                    <span class="mx-1 text-opacity-50">|</span> 
+                    <span>{{ strtoupper($appointment->patient_sex) }}</span> 
+                    <span class="mx-1 text-opacity-50">|</span> 
+                    <span>Tested: {{ $appointment->tested_at ? $appointment->tested_at->format('M d, Y') : 'Processing' }}</span>
                 </div>
-                <div class="text-accent smaller fw-bold uppercase mt-2">
+                <div class="text-accent smaller fw-bold uppercase mt-2 text-break">
                     <i class="bi bi-flask-fill me-1"></i> Tests Requested: 
                     <span style="color: var(--text-main);">{{ $appointment->services->pluck('name')->implode(', ') }}</span>
                 </div>
             </div>
             
-            <div class="col-md-5 mt-3 mt-md-0 d-flex justify-content-end align-items-center gap-3 flex-wrap">
-                <div class="text-end me-2">
+            <div class="col-12 col-md-5 d-flex justify-content-between justify-content-md-end align-items-center gap-3 flex-wrap">
+                <div class="text-start text-md-end">
                     <label class="text-secondary smaller fw-bold uppercase d-block mb-1">Folder Status</label>
                     <span class="badge {{ $appointment->status == 'released' ? 'bg-neon text-dark' : 'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25' }} px-3 py-2 fs-6 uppercase">
                         {{ strtoupper($appointment->status) }}
@@ -96,7 +98,7 @@
                 </div>
                 
                 {{-- Accordion Toggle Button (Arrow Icon Only) --}}
-                <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center fw-bold uppercase" type="button" data-bs-toggle="collapse" data-bs-target="#patientDetailsAccordion" aria-expanded="false" aria-controls="patientDetailsAccordion" style="border-radius: 8px; width: 38px; height: 38px; padding: 0;" title="Toggle Details">
+                <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center fw-bold uppercase flex-shrink-0" type="button" data-bs-toggle="collapse" data-bs-target="#patientDetailsAccordion" aria-expanded="false" aria-controls="patientDetailsAccordion" style="border-radius: 8px; width: 38px; height: 38px; padding: 0;" title="Toggle Details">
                     <i class="bi bi-chevron-down transition-all" id="accordionChevron"></i>
                 </button>
             </div>
@@ -106,43 +108,43 @@
         <div class="collapse mt-4 pt-3 border-top border-secondary border-opacity-25" id="patientDetailsAccordion">
             <div class="row g-4 text-start">
                 {{-- Schedule & Contact Details --}}
-                <div class="col-md-4 border-end border-secondary border-opacity-10 pe-md-3">
+                <div class="col-12 col-md-4 drawer-col-border pe-md-3">
                     <h6 class="text-accent fw-bold small uppercase mb-3" style="letter-spacing: 0.5px;">
                         <i class="bi bi-calendar-event me-1.5"></i>Schedule & Contact
                     </h6>
                     <div class="mb-2">
                         <small class="text-secondary d-block smaller fw-bold uppercase">Schedule Date & Time</small>
-                        <span class="small fw-semibold">{{ $appointment->appointment_date ? $appointment->appointment_date->format('M d, Y') : 'N/A' }} | {{ date('h:i A', strtotime($appointment->time_slot)) }}</span>
+                        <span class="small fw-semibold text-break">{{ $appointment->appointment_date ? $appointment->appointment_date->format('M d, Y') : 'N/A' }} | {{ date('h:i A', strtotime($appointment->time_slot)) }}</span>
                     </div>
                     <div class="mb-2">
                         <small class="text-secondary d-block smaller fw-bold uppercase">Contact Phone</small>
-                        <span class="small fw-semibold">{{ $appointment->patient_phone }}</span>
+                        <span class="small fw-semibold text-break">{{ $appointment->patient_phone }}</span>
                     </div>
                     <div>
                         <small class="text-secondary d-block smaller fw-bold uppercase">Email Address</small>
-                        <span class="small fw-semibold">{{ $appointment->patient_email ?? $appointment->user?->email ?? 'N/A' }}</span>
+                        <span class="small fw-semibold text-break">{{ $appointment->patient_email ?? $appointment->user?->email ?? 'N/A' }}</span>
                     </div>
                 </div>
 
                 {{-- Address & Organization --}}
-                <div class="col-md-4 border-end border-secondary border-opacity-10 px-md-3">
+                <div class="col-12 col-md-4 drawer-col-border px-md-3">
                     <h6 class="text-accent fw-bold small uppercase mb-3" style="letter-spacing: 0.5px;">
                         <i class="bi bi-geo-alt me-1.5"></i>Location & Entity
                     </h6>
                     <div class="mb-2">
                         <small class="text-secondary d-block smaller fw-bold uppercase">Residential Address</small>
-                        <span class="small fw-semibold">{{ $appointment->patient_address }}</span>
+                        <span class="small fw-semibold text-break">{{ $appointment->patient_address }}</span>
                     </div>
                     @if($appointment->organization_name)
                     <div>
                         <small class="text-secondary d-block smaller fw-bold uppercase">Organization / Batch</small>
-                        <span class="small fw-semibold">{{ $appointment->organization_name }} (Batch #{{ $appointment->batch_id }})</span>
+                        <span class="small fw-semibold text-break">{{ $appointment->organization_name }} (Batch #{{ $appointment->batch_id }})</span>
                     </div>
                     @endif
                 </div>
 
                 {{-- Billing & Referral Details --}}
-                <div class="col-md-4 ps-md-3 d-flex flex-column justify-content-between">
+                <div class="col-12 col-md-4 ps-md-3 d-flex flex-column justify-content-between">
                     <div>
                         <h6 class="text-accent fw-bold small uppercase mb-3" style="letter-spacing: 0.5px;">
                             <i class="bi bi-credit-card me-1.5"></i>Billing & Referral
@@ -180,8 +182,8 @@
 
     {{-- 3. CLINICAL PROTOCOL & ROLE-BASED ACCESS DISCLAIMER --}}
     <div class="mb-4 p-3 rounded border border-warning border-opacity-25 shadow-sm" style="background-color: rgba(255, 193, 7, 0.05); color: var(--text-main);">
-        <div class="d-flex align-items-center gap-3">
-            <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0" style="width: 42px; height: 42px; background-color: rgba(255, 193, 7, 0.15); color: #ffc107;">
+        <div class="d-flex align-items-start gap-3">
+            <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0 mt-0.5" style="width: 38px; height: 38px; background-color: rgba(255, 193, 7, 0.15); color: #ffc107;">
                 <i class="bi bi-shield-lock-fill fs-5"></i>
             </div>
             <div class="flex-grow-1">
@@ -232,9 +234,9 @@
             $returnReasonField = $prefix . '_return_reason';
             $returnReasonValue = $res->$returnReasonField ?? '';
         @endphp
-        <div class="col-md-6">
-            <div class="card p-4 shadow-sm workstation-card h-100" style="background-color: var(--bg-card); color: var(--text-main); border-left: 4px solid {{ $theme['border'] }} !important; border-top-color: var(--border-color); border-right-color: var(--border-color); border-bottom-color: var(--border-color);">
-                <div class="d-flex justify-content-between align-items-start mb-4">
+        <div class="col-12 col-md-6">
+            <div class="card p-3 p-sm-4 shadow-sm workstation-card h-100" style="background-color: var(--bg-card); color: var(--text-main); border-left: 4px solid {{ $theme['border'] }} !important; border-top-color: var(--border-color); border-right-color: var(--border-color); border-bottom-color: var(--border-color);">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
                     <div>
                         <h5 class="fw-bold mb-0 uppercase" style="color: var(--text-main);">
                             @if($type == 'lab') Laboratory Result
@@ -243,7 +245,7 @@
                             @else Drug Test Result @endif
                         </h5>
                     </div>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
                         <span class="badge px-3 py-2 uppercase small border" style="{{ $theme['style'] }}">
                             {{ $theme['label'] }}
                         </span>
@@ -251,7 +253,7 @@
                         <span class="badge bg-warning bg-opacity-10 text-warning px-2.5 py-1.5 uppercase small border border-warning border-opacity-25">(EDITED)</span>
                         @endif
                         @if(!$isReadonly && auth()->user()->isEmployee())
-                        <button type="button" class="btn btn-sm btn-outline-danger px-2 py-1 shadow-none" style="border-radius: 6px;" data-bs-toggle="modal" data-bs-target="#deleteOriginalWorkstationModal_{{ $type }}">
+                        <button type="button" class="btn btn-sm btn-outline-danger px-2 py-1 shadow-none" style="border-radius: 6px;" data-bs-toggle="modal" data-bs-target="#deleteOriginalWorkstationModal_{{ $type }}" title="Remove Workstation">
                             <i class="bi bi-trash"></i>
                         </button>
                         @endif
@@ -262,28 +264,28 @@
                 @if($currentStatus == 'returned' && $returnReasonValue)
                 <div class="alert bg-danger bg-opacity-10 border-danger text-danger py-2 px-3 small mb-3">
                     <div class="fw-bold uppercase smaller mb-1" style="font-size: 0.65rem;">Correction Reason:</div>
-                    <div class="italic">"{{ $returnReasonValue }}"</div>
+                    <div class="italic text-break">"{{ $returnReasonValue }}"</div>
                 </div>
                 @endif
 
                 {{-- System Audit Trail (Theme-Aware Container) --}}
                 <div class="mb-4 p-3 rounded border border-secondary border-opacity-10" style="background-color: rgba(0, 0, 0, 0.02);">
-                    <div class="row g-0">
+                    <div class="row g-2">
                         <div class="col-6 pe-2">
                             <label class="text-secondary smaller fw-bold uppercase d-block mb-1" style="font-size: 0.6rem;">System Encoder</label>
-                            <span class="fw-bold d-block text-truncate" style="color: var(--text-main); font-size: 0.85rem;">{{ $encoderName }}</span>
+                            <span class="fw-bold d-block text-truncate" style="color: var(--text-main); font-size: 0.85rem;" title="{{ $encoderName }}">{{ $encoderName }}</span>
                             @if($encodedAt)
-                            <span class="text-secondary smaller italic" style="font-size: 0.65rem;">
+                            <span class="text-secondary smaller italic d-block text-truncate" style="font-size: 0.65rem;">
                                 {{ $encodedAt->format('M d, Y | h:i A') }}
                                 @if($isEdited) <span class="text-warning fw-bold">(Edited)</span> @endif
                             </span>
                             @endif
                         </div>
-                        <div class="col-6 ps-3 border-start border-secondary border-opacity-25">
+                        <div class="col-6 ps-2 border-start border-secondary border-opacity-25">
                             <label class="text-secondary smaller fw-bold uppercase d-block mb-1" style="font-size: 0.6rem;">System Verifier</label>
-                            <span class="fw-bold d-block text-truncate" style="color: var(--text-main); font-size: 0.85rem;">{{ $verifierName }}</span>
+                            <span class="fw-bold d-block text-truncate" style="color: var(--text-main); font-size: 0.85rem;" title="{{ $verifierName }}">{{ $verifierName }}</span>
                             @if($verifiedAt)
-                            <span class="text-secondary smaller italic" style="font-size: 0.65rem;">{{ $verifiedAt->format('M d, Y | h:i A') }}</span>
+                            <span class="text-secondary smaller italic d-block text-truncate" style="font-size: 0.65rem;">{{ $verifiedAt->format('M d, Y | h:i A') }}</span>
                             @endif
                         </div>
                     </div>
@@ -319,19 +321,19 @@
             $customTheme = $statusThemes[$customStatus] ?? $statusThemes['pending'];
             $hasFile = !empty($custom->scan_path);
         @endphp
-        <div class="col-md-6">
-            <div class="card p-4 shadow-sm workstation-card h-100" style="background-color: var(--bg-card); color: var(--text-main); border-left: 4px solid {{ $customStatus === 'verified' ? '#19d38c' : ($customStatus === 'returned' ? '#dc3545' : '#0dcaf0') }} !important; border-top-color: var(--border-color); border-right-color: var(--border-color); border-bottom-color: var(--border-color);">
-                <div class="d-flex justify-content-between align-items-start mb-4">
+        <div class="col-12 col-md-6">
+            <div class="card p-3 p-sm-4 shadow-sm workstation-card h-100" style="background-color: var(--bg-card); color: var(--text-main); border-left: 4px solid {{ $customStatus === 'verified' ? '#19d38c' : ($customStatus === 'returned' ? '#dc3545' : '#0dcaf0') }} !important; border-top-color: var(--border-color); border-right-color: var(--border-color); border-bottom-color: var(--border-color);">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
                     <div>
                         <h5 class="fw-bold mb-0 uppercase" style="color: var(--text-main);">{{ $custom->name }}</h5>
                         <small class="text-secondary x-small mt-0.5 d-block">Cert ID: <span class="text-accent font-monospace">#{{ $custom->cert_no }}</span></small>
                     </div>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
                         <span class="badge px-3 py-2 uppercase small border" style="{{ $customTheme['style'] }}">
                             {{ $customTheme['label'] }}
                         </span>
                         @if(!$isReadonly && auth()->user()->isEmployee())
-                        <button type="button" class="btn btn-sm btn-outline-danger px-2 py-1 shadow-none" style="border-radius: 6px;" data-bs-toggle="modal" data-bs-target="#deleteCustomWorksheetModal_{{ $custom->id }}">
+                        <button type="button" class="btn btn-sm btn-outline-danger px-2 py-1 shadow-none" style="border-radius: 6px;" data-bs-toggle="modal" data-bs-target="#deleteCustomWorksheetModal_{{ $custom->id }}" title="Remove Custom Worksheet">
                             <i class="bi bi-trash"></i>
                         </button>
                         @endif
@@ -342,27 +344,27 @@
                 @if($custom->status === 'returned' && $custom->return_reason)
                 <div class="alert bg-danger bg-opacity-10 border-danger text-danger py-2 px-3 small mb-3">
                     <div class="fw-bold uppercase smaller mb-1" style="font-size: 0.65rem;">Correction Reason:</div>
-                    <div class="italic">"{{ $custom->return_reason }}"</div>
+                    <div class="italic text-break">"{{ $custom->return_reason }}"</div>
                 </div>
                 @endif
 
                 {{-- System Audit Trail --}}
                 <div class="mb-4 p-3 rounded border border-secondary border-opacity-10" style="background-color: rgba(0, 0, 0, 0.02);">
-                    <div class="row g-0">
+                    <div class="row g-2">
                         <div class="col-6 pe-2">
                             <label class="text-secondary smaller fw-bold uppercase d-block mb-1" style="font-size: 0.6rem;">System Encoder</label>
-                            <span class="fw-bold d-block text-truncate" style="color: var(--text-main); font-size: 0.85rem;">{{ $customEncoderName }}</span>
+                            <span class="fw-bold d-block text-truncate" style="color: var(--text-main); font-size: 0.85rem;" title="{{ $customEncoderName }}">{{ $customEncoderName }}</span>
                             @if($customEncodedAt)
-                            <span class="text-secondary smaller italic" style="font-size: 0.65rem;">
+                            <span class="text-secondary smaller italic d-block text-truncate" style="font-size: 0.65rem;">
                                 {{ $customEncodedAt->format('M d, Y | h:i A') }}
                             </span>
                             @endif
                         </div>
-                        <div class="col-6 ps-3 border-start border-secondary border-opacity-25">
+                        <div class="col-6 ps-2 border-start border-secondary border-opacity-25">
                             <label class="text-secondary smaller fw-bold uppercase d-block mb-1" style="font-size: 0.6rem;">System Verifier</label>
-                            <span class="fw-bold d-block text-truncate" style="color: var(--text-main); font-size: 0.85rem;">{{ $customVerifierName }}</span>
+                            <span class="fw-bold d-block text-truncate" style="color: var(--text-main); font-size: 0.85rem;" title="{{ $customVerifierName }}">{{ $customVerifierName }}</span>
                             @if($customVerifiedAt)
-                            <span class="text-secondary smaller italic" style="font-size: 0.65rem;">{{ $customVerifiedAt->format('M d, Y | h:i A') }}</span>
+                            <span class="text-secondary smaller italic d-block text-truncate" style="font-size: 0.65rem;">{{ $customVerifiedAt->format('M d, Y | h:i A') }}</span>
                             @endif
                         </div>
                     </div>
@@ -387,8 +389,8 @@
 
         {{-- C. ADD WORKSTATION TRIGGER CARD --}}
         @if(!$isReadonly && auth()->user()->isEmployee())
-        <div class="col-md-6">
-            <div class="card p-4 shadow-sm h-100 d-flex flex-column align-items-center justify-content-center border-dashed border-secondary" style="background-color: rgba(25, 211, 140, 0.015); min-height: 250px; border-style: dashed !important; border-width: 2px !important;">
+        <div class="col-12 col-md-6">
+            <div class="card p-4 shadow-sm h-100 d-flex flex-column align-items-center justify-content-center border-dashed border-secondary text-center" style="background-color: rgba(25, 211, 140, 0.015); min-height: 220px; border-style: dashed !important; border-width: 2px !important;">
                 <button type="button" class="btn-custom btn-accent px-4 py-2" data-bs-toggle="modal" data-bs-target="#addWorkstationModal">
                     <i class="bi bi-plus-circle me-1.5"></i>ADD WORKSTATION
                 </button>
@@ -399,23 +401,23 @@
     </div>
 
     {{-- 5. FINAL RELEASE SECTION --}}
-    <div class="mt-5 pt-5 border-top text-center" style="border-color: var(--border-color) !important;">
+    <div class="mt-5 pt-4 border-top text-center" style="border-color: var(--border-color) !important;">
         @if($readyToRelease && $appointment->status !== 'released')
         <div class="mb-4">
-            <h4 class="text-accent fw-bold mb-1 uppercase">Ready for Clinical Release</h4>
+            <h4 class="text-accent fw-bold mb-1 uppercase fs-4">Ready for Clinical Release</h4>
             <p class="text-secondary small">All internal clinical verifications are verified and signed. Proceed to finalize the patient folder.</p>
         </div>
-        <button type="button" class="btn-custom btn-accent px-5 py-3 fs-5 shadow-lg fw-bold uppercase" data-bs-toggle="modal" data-bs-target="#releaseConfirmModal">
+        <button type="button" class="btn-custom btn-accent px-4 px-sm-5 py-2.5 py-sm-3 fs-6 fs-sm-5 shadow-lg fw-bold uppercase w-100 w-sm-auto" data-bs-toggle="modal" data-bs-target="#releaseConfirmModal">
             Execute Final Release
         </button>
 
         <!-- RELEASE CONFIRMATION MODAL -->
-        <div class="modal fade" id="releaseConfirmModal" tabindex="-1">
+        <div class="modal fade" id="releaseConfirmModal" tabindex="-1" aria-labelledby="releaseConfirmModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content shadow-lg p-4 text-start" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-                    <h4 class="fw-bold uppercase mb-2" style="color: var(--text-main);">Confirm Final Release?</h4>
+                <div class="modal-content shadow-lg p-3 p-sm-4 text-start" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                    <h4 class="fw-bold uppercase mb-2" id="releaseConfirmModalLabel" style="color: var(--text-main);">Confirm Final Release?</h4>
                     <p class="text-secondary small mb-4">Finalizing will merge all forms into a single folder and release them to the patient's portal. This action locks all data for editing. Proceed?</p>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex flex-column flex-sm-row gap-2">
                         <button type="button" class="btn btn-outline-secondary flex-grow-1" data-bs-dismiss="modal">CANCEL</button>
                         <form action="{{ route('appointments.status', $appointment->id) }}" method="POST" class="flex-grow-1 m-0">
                             @csrf
@@ -428,12 +430,12 @@
             </div>
         </div>
         @elseif($appointment->status === 'released')
-        <div class="p-4 rounded border border-accent" style="background-color: rgba(25, 211, 140, 0.05); max-width: 600px; margin: 0 auto;">
+        <div class="p-3 p-sm-4 rounded border border-accent" style="background-color: rgba(25, 211, 140, 0.05); max-width: 600px; margin: 0 auto;">
             <p class="text-accent fw-bold mb-1 uppercase small">Folder Release Complete</p>
             <p class="small mb-0" style="color: var(--text-main);">Patient notified and record locked on {{ $appointment->updated_at->format('M d, Y | h:i A') }}</p>
         </div>
         @else
-        <div class="p-4 rounded border border-secondary border-dashed" style="max-width: 600px; margin: 0 auto; background-color: rgba(0, 0, 0, 0.02);">
+        <div class="p-3 p-sm-4 rounded border border-secondary border-dashed" style="max-width: 600px; margin: 0 auto; background-color: rgba(0, 0, 0, 0.02);">
             <p class="text-warning fw-bold mb-1 uppercase small">Final Release Action Locked</p>
             <p class="text-secondary mb-0 smaller">The system is waiting for all required worksheets to be verified before the release button is enabled.</p>
         </div>
@@ -445,6 +447,56 @@
 @if(!$isReadonly && auth()->user()->isEmployee())
     @include('appointments.partials.encode.add-workstation-modal')
     @include('appointments.partials.encode.delete-original-modals')
+
+    {{-- Delete Modals for Custom Workstations --}}
+    @foreach($appointment->result->customWorkstationResults as $custom)
+    <div class="modal fade" id="deleteCustomWorksheetModal_{{ $custom->id }}" tabindex="-1" aria-labelledby="deleteCustomWorksheetModalLabel_{{ $custom->id }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg p-3 p-sm-4 text-start" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold uppercase mb-0 text-danger" id="deleteCustomWorksheetModalLabel_{{ $custom->id }}">
+                        <i class="bi bi-exclamation-triangle-fill me-1.5"></i> Remove Custom Worksheet
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                
+                <p class="text-secondary small mb-3">
+                    Are you sure you want to remove the custom worksheet <strong style="color: var(--text-main);">{{ $custom->name }}</strong> (Cert: #{{ $custom->cert_no }})? This action cannot be undone and will permanently remove associated scan files.
+                </p>
+
+                <form action="{{ route('workstation.custom.destroy', [$appointment->id, $custom->id]) }}" method="POST">
+                    @csrf
+                    @method('DELETE')
+                    
+                    <div class="mb-3">
+                        <label class="form-label text-secondary smaller fw-bold uppercase">Reason for Deletion <span class="text-danger">*</span></label>
+                        <select id="delete_custom_reason_select_{{ $custom->id }}" name="reason" class="form-select form-select-sm" onchange="toggleCustomReasonField({{ $custom->id }}, this)" required>
+                            <option value="" disabled selected>-- Select Justification --</option>
+                            <option value="Worksheet entered in error">Worksheet entered in error</option>
+                            <option value="Duplicate worksheet created">Duplicate worksheet created</option>
+                            <option value="Cancelled by patient request">Cancelled by patient request</option>
+                            <option value="Doctor canceled test order">Doctor canceled test order</option>
+                            <option value="Incorrect test category assigned">Incorrect test category assigned</option>
+                            <option value="Others">Others (Specify below)</option>
+                        </select>
+                    </div>
+
+                    <div id="delete_custom_reason_wrapper_{{ $custom->id }}" class="mb-3 d-none">
+                        <label class="form-label text-secondary smaller fw-bold uppercase">Specify Reason <span class="text-danger">*</span></label>
+                        <textarea id="delete_custom_reason_{{ $custom->id }}" class="form-control form-control-sm" rows="3" placeholder="Enter detailed clinical audit justification (min 5 characters)..."></textarea>
+                    </div>
+
+                    <div class="d-flex flex-column flex-sm-row gap-2 justify-content-end mt-4">
+                        <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-2 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-sm btn-danger px-4 py-2 fw-bold uppercase">
+                            <i class="bi bi-trash me-1"></i> Confirm Delete
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endforeach
 @endif
 
 {{-- Centralized Universal Lightbox Partial --}}
@@ -491,8 +543,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }, 200);
             }
 
-            const oldRelease = document.querySelector('.mt-5.pt-5');
-            const newRelease = doc.querySelector('.mt-5.pt-5');
+            const oldRelease = document.querySelector('.mt-5.pt-4');
+            const newRelease = doc.querySelector('.mt-5.pt-4') || doc.querySelector('.mt-5.pt-5');
             if (oldRelease && newRelease) {
                 oldRelease.innerHTML = newRelease.innerHTML;
             }
@@ -583,6 +635,21 @@ window.toggleCustomReasonField = function(id, select) {
 #patientDetailsAccordion.show ~ .row #accordionChevron,
 [aria-expanded="true"] #accordionChevron {
     transform: rotate(180deg);
+}
+
+/* Responsive drawer borders for mobile/desktop layout transitions */
+@media (max-width: 767.98px) {
+    .drawer-col-border {
+        border-right: none !important;
+        border-bottom: 1px solid rgba(108, 117, 125, 0.15) !important;
+        padding-bottom: 1rem !important;
+    }
+}
+@media (min-width: 768px) {
+    .drawer-col-border {
+        border-right: 1px solid rgba(108, 117, 125, 0.15) !important;
+        border-bottom: none !important;
+    }
 }
 </style>
 @endpush

@@ -47,6 +47,58 @@
                 overflow: visible !important;
             }
 
+            .canvas-table-wrapper {
+                overflow: visible !important;
+            }
+
+            .canvas-table-wrapper table.formal-report-table {
+                min-width: 100% !important;
+                width: 100% !important;
+            }
+
+            .letterhead-row {
+                flex-direction: row !important;
+                align-items: center !important;
+            }
+
+            .letterhead-address {
+                text-align: right !important;
+            }
+
+            .doc-meta-flex {
+                flex-direction: row !important;
+                align-items: flex-start !important;
+            }
+
+            .doc-meta-detail-box {
+                text-align: right !important;
+            }
+
+            .metric-col-4 {
+                width: 25% !important;
+            }
+
+            .metric-col-3 {
+                width: 33.333% !important;
+            }
+
+            .sign-row {
+                flex-direction: row !important;
+            }
+
+            .sign-col-left {
+                width: 58.333% !important;
+            }
+
+            .sign-col-right {
+                width: 41.666% !important;
+                text-align: right !important;
+            }
+
+            .formal-signature-box {
+                margin-left: auto !important;
+            }
+
             tr {
                 page-break-inside: avoid !important;
             }
@@ -95,6 +147,32 @@
         .export-canvas.landscape-mode {
             width: 297mm !important;
             min-height: 210mm !important;
+        }
+
+        @media screen and (max-width: 767.98px) {
+            .no-print-toolbar {
+                padding: 10px 14px;
+            }
+
+            .export-canvas {
+                margin: 12px auto !important;
+                padding: 15px 12px !important;
+                border-radius: 0 !important;
+                min-height: auto !important;
+            }
+        }
+
+        @media screen and (max-width: 991.98px) {
+            .canvas-table-wrapper {
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch;
+                margin-bottom: 14px;
+            }
+
+            .canvas-table-wrapper table.formal-report-table {
+                min-width: 680px !important;
+                margin-bottom: 0 !important;
+            }
         }
 
         /* Clinical Letterhead Branding */
@@ -346,22 +424,22 @@
 <body>
 
     {{-- Screen-Only Control Toolbar --}}
-    <div class="no-print-toolbar d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-3">
+    <div class="no-print-toolbar d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 gap-md-3">
+        <div class="d-flex flex-wrap align-items-center gap-2 gap-sm-3">
             <span class="badge bg-light text-dark fw-bold uppercase px-3 py-2">
                 <i class="bi bi-file-earmark-pdf-fill text-danger me-1"></i> Print & PDF Preview
             </span>
-            <span class="text-white-50 small">Browser header/footer URL suppression enabled.</span>
+            <span class="text-white-50 small d-none d-sm-inline">Browser header/footer URL suppression enabled.</span>
         </div>
-        <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-sm btn-outline-light px-3 py-2" id="orientationBtn" onclick="toggleOrientation()">
+        <div class="d-flex flex-wrap align-items-center gap-2 w-100 w-md-auto justify-content-start justify-content-md-end">
+            <button type="button" class="btn btn-sm btn-outline-light px-3 py-2 flex-grow-1 flex-md-grow-0" id="orientationBtn" onclick="toggleOrientation()">
                 <i class="bi bi-arrow-repeat me-1"></i> <span id="orientationBtnLabel">Switch to Landscape</span>
             </button>
-            <button type="button" class="btn btn-sm btn-success fw-bold px-4 py-2 text-dark d-inline-flex align-items-center gap-2" style="background-color: #19d38c; border-color: #19d38c;" onclick="window.print()">
+            <button type="button" class="btn btn-sm btn-success fw-bold px-3 px-sm-4 py-2 text-dark d-inline-flex align-items-center justify-content-center gap-2 flex-grow-1 flex-md-grow-0" style="background-color: #19d38c; border-color: #19d38c;" onclick="window.print()">
                 <i class="bi bi-printer-fill"></i>
                 <span>SAVE AS PDF / PRINT</span>
             </button>
-            <button type="button" class="btn btn-sm btn-outline-light px-3 py-2" onclick="window.close()">
+            <button type="button" class="btn btn-sm btn-outline-light px-3 py-2 flex-grow-1 flex-md-grow-0" onclick="window.close()">
                 <i class="bi bi-x-lg me-1"></i> Close
             </button>
         </div>
@@ -371,9 +449,9 @@
     <div class="export-canvas" id="exportCanvas">
 
         {{-- 1. Official Clinical Letterhead --}}
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2 gap-sm-3 letterhead-row">
             <div class="d-flex align-items-center gap-3">
-                <div style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid #19d38c; overflow: hidden; background-color: #1c232d; display: flex; align-items: center; justify-content: center;">
+                <div style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid #19d38c; overflow: hidden; background-color: #1c232d; display: flex; align-items: center; justify-content: center;" class="flex-shrink-0">
                     <img src="{{ asset('images/logo.jpg') }}" alt="Logo" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'">
                 </div>
                 <div>
@@ -382,7 +460,7 @@
                     <div class="clinic-meta-sub">DOH Accredited Clinical Laboratory • DTI / FDA Certified Facility</div>
                 </div>
             </div>
-            <div class="text-end clinic-meta-sub">
+            <div class="text-start text-sm-end clinic-meta-sub letterhead-address">
                 <div>Atis Street, Brgy. Dadiangas West</div>
                 <div>General Santos City, 9500 South Cotabato</div>
                 <div>Phone: (083) 823 8754 • medscreen.lab@gmail.com</div>
@@ -462,7 +540,7 @@
 
         {{-- 2. Report Document Meta Block with Comprehensive Scope Badges --}}
         <div class="doc-meta-card">
-            <div class="d-flex justify-content-between align-items-start">
+            <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start gap-2 doc-meta-flex">
                 <div>
                     <div class="doc-meta-title">{{ $currentTitle }}</div>
                     <div class="scope-pills-row">
@@ -473,7 +551,7 @@
                         @endforeach
                     </div>
                 </div>
-                <div class="text-end doc-meta-detail">
+                <div class="text-start text-sm-end doc-meta-detail doc-meta-detail-box">
                     <div>Generated: <strong>{{ date('M d, Y | h:i A') }}</strong></div>
                     <div>Ref Code: <strong class="font-monospace">MS-{{ strtoupper(substr($type, 0, 3)) }}-{{ date('Ymd-His') }}</strong></div>
                 </div>
@@ -488,25 +566,25 @@
             $paidCount = $transactions->where('payment_status', 'paid')->count();
         @endphp
         <div class="row g-2 mb-3">
-            <div class="col-3">
+            <div class="col-6 col-sm-3 metric-col-4">
                 <div class="metric-mini-card">
                     <div class="val">{{ $transactions->count() }}</div>
                     <div class="lbl">Total Records</div>
                 </div>
             </div>
-            <div class="col-3">
+            <div class="col-6 col-sm-3 metric-col-4">
                 <div class="metric-mini-card">
                     <div class="val text-success">₱{{ number_format($paidTotal, 2) }}</div>
                     <div class="lbl">Paid Revenue</div>
                 </div>
             </div>
-            <div class="col-3">
+            <div class="col-6 col-sm-3 metric-col-4">
                 <div class="metric-mini-card">
                     <div class="val text-primary">{{ $paidCount }}</div>
                     <div class="lbl">Settled Invoices</div>
                 </div>
             </div>
-            <div class="col-3">
+            <div class="col-6 col-sm-3 metric-col-4">
                 <div class="metric-mini-card">
                     <div class="val text-secondary">₱{{ number_format($totalAmountSum, 2) }}</div>
                     <div class="lbl">Gross Total</div>
@@ -515,25 +593,25 @@
         </div>
         @elseif($type === 'appointments')
         <div class="row g-2 mb-3">
-            <div class="col-3">
+            <div class="col-6 col-sm-3 metric-col-4">
                 <div class="metric-mini-card">
                     <div class="val">{{ $appointments->count() }}</div>
                     <div class="lbl">Total Bookings</div>
                 </div>
             </div>
-            <div class="col-3">
+            <div class="col-6 col-sm-3 metric-col-4">
                 <div class="metric-mini-card">
                     <div class="val text-success">{{ $appointments->where('status', 'released')->count() }}</div>
                     <div class="lbl">Released</div>
                 </div>
             </div>
-            <div class="col-3">
+            <div class="col-6 col-sm-3 metric-col-4">
                 <div class="metric-mini-card">
                     <div class="val text-warning">{{ $appointments->where('status', 'pending')->count() }}</div>
                     <div class="lbl">Pending Review</div>
                 </div>
             </div>
-            <div class="col-3">
+            <div class="col-6 col-sm-3 metric-col-4">
                 <div class="metric-mini-card">
                     <div class="val text-info">{{ $appointments->whereIn('status', ['approved', 'tested', 'encoded'])->count() }}</div>
                     <div class="lbl">In Progress</div>
@@ -542,19 +620,19 @@
         </div>
         @elseif($type === 'logs')
         <div class="row g-2 mb-3">
-            <div class="col-4">
+            <div class="col-12 col-sm-4 metric-col-3">
                 <div class="metric-mini-card">
                     <div class="val">{{ $logs->count() }}</div>
                     <div class="lbl">Total Log Entries</div>
                 </div>
             </div>
-            <div class="col-4">
+            <div class="col-6 col-sm-4 metric-col-3">
                 <div class="metric-mini-card">
                     <div class="val text-danger">{{ $logs->filter(fn($l) => str_contains($l->action, 'ACCESS') || str_contains($l->action, 'EXCEPTION'))->count() }}</div>
                     <div class="lbl">Security & Exceptions</div>
                 </div>
             </div>
-            <div class="col-4">
+            <div class="col-6 col-sm-4 metric-col-3">
                 <div class="metric-mini-card">
                     <div class="val text-success">{{ $logs->filter(fn($l) => str_contains($l->action, 'VERIFIED') || str_contains($l->action, 'ENCODED'))->count() }}</div>
                     <div class="lbl">Clinical Workflows</div>
@@ -567,219 +645,229 @@
 
         {{-- TAB 1: TRANSACTIONS --}}
         @if($type === 'transactions')
-        <table class="formal-report-table">
-            <thead>
-                <tr>
-                    <th style="width: 13%;">Date</th>
-                    <th style="width: 9%;">Ref #</th>
-                    <th style="width: 23%;">Patient Name</th>
-                    <th style="width: 23%;">Services</th>
-                    <th style="width: 10%;">Method</th>
-                    <th style="width: 10%;">Payment</th>
-                    <th class="text-end" style="width: 12%;">Amount</th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse($transactions as $tx)
-                @php
-                    $amt = $tx->payment_amount ?: $tx->totalPrice();
-                    $isPaid = ($tx->payment_status === 'paid');
-                @endphp
-                <tr>
-                    <td>{{ $tx->appointment_date ? $tx->appointment_date->format('M d, Y') : $tx->created_at->format('M d, Y') }}</td>
-                    <td class="font-monospace fw-bold text-dark">#{{ $tx->id }}</td>
-                    <td class="fw-bold uppercase">{{ $tx->patient_name }}</td>
-                    <td class="small">{{ $tx->services->pluck('name')->implode(', ') }}</td>
-                    <td>{{ $tx->payment_method }}</td>
-                    <td>
-                        <span class="formal-badge {{ $isPaid ? 'formal-badge-paid' : ($tx->payment_status === 'refunded' ? 'formal-badge-pending' : 'formal-badge-expired') }}">
-                            {{ strtoupper($tx->payment_status) }}
-                        </span>
-                    </td>
-                    <td class="text-end fw-bold text-dark" style="white-space: nowrap;">₱{{ number_format($amt, 2) }}</td>
-                </tr>
-                @empty
-                <tr>
-                    <td colspan="7" class="text-center py-4 text-muted italic">No transactions found matching criteria.</td>
-                </tr>
-                @endforelse
-                <tr style="background-color: #f1f5f9; font-weight: bold;">
-                    <td colspan="6" class="text-end uppercase" style="padding: 8px 10px;">Total Confirmed Paid Revenue:</td>
-                    <td class="text-end text-success fw-bold" style="white-space: nowrap; padding: 8px 10px; font-size: 9pt;">₱{{ number_format($paidTotal, 2) }}</td>
-                </tr>
-            </tbody>
-        </table>
+        <div class="canvas-table-wrapper">
+            <table class="formal-report-table">
+                <thead>
+                    <tr>
+                        <th style="width: 13%;">Date</th>
+                        <th style="width: 9%;">Ref #</th>
+                        <th style="width: 23%;">Patient Name</th>
+                        <th style="width: 23%;">Services</th>
+                        <th style="width: 10%;">Method</th>
+                        <th style="width: 10%;">Payment</th>
+                        <th class="text-end" style="width: 12%;">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($transactions as $tx)
+                    @php
+                        $amt = $tx->payment_amount ?: $tx->totalPrice();
+                        $isPaid = ($tx->payment_status === 'paid');
+                    @endphp
+                    <tr>
+                        <td>{{ $tx->appointment_date ? $tx->appointment_date->format('M d, Y') : $tx->created_at->format('M d, Y') }}</td>
+                        <td class="font-monospace fw-bold text-dark">#{{ $tx->id }}</td>
+                        <td class="fw-bold uppercase">{{ $tx->patient_name }}</td>
+                        <td class="small">{{ $tx->services->pluck('name')->implode(', ') }}</td>
+                        <td>{{ $tx->payment_method }}</td>
+                        <td>
+                            <span class="formal-badge {{ $isPaid ? 'formal-badge-paid' : ($tx->payment_status === 'refunded' ? 'formal-badge-pending' : 'formal-badge-expired') }}">
+                                {{ strtoupper($tx->payment_status) }}
+                            </span>
+                        </td>
+                        <td class="text-end fw-bold text-dark" style="white-space: nowrap;">₱{{ number_format($amt, 2) }}</td>
+                    </tr>
+                    @empty
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted italic">No transactions found matching criteria.</td>
+                    </tr>
+                    @endforelse
+                    <tr style="background-color: #f1f5f9; font-weight: bold;">
+                        <td colspan="6" class="text-end uppercase" style="padding: 8px 10px;">Total Confirmed Paid Revenue:</td>
+                        <td class="text-end text-success fw-bold" style="white-space: nowrap; padding: 8px 10px; font-size: 9pt;">₱{{ number_format($paidTotal, 2) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
         @endif
 
         {{-- TAB 2: APPOINTMENTS --}}
         @if($type === 'appointments')
-        <table class="formal-report-table">
-            <thead>
-                <tr>
-                    <th style="width: 14%;">Schedule</th>
-                    <th style="width: 9%;">Ref #</th>
-                    <th style="width: 23%;">Patient Name</th>
-                    <th style="width: 11%;">Type</th>
-                    <th style="width: 21%;">Services</th>
-                    <th style="width: 11%;">Status</th>
-                    <th class="text-end" style="width: 11%;">Total Bill</th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse($appointments as $app)
-                @php
-                    $isExpired = $app->isExpired();
-                    $finalStatus = $isExpired ? 'expired' : $app->status;
-                    $typeLabel = $app->batch_id ? 'BULK' : ($app->dependent_id ? 'DEPENDENT' : 'PERSONAL');
-                @endphp
-                <tr>
-                    <td>
-                        <div>{{ $app->appointment_date ? $app->appointment_date->format('M d, Y') : 'N/A' }}</div>
-                        <small class="text-muted">{{ $app->time_slot ? date('h:i A', strtotime($app->time_slot)) : '' }}</small>
-                    </td>
-                    <td class="font-monospace fw-bold">#{{ $app->id }}</td>
-                    <td>
-                        <div class="fw-bold uppercase">{{ $app->patient_name }}</div>
-                        <small class="text-muted">{{ $app->patient_age }} YRS / {{ strtoupper($app->patient_sex) }}</small>
-                    </td>
-                    <td><span class="formal-badge">{{ $typeLabel }}</span></td>
-                    <td class="small">{{ $app->services->pluck('name')->implode(', ') }}</td>
-                    <td>
-                        <span class="formal-badge {{ $finalStatus === 'released' ? 'formal-badge-released' : ($finalStatus === 'pending' ? 'formal-badge-pending' : 'formal-badge-expired') }}">
-                            {{ strtoupper($finalStatus) }}
-                        </span>
-                    </td>
-                    <td class="text-end fw-bold" style="white-space: nowrap;">₱{{ number_format($app->payment_amount ?: $app->totalPrice(), 2) }}</td>
-                </tr>
-                @empty
-                <tr>
-                    <td colspan="7" class="text-center py-4 text-muted italic">No appointments recorded.</td>
-                </tr>
-                @endforelse
-            </tbody>
-        </table>
+        <div class="canvas-table-wrapper">
+            <table class="formal-report-table">
+                <thead>
+                    <tr>
+                        <th style="width: 14%;">Schedule</th>
+                        <th style="width: 9%;">Ref #</th>
+                        <th style="width: 23%;">Patient Name</th>
+                        <th style="width: 11%;">Type</th>
+                        <th style="width: 21%;">Services</th>
+                        <th style="width: 11%;">Status</th>
+                        <th class="text-end" style="width: 11%;">Total Bill</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($appointments as $app)
+                    @php
+                        $isExpired = $app->isExpired();
+                        $finalStatus = $isExpired ? 'expired' : $app->status;
+                        $typeLabel = $app->batch_id ? 'BULK' : ($app->dependent_id ? 'DEPENDENT' : 'PERSONAL');
+                    @endphp
+                    <tr>
+                        <td>
+                            <div>{{ $app->appointment_date ? $app->appointment_date->format('M d, Y') : 'N/A' }}</div>
+                            <small class="text-muted">{{ $app->time_slot ? date('h:i A', strtotime($app->time_slot)) : '' }}</small>
+                        </td>
+                        <td class="font-monospace fw-bold">#{{ $app->id }}</td>
+                        <td>
+                            <div class="fw-bold uppercase">{{ $app->patient_name }}</div>
+                            <small class="text-muted">{{ $app->patient_age }} YRS / {{ strtoupper($app->patient_sex) }}</small>
+                        </td>
+                        <td><span class="formal-badge">{{ $typeLabel }}</span></td>
+                        <td class="small">{{ $app->services->pluck('name')->implode(', ') }}</td>
+                        <td>
+                            <span class="formal-badge {{ $finalStatus === 'released' ? 'formal-badge-released' : ($finalStatus === 'pending' ? 'formal-badge-pending' : 'formal-badge-expired') }}">
+                                {{ strtoupper($finalStatus) }}
+                            </span>
+                        </td>
+                        <td class="text-end fw-bold" style="white-space: nowrap;">₱{{ number_format($app->payment_amount ?: $app->totalPrice(), 2) }}</td>
+                    </tr>
+                    @empty
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted italic">No appointments recorded.</td>
+                    </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
         @endif
 
         {{-- TAB 3: SERVICES --}}
         @if($type === 'services')
-        <table class="formal-report-table">
-            <thead>
-                <tr>
-                    <th style="width: 8%;">ID</th>
-                    <th style="width: 28%;">Examination Name</th>
-                    <th style="width: 16%;">Category</th>
-                    <th style="width: 14%;">Price</th>
-                    <th style="width: 12%;">Duration</th>
-                    <th style="width: 12%;">Bookings</th>
-                    <th class="text-end" style="width: 10%;">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse($services as $svc)
-                <tr>
-                    <td class="font-monospace fw-bold">#{{ $svc->id }}</td>
-                    <td class="fw-bold uppercase">{{ $svc->name }}</td>
-                    <td><span class="formal-badge">{{ strtoupper($svc->category) }}</span></td>
-                    <td class="fw-bold" style="white-space: nowrap;">₱{{ number_format($svc->price, 2) }}</td>
-                    <td>{{ $svc->estimated_time }} mins</td>
-                    <td class="fw-bold">{{ $svc->appointments_count }}</td>
-                    <td class="text-end">
-                        <span class="formal-badge {{ $svc->is_available ? 'formal-badge-released' : 'formal-badge-expired' }}">
-                            {{ $svc->is_available ? 'ACTIVE' : 'DISABLED' }}
-                        </span>
-                    </td>
-                </tr>
-                @empty
-                <tr>
-                    <td colspan="7" class="text-center py-4 text-muted italic">No services listed.</td>
-                </tr>
-                @endforelse
-            </tbody>
-        </table>
+        <div class="canvas-table-wrapper">
+            <table class="formal-report-table">
+                <thead>
+                    <tr>
+                        <th style="width: 8%;">ID</th>
+                        <th style="width: 28%;">Examination Name</th>
+                        <th style="width: 16%;">Category</th>
+                        <th style="width: 14%;">Price</th>
+                        <th style="width: 12%;">Duration</th>
+                        <th style="width: 12%;">Bookings</th>
+                        <th class="text-end" style="width: 10%;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($services as $svc)
+                    <tr>
+                        <td class="font-monospace fw-bold">#{{ $svc->id }}</td>
+                        <td class="fw-bold uppercase">{{ $svc->name }}</td>
+                        <td><span class="formal-badge">{{ strtoupper($svc->category) }}</span></td>
+                        <td class="fw-bold" style="white-space: nowrap;">₱{{ number_format($svc->price, 2) }}</td>
+                        <td>{{ $svc->estimated_time }} mins</td>
+                        <td class="fw-bold">{{ $svc->appointments_count }}</td>
+                        <td class="text-end">
+                            <span class="formal-badge {{ $svc->is_available ? 'formal-badge-released' : 'formal-badge-expired' }}">
+                                {{ $svc->is_available ? 'ACTIVE' : 'DISABLED' }}
+                            </span>
+                        </td>
+                    </tr>
+                    @empty
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted italic">No services listed.</td>
+                    </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
         @endif
 
         {{-- TAB 4: ACCOUNTS --}}
         @if($type === 'accounts')
-        <table class="formal-report-table">
-            <thead>
-                <tr>
-                    <th style="width: 9%;">User ID</th>
-                    <th style="width: 24%;">Full Name</th>
-                    <th style="width: 26%;">Email Address</th>
-                    <th style="width: 16%;">Phone Number</th>
-                    <th style="width: 13%;">Access Role</th>
-                    <th class="text-end" style="width: 12%;">Account Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse($accounts as $acc)
-                <tr>
-                    <td class="font-monospace fw-bold">#{{ $acc->id }}</td>
-                    <td class="fw-bold uppercase">{{ $acc->name }}</td>
-                    <td>{{ $acc->email }}</td>
-                    <td>{{ $acc->phone }}</td>
-                    <td><span class="formal-badge">{{ strtoupper($acc->role) }}</span></td>
-                    <td class="text-end">
-                        <span class="formal-badge {{ $acc->trashed() ? 'formal-badge-expired' : 'formal-badge-paid' }}">
-                            {{ $acc->trashed() ? 'DEACTIVATED' : 'ACTIVE' }}
-                        </span>
-                    </td>
-                </tr>
-                @empty
-                <tr>
-                    <td colspan="6" class="text-center py-4 text-muted italic">No user accounts found.</td>
-                </tr>
-                @endforelse
-            </tbody>
-        </table>
+        <div class="canvas-table-wrapper">
+            <table class="formal-report-table">
+                <thead>
+                    <tr>
+                        <th style="width: 9%;">User ID</th>
+                        <th style="width: 24%;">Full Name</th>
+                        <th style="width: 26%;">Email Address</th>
+                        <th style="width: 16%;">Phone Number</th>
+                        <th style="width: 13%;">Access Role</th>
+                        <th class="text-end" style="width: 12%;">Account Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($accounts as $acc)
+                    <tr>
+                        <td class="font-monospace fw-bold">#{{ $acc->id }}</td>
+                        <td class="fw-bold uppercase">{{ $acc->name }}</td>
+                        <td>{{ $acc->email }}</td>
+                        <td>{{ $acc->phone }}</td>
+                        <td><span class="formal-badge">{{ strtoupper($acc->role) }}</span></td>
+                        <td class="text-end">
+                            <span class="formal-badge {{ $acc->trashed() ? 'formal-badge-expired' : 'formal-badge-paid' }}">
+                                {{ $acc->trashed() ? 'DEACTIVATED' : 'ACTIVE' }}
+                            </span>
+                        </td>
+                    </tr>
+                    @empty
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-muted italic">No user accounts found.</td>
+                    </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
         @endif
 
         {{-- TAB 5: SYSTEM AUDIT LOGS (With Balanced 18% Width & Strict Word-Break Wrapping) --}}
         @if($type === 'logs')
-        <table class="formal-report-table">
-            <thead>
-                <tr>
-                    <th style="width: 12%;">Timestamp</th>
-                    <th style="width: 14%;">Performer</th>
-                    <th style="width: 18%;">Event Action</th>
-                    <th style="width: 14%;">Target Patient</th>
-                    <th style="width: 42%;">Justification & Audit Notes</th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse($logs as $log)
-                <tr>
-                    <td style="white-space: nowrap;">{{ $log->created_at ? $log->created_at->format('M d, Y') : 'N/A' }}<br><small class="text-muted">{{ $log->created_at ? $log->created_at->format('h:i A') : '' }}</small></td>
-                    <td>
-                        <div class="fw-bold uppercase">{{ $log->user->name ?? 'System/Deleted' }}</div>
-                        <small class="text-muted">({{ strtoupper($log->user->role ?? 'SYSTEM') }})</small>
-                    </td>
-                    <td class="action-event-cell">
-                        <span class="formal-badge action-event-badge">
-                            {{ $log->action }}
-                        </span>
-                    </td>
-                    <td class="fw-bold uppercase">{{ $log->patient_name }}</td>
-                    <td>
-                        {{-- Prevents long stack traces, exceptions, and Windows file paths from overflowing --}}
-                        <div class="log-reason-content">
-                            {{ $log->reason }}
-                        </div>
-                    </td>
-                </tr>
-                @empty
-                <tr>
-                    <td colspan="5" class="text-center py-4 text-muted italic">No audit records logged.</td>
-                </tr>
-                @endforelse
-            </tbody>
-        </table>
+        <div class="canvas-table-wrapper">
+            <table class="formal-report-table">
+                <thead>
+                    <tr>
+                        <th style="width: 12%;">Timestamp</th>
+                        <th style="width: 14%;">Performer</th>
+                        <th style="width: 18%;">Event Action</th>
+                        <th style="width: 14%;">Target Patient</th>
+                        <th style="width: 42%;">Justification & Audit Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($logs as $log)
+                    <tr>
+                        <td style="white-space: nowrap;">{{ $log->created_at ? $log->created_at->format('M d, Y') : 'N/A' }}<br><small class="text-muted">{{ $log->created_at ? $log->created_at->format('h:i A') : '' }}</small></td>
+                        <td>
+                            <div class="fw-bold uppercase">{{ $log->user->name ?? 'System/Deleted' }}</div>
+                            <small class="text-muted">({{ strtoupper($log->user->role ?? 'SYSTEM') }})</small>
+                        </td>
+                        <td class="action-event-cell">
+                            <span class="formal-badge action-event-badge">
+                                {{ $log->action }}
+                            </span>
+                        </td>
+                        <td class="fw-bold uppercase">{{ $log->patient_name }}</td>
+                        <td>
+                            {{-- Prevents long stack traces, exceptions, and Windows file paths from overflowing --}}
+                            <div class="log-reason-content">
+                                {{ $log->reason }}
+                            </div>
+                        </td>
+                    </tr>
+                    @empty
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-muted italic">No audit records logged.</td>
+                    </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
         @endif
 
         {{-- 5. Automated Clinical Sign-off & Audit Certification Footer --}}
         <div class="formal-sign-section">
-            <div class="row align-items-end">
-                <div class="col-7">
+            <div class="row align-items-end g-3 sign-row">
+                <div class="col-12 col-sm-7 sign-col-left">
                     <p class="mb-1 text-muted" style="font-size: 7.5pt; line-height: 1.4;">
                         <strong>CERTIFICATION & LEGAL DISCLAIMER:</strong> This official document contains privileged clinical and financial data generated by Medscreen Diagnostic Laboratory under Republic Act No. 10173 (Philippine Data Privacy Act of 2012). Any unauthorized reproduction is strictly prohibited.
                     </p>
@@ -787,8 +875,8 @@
                         Security Audit Verification Hash: {{ hash('sha256', $type . now()->timestamp . $adminName) }}
                     </div>
                 </div>
-                <div class="col-5 text-end">
-                    <div class="formal-signature-box ms-auto">
+                <div class="col-12 col-sm-5 text-start text-sm-end sign-col-right">
+                    <div class="formal-signature-box ms-sm-auto">
                         <div class="formal-sign-line">
                             <div class="admin-name-signature">{{ $adminName }}</div>
                         </div>
