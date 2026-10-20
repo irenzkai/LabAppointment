@@ -24,7 +24,6 @@
                     <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-list-stars"></i></div>
                     <div class="min-w-0">
                         <div class="fw-bold text-main small uppercase text-truncate">Services List</div>
-                        <small class="text-secondary smaller d-block text-truncate">Add, edit & archive</small>
                     </div>
                 </div>
             </a>
@@ -35,7 +34,6 @@
                     <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-kanban"></i></div>
                     <div class="min-w-0">
                         <div class="fw-bold text-main small uppercase text-truncate">Appointment List</div>
-                        <small class="text-secondary smaller d-block text-truncate">Approval workflow</small>
                     </div>
                 </div>
             </a>
@@ -46,7 +44,6 @@
                     <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-people"></i></div>
                     <div class="min-w-0">
                         <div class="fw-bold text-main small uppercase text-truncate">User List</div>
-                        <small class="text-secondary smaller d-block text-truncate">Lab history archive</small>
                     </div>
                 </div>
             </a>
@@ -57,7 +54,6 @@
                     <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-qr-code-scan"></i></div>
                     <div class="min-w-0">
                         <div class="fw-bold text-main small uppercase text-truncate">Payment QRs</div>
-                        <small class="text-secondary smaller d-block text-truncate">Gateways & channels</small>
                     </div>
                 </div>
             </a>
@@ -68,7 +64,6 @@
                     <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-clock-history"></i></div>
                     <div class="min-w-0">
                         <div class="fw-bold text-main small uppercase text-truncate">Schedule Editor</div>
-                        <small class="text-secondary smaller d-block text-truncate">Operating hours & slots</small>
                     </div>
                 </div>
             </a>
