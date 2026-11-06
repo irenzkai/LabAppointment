@@ -156,7 +156,7 @@ function toggleModalMN(chk) {
 }
 
 // =========================================================================
-// 2. CHECKBOX MULTI-ROW SELECTION & BATCH DELETE
+// 2. CHECKBOX MULTI-ROW SELECTION & BATCH DELETE (BOOTSTRAP MODAL ENFORCED)
 // =========================================================================
 window.toggleSelectAllRows = function(masterCheckbox) {
     const isChecked = masterCheckbox.checked;
@@ -194,10 +194,20 @@ window.deleteSelectedBulkRows = function() {
     const checkedBoxes = document.querySelectorAll('.row-select-chk:checked');
     if (checkedBoxes.length === 0) return;
 
-    if (!confirm(`Are you sure you want to remove ${checkedBoxes.length} selected patient row(s)?`)) {
-        return;
+    const modalCountEl = document.getElementById('modalDeleteSelectedCount');
+    if (modalCountEl) {
+        modalCountEl.innerText = checkedBoxes.length;
     }
 
+    const modalEl = document.getElementById('deleteSelectedBulkModal');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+};
+
+window.confirmDeleteSelectedBulkRows = function() {
+    const checkedBoxes = document.querySelectorAll('.row-select-chk:checked');
     checkedBoxes.forEach(chk => {
         const row = chk.closest('tr');
         if (row) row.remove();
@@ -205,6 +215,12 @@ window.deleteSelectedBulkRows = function() {
 
     const masterCheckbox = document.getElementById('selectAllRows');
     if (masterCheckbox) masterCheckbox.checked = false;
+
+    const modalEl = document.getElementById('deleteSelectedBulkModal');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+    }
 
     updateSelectedRowsState();
     if (typeof performGlobalSync === 'function') performGlobalSync();

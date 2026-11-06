@@ -24,7 +24,7 @@
     <div class="d-flex justify-content-between align-items-center mt-4 flex-wrap gap-2">
         <div class="d-flex gap-2 align-items-center flex-wrap">
             <button type="button" class="btn-custom btn-accent px-4 py-2.5 fw-bold uppercase shadow-sm" onclick="openCreatePatientModal()">
-                <i class="bi bi-person-plus-fill me-1.5"></i> ADD PATIENT
+                <i class="bi bi-person-plus-fill me-1"></i> ADD PATIENT
             </button>
             
             {{-- Multi-Row Batch Delete Button (Visible only when rows are checked) --}}
@@ -39,7 +39,7 @@
         </div>
         
         <button type="button" id="smartSchedBtn" class="btn-custom btn-outline-accent px-4 py-2.5 fw-bold uppercase shadow-sm" onclick="runSmartScheduler()">
-            <i class="bi bi-cpu me-1.5"></i> SMART AUTO-TIME
+            <i class="bi bi-cpu me-1"></i> SMART AUTO-TIME
         </button>
     </div>
 </div>
@@ -228,6 +228,27 @@
             <div class="d-flex gap-2">
                 <button type="button" class="btn-custom btn-outline-secondary w-50 py-2.5 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn-custom btn-danger-custom w-50 py-2.5 fw-bold uppercase" onclick="confirmClearAllBulkRows()">Clear All</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- ========================================================================= --}}
+{{-- 3. DELETE SELECTED ROWS CONFIRMATION MODAL --}}
+{{-- ========================================================================= --}}
+<div class="modal fade" id="deleteSelectedBulkModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+        <div class="modal-content border-danger bg-card shadow-lg text-center p-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main); border-radius: 14px;">
+            <div class="mb-3">
+                <i class="bi bi-trash3 text-danger display-4 d-block"></i>
+            </div>
+            <h5 class="text-main fw-bold mb-2 uppercase tracking-tight">Remove Selected Rows?</h5>
+            <p class="text-secondary small mb-4">
+                Are you sure you want to remove <span id="modalDeleteSelectedCount" class="fw-bold text-danger">0</span> selected patient row(s) from the spreadsheet?
+            </p>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn-custom btn-outline-secondary w-50 py-2.5 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn-custom btn-danger-custom w-50 py-2.5 fw-bold uppercase" onclick="confirmDeleteSelectedBulkRows()">Delete</button>
             </div>
         </div>
     </div>
