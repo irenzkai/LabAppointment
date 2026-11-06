@@ -133,7 +133,7 @@
                                             'canceled' => 'danger',
                                             default => 'secondary'
                                         };
-                                        $statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
+                                        $statusLabel = $isExpired ? 'VOIDED' : strtoupper($app->status);
 
                                         $isMaker = (Auth::id() == $app->user_id);
                                         $targetRoute = ($app->batch_id && !$isMaker)
@@ -142,6 +142,12 @@
                                                 ['id' => $app->id],
                                                 Auth::user()->isEmployee() ? ['view' => 'patient'] : []
                                             ));
+
+                                        // Compile both packages and individual services cleanly
+                                        $pkgItems = $app->packages ? $app->packages->pluck('name')->map(fn($n) => '[PKG] ' . $n) : collect();
+                                        $svcItems = $app->services ? $app->services->pluck('name') : collect();
+                                        $allExamsCollection = $pkgItems->concat($svcItems);
+                                        $allExamsString = $allExamsCollection->implode(', ');
                                     @endphp
                                     <tr class="border-bottom align-middle appointment-row-hover" style="cursor: pointer; border-color: var(--border-color) !important;" onclick="window.location.href='{{ $targetRoute }}'">
                                         <td class="ps-4 py-3">
@@ -168,7 +174,13 @@
                                             </div>
                                         </td>
                                         <td class="small" style="color: var(--text-main) !important;">
-                                            {{ Str::limit($app->services->pluck('name')->implode(', '), 38) }}
+                                            @if($allExamsCollection->isNotEmpty())
+                                                <span title="{{ $allExamsString }}">
+                                                    {{ Str::limit($allExamsString, 42) }}
+                                                </span>
+                                            @else
+                                                <span class="text-muted italic">None specified</span>
+                                            @endif
                                         </td>
                                         <td class="small">
                                             <div class="fw-semibold" style="color: var(--text-main) !important;">

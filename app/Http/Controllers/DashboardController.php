@@ -60,11 +60,11 @@ class DashboardController extends Controller
             ->pluck('batch_id')
             ->unique();
 
-        // Fetch recent appointments:
+        // Fetch recent appointments (Eager load both atomic services and bundled packages):
         // 1. Direct personal or dependent bookings created by this user (non-bulk)
         // 2. ALL patient records in bulk batches created by this user (even if patient has an account)
         // 3. Individual appointments where this user is the registered patient in a bulk booking made by someone else
-        $recentAppointments = Appointment::with('services')
+        $recentAppointments = Appointment::with(['services', 'packages'])
             ->where(function($q) use ($user, $createdBatchIds) {
                 // Personal & dependent individual bookings
                 $q->where(function($sub) use ($user) {
@@ -128,7 +128,7 @@ class DashboardController extends Controller
         ];
 
         // 4. Appointments Needing Action Query (EXCLUDES EXPIRED APPOINTMENTS ALWAYS)
-        $needingActionQuery = Appointment::with(['services', 'user'])
+        $needingActionQuery = Appointment::with(['services', 'packages', 'user'])
             ->where(function($q) {
                 $q->whereIn('status', ['pending', 'approved', 'retest', 'tested', 'encoded'])
                     ->orWhere(function($sub) {
@@ -229,7 +229,7 @@ class DashboardController extends Controller
         $txStatus = $request->query('tx_status', 'all');
         $txSearch = $request->query('tx_search');
 
-        $txQuery = Appointment::with('services');
+        $txQuery = Appointment::with(['services', 'packages']);
         if ($txSearch) {
             $txQuery->where(function($q) use ($txSearch) {
                 $q->where('patient_name', 'like', "%{$txSearch}%")
@@ -240,6 +240,7 @@ class DashboardController extends Controller
         if ($txStatus && $txStatus !== 'all') {
             $txQuery->where('payment_status', $txStatus);
         }
+
         if ($txPeriod === 'daily' && $txDate) {
             $txQuery->whereDate('appointment_date', $txDate);
         } elseif ($txPeriod === 'monthly' && $txMonth) {

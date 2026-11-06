@@ -8,6 +8,7 @@ return new class extends Migration
 {
     /**
      * Run the migrations.
+     * Enforces individual atomic diagnostic procedures.
      */
     public function up(): void
     {
@@ -20,15 +21,14 @@ return new class extends Migration
             $table->text('description');           // Detailed examination scope
             $table->text('preparation');           // Prep guidelines (e.g. "Fasting required")
 
-            // 2. Operational parameters
+            // 2. Operational Parameters (Purely Individual Procedures)
             $table->unsignedInteger('estimated_time')->nullable(); // Duration in minutes
-            $table->enum('category', ['individual', 'package'])->default('individual');
             $table->enum('gender_restriction', ['male', 'female', 'both'])->default('both');
-            $table->boolean('is_available')->default(true); // Availability toggle
+            $table->boolean('is_available')->default(true);        // Availability toggle
 
             $table->timestamps();
 
-            // AUDIT & DATA RETENTION COMPLIANCE [102]
+            // AUDIT & DATA RETENTION COMPLIANCE 
             // Preserves service catalog integrity for historical appointments
             $table->softDeletes(); 
         });

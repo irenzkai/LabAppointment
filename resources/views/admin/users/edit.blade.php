@@ -1,5 +1,7 @@
 @extends('layouts.app')
+
 @section('title', 'Edit Account - ' . $user->name)
+
 @section('content')
 <div class="container text-start animate-page py-3 py-sm-4 px-3 px-sm-4" id="editUserContainer">
     <div class="row justify-content-center">
@@ -14,7 +16,7 @@
                         <p class="text-secondary mb-0 small">Update identity, PSGC address, access roles, security overrides, and family dependents.</p>
                     </div>
                     <div class="flex-shrink-0 back-directory-box">
-                        <a href="{{ route('admin.users.index') }}" class="btn-custom btn-cancel-custom px-3.5 py-2 fw-bold text-uppercase text-decoration-none d-inline-flex align-items-center gap-1.5" style="border-radius: 8px; font-size: 0.75rem; white-space: nowrap;">
+                        <a href="{{ route('admin.users.index') }}" class="btn-custom btn-cancel-custom px-3.5 py-2 fw-bold text-uppercase text-decoration-none d-inline-flex align-items-center gap-1" style="border-radius: 8px; font-size: 0.75rem; white-space: nowrap;">
                             <i class="bi bi-arrow-left"></i>
                             <span>Back to Directory</span>
                         </a>
@@ -22,16 +24,16 @@
                 </div>
 
                 @if ($errors->any())
-                <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 text-danger p-3 mb-4 rounded-3">
-                    <div class="d-flex align-items-center mb-1 fw-bold uppercase small">
-                        <i class="bi bi-exclamation-triangle-fill me-2"></i> Validation Errors
+                    <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 text-danger p-3 mb-4 rounded-3">
+                        <div class="d-flex align-items-center mb-1 fw-bold uppercase small">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i> Validation Errors
+                        </div>
+                        <ul class="mb-0 small ps-3">
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
                     </div>
-                    <ul class="mb-0 small ps-3">
-                        @foreach ($errors->all() as $error)
-                        <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
                 @endif
 
                 {{-- Tabs: Main Profile vs Family Dependents --}}
@@ -59,50 +61,60 @@
                             <h6 class="text-accent mb-3 small fw-bold uppercase">1. Personal Identity</h6>
                             <div class="row g-3 mb-4">
                                 <div class="col-12 col-sm-6 col-md-3">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">First Name</label>
-                                    <input type="text" name="first_name" id="first_name" class="form-control uppercase" value="{{ old('first_name', $user->first_name) }}" required>
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">First Name <span class="text-danger">*</span></label>
+                                    <input type="text" name="first_name" id="first_name" class="form-control uppercase @error('first_name') is-invalid @enderror" value="{{ old('first_name', $user->first_name) }}" required>
                                     <div class="invalid-feedback d-none" id="err_first_name"></div>
+                                    @error('first_name') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
                                 <div class="col-12 col-sm-6 col-md-3">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Middle Name</label>
-                                    <input type="text" name="middle_name" id="middle_name" class="form-control uppercase" value="{{ old('middle_name', $user->middle_name) }}">
+                                    <input type="text" name="middle_name" id="middle_name" class="form-control uppercase @error('middle_name') is-invalid @enderror" value="{{ old('middle_name', $user->middle_name) }}">
                                     <div class="invalid-feedback d-none" id="err_middle_name"></div>
+                                    @error('middle_name') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
                                 <div class="col-12 col-sm-6 col-md-3">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">Last Name</label>
-                                    <input type="text" name="last_name" id="last_name" class="form-control uppercase" value="{{ old('last_name', $user->last_name) }}" required>
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">Last Name <span class="text-danger">*</span></label>
+                                    <input type="text" name="last_name" id="last_name" class="form-control uppercase @error('last_name') is-invalid @enderror" value="{{ old('last_name', $user->last_name) }}" required>
                                     <div class="invalid-feedback d-none" id="err_last_name"></div>
+                                    @error('last_name') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
                                 <div class="col-12 col-sm-6 col-md-3">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Suffix (Opt.)</label>
-                                    <input type="text" name="suffix" id="suffix" class="form-control uppercase" value="{{ old('suffix', $user->suffix) }}" placeholder="e.g. JR">
+                                    <input type="text" name="suffix" id="suffix" list="suffix_options" class="form-control uppercase @error('suffix') is-invalid @enderror" value="{{ old('suffix', $user->suffix) }}" placeholder="e.g. JR" maxlength="10">
+                                    <datalist id="suffix_options">
+                                        <option value="JR"><option value="SR"><option value="II"><option value="III"><option value="IV"><option value="V">
+                                    </datalist>
                                     <div class="invalid-feedback d-none" id="err_suffix"></div>
+                                    @error('suffix') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
                                 <div class="col-12 col-sm-6 col-md-4">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">Birthdate</label>
-                                    <input type="date" name="birthdate" id="birthdate" class="form-control" value="{{ $user->birthdate ? $user->birthdate->format('Y-m-d') : '' }}" required max="{{ date('Y-m-d') }}">
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">Birthdate <span class="text-danger">*</span></label>
+                                    <input type="date" name="birthdate" id="birthdate" class="form-control @error('birthdate') is-invalid @enderror" value="{{ old('birthdate', $user->birthdate ? $user->birthdate->format('Y-m-d') : '') }}" required max="{{ date('Y-m-d') }}">
                                     <div class="invalid-feedback d-none" id="err_birthdate"></div>
+                                    @error('birthdate') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
                                 <div class="col-12 col-sm-6 col-md-4">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">Sex</label>
-                                    <select name="sex" id="sex" class="form-select" required>
-                                        <option value="Male" {{ $user->sex === 'Male' ? 'selected' : '' }}>Male</option>
-                                        <option value="Female" {{ $user->sex === 'Female' ? 'selected' : '' }}>Female</option>
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">Sex <span class="text-danger">*</span></label>
+                                    <select name="sex" id="sex" class="form-select @error('sex') is-invalid @enderror" required>
+                                        <option value="Male" {{ old('sex', $user->sex) === 'Male' ? 'selected' : '' }}>Male</option>
+                                        <option value="Female" {{ old('sex', $user->sex) === 'Female' ? 'selected' : '' }}>Female</option>
                                     </select>
                                     <div class="invalid-feedback d-none" id="err_sex"></div>
+                                    @error('sex') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
                                 <div class="col-12 col-sm-12 col-md-4">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">Contact Phone</label>
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">Contact Phone <span class="text-danger">*</span></label>
                                     <div class="input-group">
                                         <span class="input-group-text border-secondary bg-secondary bg-opacity-25 text-main fw-bold">09</span>
                                         @php
-                                        $rawPhone = old('phone', $user->phone);
-                                        $displayPhone = str_starts_with($rawPhone, '09') ? substr($rawPhone, 2) : $rawPhone;
+                                            $rawPhone = old('phone', $user->phone);
+                                            $displayPhone = str_starts_with($rawPhone, '09') ? substr($rawPhone, 2) : $rawPhone;
                                         @endphp
-                                        <input type="text" id="phone_display" class="form-control" placeholder="171234567" maxlength="9" value="{{ $displayPhone }}" oninput="this.value = this.value.replace(/[^0-9]/g, ''); syncEditPhone();" required>
+                                        <input type="text" id="phone_display" class="form-control @error('phone') is-invalid @enderror" placeholder="171234567" maxlength="9" value="{{ $displayPhone }}" oninput="this.value = this.value.replace(/[^0-9]/g, ''); syncEditPhone();" required>
                                     </div>
                                     <input type="hidden" name="phone" id="in_phone" value="{{ $rawPhone }}">
                                     <div class="invalid-feedback d-none" id="err_phone"></div>
+                                    @error('phone') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
                             </div>
 
@@ -110,30 +122,34 @@
                             <h6 class="text-accent mb-3 small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3">2. PSGC Residential Address</h6>
                             <div class="row g-3 mb-4">
                                 <div class="col-12 col-sm-6">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">Province</label>
-                                    <select id="edit_prov" name="province" class="form-select" onchange="fetchEditCities(this.value)" required>
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">Province <span class="text-danger">*</span></label>
+                                    <select id="edit_prov" name="province" class="form-select @error('province') is-invalid @enderror" onchange="fetchEditCities(this.value)" required>
                                         <option value="">Select Province</option>
                                     </select>
                                     <div class="invalid-feedback d-none" id="err_province"></div>
+                                    @error('province') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">City / Municipality</label>
-                                    <select id="edit_city" name="city" class="form-select" onchange="fetchEditBarangays(this.value)" disabled required>
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">City / Municipality <span class="text-danger">*</span></label>
+                                    <select id="edit_city" name="city" class="form-select @error('city') is-invalid @enderror" onchange="fetchEditBarangays(this.value)" disabled required>
                                         <option value="">Select Province First</option>
                                     </select>
                                     <div class="invalid-feedback d-none" id="err_city"></div>
+                                    @error('city') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">Barangay</label>
-                                    <select id="edit_brgy" name="barangay" class="form-select" disabled required>
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">Barangay <span class="text-danger">*</span></label>
+                                    <select id="edit_brgy" name="barangay" class="form-select @error('barangay') is-invalid @enderror" disabled required>
                                         <option value="">Select City First</option>
                                     </select>
                                     <div class="invalid-feedback d-none" id="err_barangay"></div>
+                                    @error('barangay') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="small text-secondary fw-bold mb-1 uppercase">Street / House No.</label>
-                                    <input type="text" name="street" id="edit_street" class="form-control uppercase" value="{{ old('street', $user->street) }}" required>
+                                    <label class="small text-secondary fw-bold mb-1 uppercase">Street / House No. <span class="text-danger">*</span></label>
+                                    <input type="text" name="street" id="edit_street" class="form-control uppercase @error('street') is-invalid @enderror" value="{{ old('street', $user->street) }}" required>
                                     <div class="invalid-feedback d-none" id="err_street"></div>
+                                    @error('street') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
                             </div>
 
@@ -176,12 +192,16 @@
                                 {{-- Access Role --}}
                                 <div class="col-12 col-md-4">
                                     <label class="small text-secondary fw-bold mb-1 uppercase">Role / Access Level</label>
-                                    <select name="role" id="role" class="form-select" required>
-                                        <option value="user" {{ $user->role === 'user' ? 'selected' : '' }}>Patient / User</option>
-                                        <option value="staff" {{ $user->role === 'staff' ? 'selected' : '' }}>Clinic Staff</option>
-                                        <option value="lab_tech" {{ $user->role === 'lab_tech' ? 'selected' : '' }}>Laboratory Technician</option>
+                                    <select name="role" id="role" class="form-select @error('role') is-invalid @enderror" onchange="handleRoleChange(this.value, false)" required>
+                                        <option value="user" {{ old('role', $user->role) === 'user' ? 'selected' : '' }}>Patient / User</option>
+                                        <option value="staff" {{ old('role', $user->role) === 'staff' ? 'selected' : '' }}>Clinic Staff</option>
+                                        <option value="lab_tech" {{ old('role', $user->role) === 'lab_tech' ? 'selected' : '' }}>Laboratory Technician</option>
+                                        @if($user->role === 'admin')
+                                            <option value="admin" {{ old('role', $user->role) === 'admin' ? 'selected' : '' }}>System Administrator</option>
+                                        @endif
                                     </select>
                                     <div class="invalid-feedback d-none" id="err_role"></div>
+                                    @error('role') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
 
                                 {{-- Email Address --}}
@@ -190,8 +210,9 @@
                                         Email Address
                                         <span id="email_changed_badge" class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-0.5 px-1.5 ms-1 d-none" style="font-size: 0.65rem;">Modified</span>
                                     </label>
-                                    <input type="email" name="email" id="email" class="form-control" value="{{ old('email', $user->email) }}" oninput="updateEmailState();" required>
+                                    <input type="email" name="email" id="email" class="form-control @error('email') is-invalid @enderror" value="{{ old('email', $user->email) }}" oninput="updateEmailState();" required>
                                     <div class="invalid-feedback d-none" id="err_email"></div>
+                                    @error('email') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
 
                                 {{-- Specific Email Action --}}
@@ -200,13 +221,81 @@
                                     <select name="email_action" id="email_action" class="form-select" onchange="handleEmailActionChange(this.value)">
                                         {{-- Populated dynamically via JS --}}
                                     </select>
-
                                     {{-- If unverified, option to send verification link --}}
                                     <div id="email_link_checkbox_wrapper" class="form-check mt-2 d-none">
                                         <input class="form-check-input" type="checkbox" name="send_verification_link" id="send_verification_link" value="1" {{ old('send_verification_link', '1') === '1' ? 'checked' : '' }}>
                                         <label class="form-check-label smaller text-secondary fw-bold" for="send_verification_link" style="font-size: 0.75rem;">
                                             Send verification link to email
                                         </label>
+                                    </div>
+                                </div>
+
+                                {{-- Dynamic Clinical Role Credentials (Visible for Staff, Lab Tech, Admin) --}}
+                                @php
+                                    $currentRoleState = old('role', $user->role);
+                                    $isClinicalRole = in_array($currentRoleState, ['staff', 'lab_tech', 'admin']);
+                                    $isLabTechState = in_array($currentRoleState, ['lab_tech', 'admin']);
+                                @endphp
+                                <div id="clinical_credentials_container" class="col-12 {{ $isClinicalRole ? '' : 'd-none' }}">
+                                    <div class="p-3 rounded border border-secondary border-opacity-25 bg-secondary bg-opacity-10">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="bi bi-person-badge-fill text-accent me-2"></i>
+                                            <span class="small fw-bold text-accent uppercase" id="credentials_box_title">
+                                                {{ $currentRoleState === 'lab_tech' ? 'Laboratory Technician & Professional Credentials' : ($currentRoleState === 'admin' ? 'System Administrator & Clinical Credentials' : 'Clinic Staff Designation') }}
+                                            </span>
+                                        </div>
+                                        <div class="row g-3">
+                                            {{-- Occupation / Designation --}}
+                                            <div class="col-12 {{ $isLabTechState ? 'col-md-6' : 'col-md-12' }}" id="occupation_wrapper">
+                                                <label class="small text-secondary fw-bold mb-1 uppercase">
+                                                    Occupation / Official Designation <span class="text-danger">*</span>
+                                                </label>
+                                                <input type="text" 
+                                                    name="occupation" 
+                                                    id="occupation" 
+                                                    class="form-control @error('occupation') is-invalid @enderror" 
+                                                    list="occupation_suggestions" 
+                                                    placeholder="{{ $isLabTechState ? 'e.g. Medical Technologist, Pathologist, Radiologist' : 'e.g. Receptionist, Clinical Encoder, Clinic Manager' }}" 
+                                                    value="{{ old('occupation', $user->occupation) }}">
+                                                <datalist id="occupation_suggestions">
+                                                    @if($isLabTechState)
+                                                        <option value="Medical Technologist">
+                                                        <option value="Pathologist">
+                                                        <option value="Radiologist">
+                                                        <option value="Attending Physician">
+                                                        <option value="Laboratory Supervisor">
+                                                    @else
+                                                        <option value="Receptionist">
+                                                        <option value="Clinical Encoder">
+                                                        <option value="Clinic Manager">
+                                                        <option value="Clinic Nurse">
+                                                        <option value="Admissions Officer">
+                                                    @endif
+                                                </datalist>
+                                                <div class="invalid-feedback d-none" id="err_occupation"></div>
+                                                @error('occupation') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
+                                                <small class="text-muted smaller d-block mt-1" id="occupation_help_text">
+                                                    {{ $isLabTechState ? 'Required for clinical verification sign-off and lab audit logs.' : 'Designate official staff position for reception, admissions, and audit logs.' }}
+                                                </small>
+                                            </div>
+
+                                            {{-- Professional License / PRC ID --}}
+                                            <div class="col-12 col-md-6 {{ $isLabTechState ? '' : 'd-none' }}" id="license_wrapper">
+                                                <label class="small text-secondary fw-bold mb-1 uppercase">
+                                                    Professional License / PRC No. <span class="text-danger">*</span>
+                                                </label>
+                                                <input type="text" 
+                                                    name="license_number" 
+                                                    id="license_number" 
+                                                    class="form-control uppercase @error('license_number') is-invalid @enderror" 
+                                                    placeholder="e.g. PRC-MT-0012345" 
+                                                    maxlength="50"
+                                                    value="{{ old('license_number', $user->license_number) }}">
+                                                <div class="invalid-feedback d-none" id="err_license_number"></div>
+                                                @error('license_number') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
+                                                <small class="text-muted smaller d-block mt-1">Required for certified laboratory technologists and pathologists.</small>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -237,7 +326,7 @@
                                 <div id="manual_pass_wrapper" class="col-12 d-none">
                                     <div class="row g-2">
                                         <div class="col-12 col-md-6">
-                                            <input type="password" name="password" id="password" class="form-control" placeholder="New temporary password">
+                                            <input type="password" name="password" id="password" class="form-control" placeholder="New temporary password (min 8 chars, mixed, symbol)">
                                             <div class="invalid-feedback d-none" id="err_password"></div>
                                         </div>
                                         <div class="col-12 col-md-6">
@@ -253,14 +342,16 @@
                                 <h6 class="text-danger mb-2 small fw-bold uppercase"><i class="bi bi-shield-exclamation me-1"></i>4. Administrative Justification</h6>
                                 <div class="mb-3">
                                     <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Select Administrative Justification</label>
-                                    <select name="reason" id="reason_select" class="form-select" onchange="toggleEditReason(this.value)" required>
+                                    <select name="reason" id="reason_select" class="form-select @error('reason') is-invalid @enderror" onchange="toggleEditReason(this.value)" required>
                                         <option value="" disabled {{ old('reason') ? '' : 'selected' }}>-- Select a valid justification --</option>
                                         <option value="Routine administrative profile update" {{ old('reason') == 'Routine administrative profile update' ? 'selected' : '' }}>Routine administrative profile update</option>
                                         <option value="Official patient request for credential/demographic revision" {{ old('reason') == 'Official patient request for credential/demographic revision' ? 'selected' : '' }}>Official patient request for credential/demographic revision</option>
                                         <option value="Security override and manual password reset" {{ old('reason') == 'Security override and manual password reset' ? 'selected' : '' }}>Security override and manual password reset</option>
+                                        <option value="Staff role elevation / credential configuration" {{ old('reason') == 'Staff role elevation / credential configuration' ? 'selected' : '' }}>Staff role elevation / credential configuration</option>
                                         <option value="Others">Others (Specify below)</option>
                                     </select>
                                     <div class="invalid-feedback d-none" id="err_reason"></div>
+                                    @error('reason') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                                 </div>
                                 <div id="reason_custom_wrapper" class="mb-3 d-none">
                                     <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Specify Custom Reason</label>
@@ -285,13 +376,13 @@
                                 </div>
                                 <div class="flex-shrink-0 status-action-box">
                                     @if($user->trashed())
-                                    <button type="button" class="btn btn-success fw-bold uppercase px-4 py-2" data-bs-toggle="modal" data-bs-target="#statusModal">
-                                        <i class="bi bi-arrow-counterclockwise me-1"></i> REACTIVATE ACCOUNT
-                                    </button>
+                                        <button type="button" class="btn btn-success fw-bold uppercase px-4 py-2" data-bs-toggle="modal" data-bs-target="#statusModal">
+                                            <i class="bi bi-arrow-counterclockwise me-1"></i> REACTIVATE ACCOUNT
+                                        </button>
                                     @else
-                                    <button type="button" class="btn btn-outline-danger fw-bold uppercase px-4 py-2" data-bs-toggle="modal" data-bs-target="#statusModal">
-                                        <i class="bi bi-slash-circle me-1"></i> DEACTIVATE ACCOUNT
-                                    </button>
+                                        <button type="button" class="btn btn-outline-danger fw-bold uppercase px-4 py-2" data-bs-toggle="modal" data-bs-target="#statusModal">
+                                            <i class="bi bi-slash-circle me-1"></i> DEACTIVATE ACCOUNT
+                                        </button>
                                     @endif
                                 </div>
                             </div>
@@ -306,7 +397,7 @@
                                 <small class="text-muted">Add, update, or archive family dependents registered under this patient account.</small>
                             </div>
                             <div class="flex-shrink-0 add-dep-btn-box">
-                                <a href="{{ route('admin.users.dependents.create', $user->id) }}" class="btn btn-accent btn-sm fw-bold uppercase px-3 py-2 text-nowrap d-inline-flex align-items-center gap-1.5" style="border-radius: 8px;">
+                                <a href="{{ route('admin.users.dependents.create', $user->id) }}" class="btn btn-accent btn-sm fw-bold uppercase px-3 py-2 text-nowrap d-inline-flex align-items-center gap-1" style="border-radius: 8px;">
                                     <i class="bi bi-plus-lg"></i>
                                     <span>ADD DEPENDENT</span>
                                 </a>
@@ -316,156 +407,155 @@
                         {{-- Active Dependents Grid --}}
                         <div class="row g-3 mb-4">
                             @forelse($user->dependents->where('deleted_at', null) as $dep)
-                            @php $isOver18 = $dep->birthdate && $dep->birthdate->age >= 18; @endphp
-                            <div class="col-12 col-md-6 text-start">
-                                <div class="p-3 rounded border {{ $isOver18 ? 'border-warning' : 'border-secondary border-opacity-20' }} d-flex justify-content-between align-items-center h-100 bg-card gap-2">
-                                    <div>
-                                        <div class="fw-bold text-main small text-break">{{ strtoupper($dep->name) }}</div>
-                                        <small class="text-secondary d-block">{{ strtoupper($dep->relationship) }} | {{ strtoupper($dep->sex) }} | {{ $dep->birthdate ? $dep->birthdate->age : 'N/A' }} YRS OLD</small>
-                                        @if($isOver18) <span class="badge bg-warning text-dark mt-1">18+ (Promotion Eligible)</span> @endif
-                                        <div class="text-accent smaller mt-1 text-break"><i class="bi bi-geo-alt-fill me-1"></i>{{ $dep->address }}</div>
+                                @php $isOver18 = $dep->birthdate && $dep->birthdate->age >= 18; @endphp
+                                <div class="col-12 col-md-6 text-start">
+                                    <div class="p-3 rounded border {{ $isOver18 ? 'border-warning' : 'border-secondary border-opacity-20' }} d-flex justify-content-between align-items-center h-100 bg-card gap-2">
+                                        <div>
+                                            <div class="fw-bold text-main small text-break">{{ strtoupper($dep->name) }}</div>
+                                            <small class="text-secondary d-block">{{ strtoupper($dep->relationship ?? 'Dependent') }} | {{ strtoupper($dep->sex) }} | {{ $dep->birthdate ? $dep->birthdate->age : 'N/A' }} YRS OLD</small>
+                                            @if($isOver18) <span class="badge bg-warning text-dark mt-1">18+ (Promotion Eligible)</span> @endif
+                                            <div class="text-accent smaller mt-1 text-break"><i class="bi bi-geo-alt-fill me-1"></i>{{ $dep->address }}</div>
+                                        </div>
+
+                                        {{-- 3-Dot Dropdown Menu --}}
+                                        <div class="dropdown flex-shrink-0">
+                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle py-1 px-2.5" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                <i class="bi bi-three-dots-vertical"></i>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark shadow bg-card border-secondary">
+                                                <li>
+                                                    <a class="dropdown-item small py-2" href="{{ route('admin.users.dependents.edit', [$user->id, $dep->id]) }}">
+                                                        <i class="bi bi-pencil-square me-2 text-info"></i>Edit
+                                                    </a>
+                                                </li>
+                                                <li>
+                                                    <button type="button" class="dropdown-item small py-2" data-bs-toggle="modal" data-bs-target="#promoteDepModal{{ $dep->id }}">
+                                                        <i class="bi bi-arrow-up-circle me-2 text-accent"></i>Promote Account
+                                                    </button>
+                                                </li>
+                                                <li><hr class="dropdown-divider border-secondary border-opacity-50"></li>
+                                                <li>
+                                                    <button type="button" class="dropdown-item small py-2 text-danger" data-bs-toggle="modal" data-bs-target="#archiveDepModal{{ $dep->id }}">
+                                                        <i class="bi bi-trash me-2"></i>Archive
+                                                    </button>
+                                                </li>
+                                            </ul>
+                                        </div>
                                     </div>
+                                </div>
 
-                                    {{-- 3-Dot Dropdown Menu --}}
-                                    <div class="dropdown flex-shrink-0">
-                                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle py-1 px-2.5" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                            <i class="bi bi-three-dots-vertical"></i>
-                                        </button>
-                                        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark shadow bg-card border-secondary">
-                                            <li>
-                                                <a class="dropdown-item small py-2" href="{{ route('admin.users.dependents.edit', [$user->id, $dep->id]) }}">
-                                                    <i class="bi bi-pencil-square me-2 text-info"></i>Edit
-                                                </a>
-                                            </li>
-                                            <li>
-                                                <button type="button" class="dropdown-item small py-2" data-bs-toggle="modal" data-bs-target="#promoteDepModal{{ $dep->id }}">
-                                                    <i class="bi bi-arrow-up-circle me-2 text-accent"></i>Promote Account
-                                                </button>
-                                            </li>
-                                            <li><hr class="dropdown-divider border-secondary border-opacity-50"></li>
-                                            <li>
-                                                <button type="button" class="dropdown-item small py-2 text-danger" data-bs-toggle="modal" data-bs-target="#archiveDepModal{{ $dep->id }}">
-                                                    <i class="bi bi-trash me-2"></i>Archive
-                                                </button>
-                                            </li>
-                                        </ul>
+                                {{-- Promote Dependent Modal --}}
+                                <div class="modal fade" id="promoteDepModal{{ $dep->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <form action="{{ route('admin.users.dependents.promote', [$user->id, $dep->id]) }}" method="POST" class="modal-content border-secondary bg-card text-start p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                                            @csrf
+                                            <h5 class="text-accent fw-bold uppercase mb-2">
+                                                <i class="bi bi-arrow-up-circle me-2"></i>Promote Dependent Account
+                                            </h5>
+                                            <p class="small text-muted mb-3 text-break">
+                                                Promoting <strong>{{ strtoupper($dep->name) }}</strong> will directly redirect to create an independent user account with historical medical records automatically transitioned.
+                                            </p>
+                                            <div class="mb-3">
+                                                <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Reason for Promotion</label>
+                                                <select name="reason" id="promote_reason_select_{{ $dep->id }}" class="form-select" onchange="togglePromoteReason('{{ $dep->id }}', this.value)" required>
+                                                    <option value="" disabled selected>-- Select a valid justification --</option>
+                                                    <option value="Minor reached adulthood / account promotion">Minor reached adulthood / account promotion</option>
+                                                    <option value="Requested by parent / account owner">Requested by parent / account owner</option>
+                                                    <option value="Administrative independent account creation">Administrative independent account creation</option>
+                                                    <option value="Others">Others (Specify below)</option>
+                                                </select>
+                                            </div>
+                                            <div id="promote_custom_reason_wrapper_{{ $dep->id }}" class="mb-3 d-none">
+                                                <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Specify Custom Reason</label>
+                                                <textarea id="promote_custom_reason_{{ $dep->id }}" class="form-control" rows="2" placeholder="Provide details regarding the account promotion..."></textarea>
+                                            </div>
+                                            <div class="d-flex flex-column flex-sm-row gap-2 mt-3">
+                                                <button type="button" class="btn btn-outline-secondary flex-grow-1 py-2 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-accent flex-grow-1 py-2 fw-bold uppercase shadow-sm">Confirm & Create</button>
+                                            </div>
+                                        </form>
                                     </div>
                                 </div>
-                            </div>
 
-                            {{-- Promote Dependent Modal with Reason Dropdown Confirmation --}}
-                            <div class="modal fade" id="promoteDepModal{{ $dep->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-                                <div class="modal-dialog modal-dialog-centered">
-                                    <form action="{{ route('admin.users.dependents.promote', [$user->id, $dep->id]) }}" method="POST" class="modal-content border-secondary bg-card text-start p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-                                        @csrf
-                                        <h5 class="text-accent fw-bold uppercase mb-2">
-                                            <i class="bi bi-arrow-up-circle me-2"></i>Promote Dependent Account
-                                        </h5>
-                                        <p class="small text-muted mb-3 text-break">
-                                            Promoting <strong>{{ strtoupper($dep->name) }}</strong> will directly redirect to create an independent user account with historical medical records automatically transitioned.
-                                        </p>
-                                        <div class="mb-3">
-                                            <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Reason for Promotion</label>
-                                            <select name="reason" id="promote_reason_select_{{ $dep->id }}" class="form-select" onchange="togglePromoteReason('{{ $dep->id }}', this.value)" required>
-                                                <option value="" disabled selected>-- Select a valid justification --</option>
-                                                <option value="Minor reached adulthood / account promotion">Minor reached adulthood / account promotion</option>
-                                                <option value="Requested by parent / account owner">Requested by parent / account owner</option>
-                                                <option value="Administrative independent account creation">Administrative independent account creation</option>
-                                                <option value="Others">Others (Specify below)</option>
-                                            </select>
-                                        </div>
-                                        <div id="promote_custom_reason_wrapper_{{ $dep->id }}" class="mb-3 d-none">
-                                            <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Specify Custom Reason</label>
-                                            <textarea id="promote_custom_reason_{{ $dep->id }}" class="form-control" rows="2" placeholder="Provide details regarding the account promotion..."></textarea>
-                                        </div>
-                                        <div class="d-flex flex-column flex-sm-row gap-2 mt-3">
-                                            <button type="button" class="btn btn-outline-secondary flex-grow-1 py-2 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-accent flex-grow-1 py-2 fw-bold uppercase shadow-sm">Confirm & Create</button>
-                                        </div>
-                                    </form>
+                                {{-- Archive Dependent Modal --}}
+                                <div class="modal fade" id="archiveDepModal{{ $dep->id }}" tabindex="-1">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <form action="{{ route('admin.users.dependents.destroy', [$user->id, $dep->id]) }}" method="POST" class="modal-content border-danger bg-card text-start p-3 p-sm-4">
+                                            @csrf 
+                                            @method('DELETE')
+                                            <h5 class="text-danger fw-bold uppercase mb-2 text-break">Archive Dependent: {{ $dep->name }}</h5>
+                                            <p class="small text-muted mb-3">This dependent profile will be soft-deleted and moved to the archive directory.</p>
+                                            <div class="mb-3">
+                                                <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Reason for Archiving</label>
+                                                <select name="reason" class="form-select" required>
+                                                    <option value="Minor reached adulthood / account promotion">Minor reached adulthood / account promotion</option>
+                                                    <option value="Requested by parent / account owner">Requested by parent / account owner</option>
+                                                    <option value="Duplicate dependent profile cleanup">Duplicate dependent profile cleanup</option>
+                                                    <option value="Others">Others</option>
+                                                </select>
+                                            </div>
+                                            <button type="submit" class="btn btn-danger w-100 py-2 fw-bold uppercase">CONFIRM ARCHIVE</button>
+                                        </form>
+                                    </div>
                                 </div>
-                            </div>
-
-                            {{-- Archive Dependent Modal with Reason --}}
-                            <div class="modal fade" id="archiveDepModal{{ $dep->id }}" tabindex="-1">
-                                <div class="modal-dialog modal-dialog-centered">
-                                    <form action="{{ route('admin.users.dependents.destroy', [$user->id, $dep->id]) }}" method="POST" class="modal-content border-danger bg-card text-start p-3 p-sm-4">
-                                        @csrf 
-                                        @method('DELETE')
-                                        <h5 class="text-danger fw-bold uppercase mb-2 text-break">Archive Dependent: {{ $dep->name }}</h5>
-                                        <p class="small text-muted mb-3">This dependent profile will be soft-deleted and moved to the archive directory.</p>
-                                        
-                                        <div class="mb-3">
-                                            <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Reason for Archiving</label>
-                                            <select name="reason" class="form-select" required>
-                                                <option value="Minor reached adulthood / account promotion">Minor reached adulthood / account promotion</option>
-                                                <option value="Requested by parent / account owner">Requested by parent / account owner</option>
-                                                <option value="Duplicate dependent profile cleanup">Duplicate dependent profile cleanup</option>
-                                                <option value="Others">Others</option>
-                                            </select>
-                                        </div>
-                                        <button type="submit" class="btn btn-danger w-100 py-2 fw-bold uppercase">CONFIRM ARCHIVE</button>
-                                    </form>
-                                </div>
-                            </div>
                             @empty
-                            <div class="col-12 py-4 text-center text-muted italic">No active dependents linked to this user profile.</div>
+                                <div class="col-12 py-4 text-center text-muted italic">No active dependents linked to this user profile.</div>
                             @endforelse
                         </div>
 
                         {{-- Archived Dependents Directory --}}
                         @php $archivedDeps = $user->dependents->where('deleted_at', '!=', null); @endphp
                         @if($archivedDeps->count() > 0)
-                        <hr class="border-secondary border-opacity-25 my-4">
-                        <h6 class="text-warning fw-bold mb-3 uppercase small"><i class="bi bi-archive me-1"></i>Archived Dependents (Directory)</h6>
-                        <div class="row g-3">
-                            @foreach($archivedDeps as $archived)
-                            <div class="col-12 col-md-6 text-start">
-                                <div class="p-3 rounded border border-warning border-opacity-30 d-flex justify-content-between align-items-center bg-card gap-2">
-                                    <div>
-                                        <div class="text-warning fw-bold small text-break">{{ strtoupper($archived->name) }}</div>
-                                        <small class="text-secondary d-block">{{ strtoupper($archived->relationship) }} | {{ $archived->birthdate ? $archived->birthdate->age : 'N/A' }} YRS OLD (ARCHIVED)</small>
+                            <hr class="border-secondary border-opacity-25 my-4">
+                            <h6 class="text-warning fw-bold mb-3 uppercase small"><i class="bi bi-archive me-1"></i>Archived Dependents (Directory)</h6>
+                            <div class="row g-3">
+                                @foreach($archivedDeps as $archived)
+                                    <div class="col-12 col-md-6 text-start">
+                                        <div class="p-3 rounded border border-warning border-opacity-30 d-flex justify-content-between align-items-center bg-card gap-2">
+                                            <div>
+                                                <div class="text-warning fw-bold small text-break">{{ strtoupper($archived->name) }}</div>
+                                                <small class="text-secondary d-block">{{ strtoupper($archived->relationship ?? 'Dependent') }} | {{ $archived->birthdate ? $archived->birthdate->age : 'N/A' }} YRS OLD (ARCHIVED)</small>
+                                            </div>
+                                            <button type="button" class="btn btn-sm btn-outline-warning py-1 px-3 fw-bold uppercase flex-shrink-0" data-bs-toggle="modal" data-bs-target="#restoreDepModal{{ $archived->id }}">
+                                                <i class="bi bi-arrow-counterclockwise me-1"></i> RESTORE
+                                            </button>
+                                        </div>
                                     </div>
-                                    <button type="button" class="btn btn-sm btn-outline-warning py-1 px-3 fw-bold uppercase flex-shrink-0" data-bs-toggle="modal" data-bs-target="#restoreDepModal{{ $archived->id }}">
-                                        <i class="bi bi-arrow-counterclockwise me-1"></i> RESTORE
-                                    </button>
-                                </div>
-                            </div>
 
-                            {{-- Restore Dependent Modal with Reason Dropdown --}}
-                            <div class="modal fade" id="restoreDepModal{{ $archived->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-                                <div class="modal-dialog modal-dialog-centered">
-                                    <form action="{{ route('admin.users.dependents.restore', [$user->id, $archived->id]) }}" method="POST" class="modal-content border-warning bg-card text-start p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-                                        @csrf
-                                        <h5 class="text-warning fw-bold uppercase mb-2">
-                                            <i class="bi bi-arrow-counterclockwise me-2"></i>Restore Dependent Profile?
-                                        </h5>
-                                        <p class="small text-muted mb-3 text-break">
-                                            You are about to reactivate <strong>{{ strtoupper($archived->name) }}</strong> and restore them to active family dependents.
-                                        </p>
-                                        <div class="mb-3">
-                                            <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Reason for Restoration</label>
-                                            <select name="reason" id="restore_reason_select_{{ $archived->id }}" class="form-select" onchange="toggleRestoreReason('{{ $archived->id }}', this.value)" required>
-                                                <option value="" disabled selected>-- Select a valid justification --</option>
-                                                <option value="Restored per parent/guardian request">Restored per parent/guardian request</option>
-                                                <option value="Administrative correction of accidental archival">Administrative correction of accidental archival</option>
-                                                <option value="Re-activation of family dependent profile">Re-activation of family dependent profile</option>
-                                                <option value="Others">Others (Specify below)</option>
-                                            </select>
+                                    {{-- Restore Dependent Modal --}}
+                                    <div class="modal fade" id="restoreDepModal{{ $archived->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+                                        <div class="modal-dialog modal-dialog-centered">
+                                            <form action="{{ route('admin.users.dependents.restore', [$user->id, $archived->id]) }}" method="POST" class="modal-content border-warning bg-card text-start p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                                                @csrf
+                                                <h5 class="text-warning fw-bold uppercase mb-2">
+                                                    <i class="bi bi-arrow-counterclockwise me-2"></i>Restore Dependent Profile?
+                                                </h5>
+                                                <p class="small text-muted mb-3 text-break">
+                                                    You are about to reactivate <strong>{{ strtoupper($archived->name) }}</strong> and restore them to active family dependents.
+                                                </p>
+                                                <div class="mb-3">
+                                                    <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Reason for Restoration</label>
+                                                    <select name="reason" id="restore_reason_select_{{ $archived->id }}" class="form-select" onchange="toggleRestoreReason('{{ $archived->id }}', this.value)" required>
+                                                        <option value="" disabled selected>-- Select a valid justification --</option>
+                                                        <option value="Restored per parent/guardian request">Restored per parent/guardian request</option>
+                                                        <option value="Administrative correction of accidental archival">Administrative correction of accidental archival</option>
+                                                        <option value="Re-activation of family dependent profile">Re-activation of family dependent profile</option>
+                                                        <option value="Others">Others (Specify below)</option>
+                                                    </select>
+                                                </div>
+                                                <div id="restore_custom_reason_wrapper_{{ $archived->id }}" class="mb-3 d-none">
+                                                    <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Specify Custom Reason</label>
+                                                    <textarea id="restore_custom_reason_{{ $archived->id }}" class="form-control" rows="2" placeholder="Provide justification for restoring this profile..."></textarea>
+                                                </div>
+                                                <div class="d-flex flex-column flex-sm-row gap-2 mt-3">
+                                                    <button type="button" class="btn btn-outline-secondary flex-grow-1 py-2 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
+                                                    <button type="submit" class="btn btn-warning flex-grow-1 py-2 fw-bold uppercase text-dark">Restore Dependent</button>
+                                                </div>
+                                            </form>
                                         </div>
-                                        <div id="restore_custom_reason_wrapper_{{ $archived->id }}" class="mb-3 d-none">
-                                            <label class="smaller fw-bold text-secondary uppercase mb-1 d-block">Specify Custom Reason</label>
-                                            <textarea id="restore_custom_reason_{{ $archived->id }}" class="form-control" rows="2" placeholder="Provide justification for restoring this profile..."></textarea>
-                                        </div>
-                                        <div class="d-flex flex-column flex-sm-row gap-2 mt-3">
-                                            <button type="button" class="btn btn-outline-secondary flex-grow-1 py-2 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-warning flex-grow-1 py-2 fw-bold uppercase text-dark">Restore Dependent</button>
-                                        </div>
-                                    </form>
-                                </div>
+                                    </div>
+                                @endforeach
                             </div>
-                            @endforeach
-                        </div>
                         @endif
                     </div>
                 </div>
@@ -485,9 +575,9 @@
             </h5>
             <p class="small text-muted mb-3">
                 @if($user->trashed())
-                Reactivating this account will restore full portal access for <strong>{{ $user->name }}</strong>.
+                    Reactivating this account will restore full portal access for <strong>{{ $user->name }}</strong>.
                 @else
-                Deactivating <strong>{{ $user->name }}</strong> will suspend login access. Under medical regulations, patient files are safely retained in restricted archive for 10 years before destruction.
+                    Deactivating <strong>{{ $user->name }}</strong> will suspend login access. Under medical regulations, patient files are safely retained in restricted archive for 10 years before destruction.
                 @endif
             </p>
             <div class="mb-3">
@@ -513,7 +603,6 @@
 .back-directory-box a {
     width: auto !important;
 }
-
 @media (max-width: 575.98px) {
     .back-directory-box,
     .add-dep-btn-box,
@@ -527,7 +616,6 @@
         justify-content: center !important;
     }
 }
-
 .btn-cancel-custom {
     color: var(--text-muted) !important;
     border: 1.5px solid var(--border-color) !important;
@@ -543,7 +631,7 @@
 #editUserContainer .form-control:focus,
 #editUserContainer .form-select:focus {
     border-color: var(--brand-accent) !important;
-    box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.15) !important;
+    box-shadow: 0 0 0 3px rgba(25, 211, 140, 0.15) !important;
 }
 #editUserContainer .is-invalid {
     border-color: #ff4d4d !important;
@@ -564,19 +652,16 @@
 
 @push('scripts')
 <script>
-const savedProv = "{{ $user->province }}";
-const savedCity = "{{ $user->city }}";
-const savedBrgy = "{{ $user->barangay }}";
-
+const savedProv = @json(old('province', $user->province ?? ''));
+const savedCity = @json(old('city', $user->city ?? ''));
+const savedBrgy = @json(old('barangay', $user->barangay ?? ''));
 const originalEmail = "{{ strtolower(trim($user->email)) }}";
 const originalPhone = "{{ trim($user->phone) }}";
 const isOriginalEmailVerified = {{ $user->email_verified_at ? 'true' : 'false' }};
 const isOriginalPhoneVerified = {{ $user->phone_verified_at ? 'true' : 'false' }};
-
 const oldEmailAction = "{{ old('email_action', '') }}";
 const oldPhoneAction = "{{ old('phone_action', '') }}";
 const oldPassOpt = "{{ old('password_option', '') }}";
-const oldSendLink = "{{ old('send_verification_link', '1') }}";
 
 function syncEditPhone() {
     const display = document.getElementById('phone_display');
@@ -588,11 +673,117 @@ function syncEditPhone() {
     }
 }
 
+function handleRoleChange(newRole, isInitialLoad = false) {
+    const credsContainer = document.getElementById('clinical_credentials_container');
+    const licenseWrapper = document.getElementById('license_wrapper');
+    const occWrapper = document.getElementById('occupation_wrapper');
+    const occInput = document.getElementById('occupation');
+    const licInput = document.getElementById('license_number');
+    const credsTitle = document.getElementById('credentials_box_title');
+    const occHelp = document.getElementById('occupation_help_text');
+    const datalist = document.getElementById('occupation_suggestions');
+
+    if (!credsContainer || !occInput || !licInput) return;
+
+    const staffTitles = ['RECEPTIONIST', 'CLINICAL ENCODER', 'CLINIC MANAGER', 'CLINIC NURSE', 'ADMISSIONS OFFICER'];
+    const labTitles = ['MEDICAL TECHNOLOGIST', 'PATHOLOGIST', 'RADIOLOGIST', 'ATTENDING PHYSICIAN', 'LABORATORY SUPERVISOR'];
+
+    if (newRole === 'user') {
+        // Demoted to patient: Clear both occupation and license number, hide container
+        credsContainer.classList.add('d-none');
+        if (!isInitialLoad) {
+            occInput.value = '';
+            licInput.value = '';
+        }
+        occInput.removeAttribute('required');
+        licInput.removeAttribute('required');
+        clearFieldError(occInput);
+        clearFieldError(licInput);
+    } else if (newRole === 'staff') {
+        // Configured as staff: Require occupation, clear and hide license number
+        credsContainer.classList.remove('d-none');
+        if (licenseWrapper) licenseWrapper.classList.add('d-none');
+        if (occWrapper) {
+            occWrapper.className = 'col-12 col-md-12';
+        }
+        if (!isInitialLoad) {
+            licInput.value = '';
+            if (labTitles.includes(occInput.value.trim().toUpperCase())) {
+                occInput.value = '';
+            }
+        }
+        licInput.removeAttribute('required');
+        clearFieldError(licInput);
+
+        occInput.setAttribute('required', 'required');
+        occInput.setAttribute('placeholder', 'e.g. Receptionist, Clinical Encoder, Clinic Manager');
+        if (credsTitle) credsTitle.innerText = 'Clinic Staff Designation';
+        if (occHelp) occHelp.innerText = 'Designate official staff position for reception, admissions, and audit logs.';
+        if (datalist) {
+            datalist.innerHTML = `
+                <option value="Receptionist">
+                <option value="Clinical Encoder">
+                <option value="Clinic Manager">
+                <option value="Clinic Nurse">
+                <option value="Admissions Officer">
+            `;
+        }
+    } else if (newRole === 'lab_tech') {
+        // Configured as lab technician: Require both occupation and license number
+        credsContainer.classList.remove('d-none');
+        if (licenseWrapper) licenseWrapper.classList.remove('d-none');
+        if (occWrapper) {
+            occWrapper.className = 'col-12 col-md-6';
+        }
+        if (!isInitialLoad) {
+            if (staffTitles.includes(occInput.value.trim().toUpperCase())) {
+                occInput.value = '';
+            }
+        }
+        occInput.setAttribute('required', 'required');
+        licInput.setAttribute('required', 'required');
+        occInput.setAttribute('placeholder', 'e.g. Medical Technologist, Pathologist, Radiologist');
+        if (credsTitle) credsTitle.innerText = 'Laboratory Technician & Professional Credentials';
+        if (occHelp) occHelp.innerText = 'Required for clinical verification sign-off and lab audit logs.';
+        if (datalist) {
+            datalist.innerHTML = `
+                <option value="Medical Technologist">
+                <option value="Pathologist">
+                <option value="Radiologist">
+                <option value="Attending Physician">
+                <option value="Laboratory Supervisor">
+            `;
+        }
+    } else if (newRole === 'admin') {
+        // System Administrator oversight
+        credsContainer.classList.remove('d-none');
+        if (licenseWrapper) licenseWrapper.classList.remove('d-none');
+        if (occWrapper) {
+            occWrapper.className = 'col-12 col-md-6';
+        }
+        occInput.removeAttribute('required');
+        licInput.removeAttribute('required');
+        occInput.setAttribute('placeholder', 'e.g. Laboratory Administrator, Pathologist');
+        if (credsTitle) credsTitle.innerText = 'System Administrator & Clinical Credentials';
+        if (occHelp) occHelp.innerText = 'Optional designation and license for administrator clinical oversight.';
+        if (datalist) {
+            datalist.innerHTML = `
+                <option value="Laboratory Administrator">
+                <option value="Pathologist">
+                <option value="Attending Physician">
+                <option value="Medical Technologist">
+                <option value="Radiologist">
+                <option value="Clinic Manager">
+            `;
+        }
+    }
+    clearFieldError(document.getElementById('role'));
+}
+
 function updateEmailState() {
     const emailInput = document.getElementById('email');
     const emailAction = document.getElementById('email_action');
     const changedBadge = document.getElementById('email_changed_badge');
-
     if (!emailInput || !emailAction) return;
 
     const currentEmail = emailInput.value.trim().toLowerCase();
@@ -609,7 +800,6 @@ function updateEmailState() {
     const previousSelected = emailAction.value;
 
     if (isEmailChanged) {
-        // When email changes: enable choosing between unverified and verified
         emailAction.innerHTML = `
             <option value="unverify">Mark Email as Unverified</option>
             <option value="verify_now">Mark Email as Verified</option>
@@ -620,8 +810,6 @@ function updateEmailState() {
             emailAction.value = 'unverify';
         }
     } else {
-        // When email is unchanged:
-        // verify appears if unverified, and unverify if verified
         if (isOriginalEmailVerified) {
             emailAction.innerHTML = `
                 <option value="">-- Keep Current Status (Verified) --</option>
@@ -640,7 +828,6 @@ function updateEmailState() {
             emailAction.value = '';
         }
     }
-
     handleEmailActionChange(emailAction.value);
 }
 
@@ -651,7 +838,6 @@ function handleEmailActionChange(action) {
     const isEmailChanged = (currentEmail !== originalEmail && currentEmail !== '');
 
     if (linkCheckboxWrapper) {
-        // If unverified (either due to email change or keeping unverified), allow choosing whether to send link
         if (isEmailChanged && action === 'unverify') {
             linkCheckboxWrapper.classList.remove('d-none');
         } else if (!isEmailChanged && !isOriginalEmailVerified && action === 'unverify') {
@@ -660,7 +846,6 @@ function handleEmailActionChange(action) {
             linkCheckboxWrapper.classList.add('d-none');
         }
     }
-
     updatePasswordResetOption();
 }
 
@@ -668,7 +853,6 @@ function updatePhoneState() {
     const hiddenPhone = document.getElementById('in_phone');
     const phoneAction = document.getElementById('phone_action');
     const changedBadge = document.getElementById('phone_changed_badge');
-
     if (!hiddenPhone || !phoneAction) return;
 
     const currentPhone = hiddenPhone.value.trim();
@@ -685,7 +869,6 @@ function updatePhoneState() {
     const previousSelected = phoneAction.value;
 
     if (isPhoneChanged) {
-        // When phone changes: mark as verified or unverified (no link option)
         phoneAction.innerHTML = `
             <option value="unverify">Mark Phone as Unverified</option>
             <option value="verify_now">Mark Phone as Verified</option>
@@ -696,8 +879,6 @@ function updatePhoneState() {
             phoneAction.value = 'unverify';
         }
     } else {
-        // When phone is unchanged:
-        // verify appears if unverified, and unverify if verified
         if (isOriginalPhoneVerified) {
             phoneAction.innerHTML = `
                 <option value="">-- Keep Current Status (Verified) --</option>
@@ -723,13 +904,12 @@ function updatePasswordResetOption() {
     const passOpt = document.getElementById('pass_opt');
     const optSendLink = document.getElementById('opt_send_link');
     const notice = document.getElementById('pass_reset_link_notice');
-
     if (!emailInput || !emailAction || !passOpt) return;
 
     const currentEmail = emailInput.value.trim().toLowerCase();
     const isEmailChanged = (currentEmail !== originalEmail && currentEmail !== '');
-
     let isEffectivelyVerified = false;
+
     if (isEmailChanged) {
         isEffectivelyVerified = (emailAction.value === 'verify_now');
     } else {
@@ -813,7 +993,7 @@ function toggleRestoreReason(depId, val) {
 
 function toggleManualPass(val) {
     const wrapper = document.getElementById('manual_pass_wrapper');
-    if(val === 'manual') wrapper.classList.remove('d-none');
+    if (val === 'manual') wrapper.classList.remove('d-none');
     else wrapper.classList.add('d-none');
 }
 
@@ -885,6 +1065,13 @@ function validateAdminEditUserForm(e) {
     if (!lName || !lName.value.trim()) markInvalid(lName, 'err_last_name', 'Last Name is required.');
     else if (lErr) markInvalid(lName, 'err_last_name', lErr);
 
+    const suffix = document.getElementById('suffix');
+    if (suffix && suffix.value.trim()) {
+        const suffixRegex = /^[a-zA-Z0-9\s.]+$/;
+        if (!suffixRegex.test(suffix.value.trim())) markInvalid(suffix, 'err_suffix', 'The suffix may only contain letters, numbers, spaces, and periods.');
+        else if (suffix.value.trim().length > 10) markInvalid(suffix, 'err_suffix', 'The suffix cannot exceed 10 characters.');
+    }
+
     const bday = document.getElementById('birthdate');
     if (!bday || !bday.value) {
         markInvalid(bday, 'err_birthdate', 'Birthdate is required.');
@@ -904,9 +1091,9 @@ function validateAdminEditUserForm(e) {
     const hiddenPhone = document.getElementById('in_phone');
     const phoneRegex = /^09\d{9}$/;
     if (!displayPhone || !displayPhone.value.trim()) {
-        markInvalid(displayPhone, 'err_phone', 'Contact phone number is required.');
+        markInvalid(displayPhone, 'err_phone', 'The phone number is required.');
     } else if (!phoneRegex.test(hiddenPhone.value.trim())) {
-        markInvalid(displayPhone, 'err_phone', 'Phone number must contain exactly 11 digits (09 + 9 digits).');
+        markInvalid(displayPhone, 'err_phone', 'The phone number must start with 09 and contain exactly 11 digits.');
     }
 
     const prov = document.getElementById('edit_prov');
@@ -927,12 +1114,42 @@ function validateAdminEditUserForm(e) {
         markInvalid(email, 'err_email', 'Please enter a valid email address with a domain.');
     }
 
+    // Role-dependent clinical credentials validation & cleanup
+    const role = document.getElementById('role')?.value;
+    const occInput = document.getElementById('occupation');
+    const licInput = document.getElementById('license_number');
+
+    if (role === 'user') {
+        if (occInput) occInput.value = '';
+        if (licInput) licInput.value = '';
+    } else if (role === 'staff') {
+        if (licInput) licInput.value = '';
+        if (!occInput || !occInput.value.trim()) {
+            markInvalid(occInput, 'err_occupation', 'Please designate an official occupation for staff or lab technician accounts.');
+        } else if (occInput.value.trim().length > 100) {
+            markInvalid(occInput, 'err_occupation', 'Occupation cannot exceed 100 characters.');
+        }
+    } else if (role === 'lab_tech') {
+        if (!occInput || !occInput.value.trim()) {
+            markInvalid(occInput, 'err_occupation', 'Please designate an official occupation for staff or lab technician accounts.');
+        } else if (occInput.value.trim().length > 100) {
+            markInvalid(occInput, 'err_occupation', 'Occupation cannot exceed 100 characters.');
+        }
+        if (!licInput || !licInput.value.trim()) {
+            markInvalid(licInput, 'err_license_number', 'Professional license number (PRC/DOH) is required for laboratory technicians.');
+        } else if (licInput.value.trim().length > 50) {
+            markInvalid(licInput, 'err_license_number', 'License number cannot exceed 50 characters.');
+        }
+    }
+
     const passOpt = document.getElementById('pass_opt');
     const password = document.getElementById('password');
     const passConfirm = document.getElementById('password_confirmation');
     if (passOpt && passOpt.value === 'manual') {
         if (!password || !password.value || password.value.length < 8) {
             markInvalid(password, 'err_password', 'Password must be at least 8 characters long.');
+        } else if (!/[A-Z]/.test(password.value) || !/[a-z]/.test(password.value) || !/[0-9]/.test(password.value) || !/[!@#$%^&*(),.?":{}|<>]/.test(password.value)) {
+            markInvalid(password, 'err_password', 'Password must include uppercase, lowercase, number, and special character.');
         }
         if (!passConfirm || passConfirm.value !== password.value) {
             markInvalid(passConfirm, 'err_password_confirmation', 'Password confirmation does not match.');
@@ -969,9 +1186,12 @@ async function fetchEditProvinces() {
         data.sort((a,b) => a.name.localeCompare(b.name)).forEach(p => {
             provSel.innerHTML += `<option value="${p.code}">${p.name}</option>`;
         });
-        if(savedProv) {
+        if (savedProv) {
             let opt = Array.from(provSel.options).find(o => o.text.toUpperCase() === savedProv.toUpperCase());
-            if(opt) { provSel.value = opt.value; await fetchEditCities(opt.value); }
+            if (opt) { 
+                provSel.value = opt.value; 
+                await fetchEditCities(opt.value); 
+            }
         }
     } catch(e){}
 }
@@ -979,7 +1199,8 @@ async function fetchEditProvinces() {
 async function fetchEditCities(provCode) {
     const citySel = document.getElementById('edit_city');
     const brgySel = document.getElementById('edit_brgy');
-    citySel.disabled = true; brgySel.disabled = true;
+    citySel.disabled = true; 
+    brgySel.disabled = true;
     citySel.innerHTML = '<option value="">Loading...</option>';
     try {
         const res = await fetch(`https://psgc.gitlab.io/api/provinces/${provCode}/cities-municipalities/`);
@@ -989,9 +1210,12 @@ async function fetchEditCities(provCode) {
             citySel.innerHTML += `<option value="${c.code}">${c.name}</option>`;
         });
         citySel.disabled = false;
-        if(savedCity) {
+        if (savedCity) {
             let opt = Array.from(citySel.options).find(o => o.text.toUpperCase() === savedCity.toUpperCase());
-            if(opt) { citySel.value = opt.value; await fetchEditBarangays(opt.value); }
+            if (opt) { 
+                citySel.value = opt.value; 
+                await fetchEditBarangays(opt.value); 
+            }
         }
     } catch(e){}
 }
@@ -1008,9 +1232,9 @@ async function fetchEditBarangays(cityCode) {
             brgySel.innerHTML += `<option value="${b.name}">${b.name}</option>`;
         });
         brgySel.disabled = false;
-        if(savedBrgy) {
+        if (savedBrgy) {
             let opt = Array.from(brgySel.options).find(o => o.text.toUpperCase() === savedBrgy.toUpperCase());
-            if(opt) brgySel.value = opt.value;
+            if (opt) brgySel.value = opt.value;
         }
     } catch(e){}
 }
@@ -1031,6 +1255,11 @@ document.addEventListener('DOMContentLoaded', () => {
     syncEditPhone();
     updateEmailState();
     updatePhoneState();
+
+    const roleElem = document.getElementById('role');
+    if (roleElem) {
+        handleRoleChange(roleElem.value, true);
+    }
 
     if (oldEmailAction) {
         const emailAction = document.getElementById('email_action');

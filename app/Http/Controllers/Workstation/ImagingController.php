@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Workstation;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Appointment, ActivityLog};
+use App\Models\{Appointment, User, ActivityLog};
 use App\Traits\HandlesResultFiles;
-use App\Events\QueueUpdated; // Import our real-time broadcasting event
+use App\Events\QueueUpdated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
@@ -15,7 +15,8 @@ class ImagingController extends Controller
     use HandlesResultFiles;
 
     /**
-     * WORKSTATION: Radiology Index
+     * WORKSTATION: Radiology Index.
+     * Pre-loads registered Radiologists for automated 1-click signatory selection.
      */
     public function radioIndex(Appointment $appointment)
     {
@@ -32,14 +33,20 @@ class ImagingController extends Controller
             event(new QueueUpdated());
         }
 
+        // Query registered clinical radiologists
+        $radiologists = User::radiologists()->where('is_active', true)->orderBy('last_name')->get();
+        if ($radiologists->isEmpty()) {
+            $radiologists = User::whereIn('role', ['admin', 'lab_tech'])->where('is_active', true)->orderBy('last_name')->get();
+        }
+
         // SECURED: Pre-authorize the embedded preview iframe to bypass the Reason-Gate safely
         session()->put("access_granted_{$appointment->id}_radio", true);
 
-        return view('appointments.workstations.radiology', compact('appointment'));
+        return view('appointments.workstations.radiology', compact('appointment', 'radiologists'));
     }
 
     /**
-     * WORKSTATION: Radiology Save
+     * WORKSTATION: Radiology Save.
      */
     public function radioSave(Request $request, Appointment $appointment)
     {
@@ -52,13 +59,24 @@ class ImagingController extends Controller
             return back()->withErrors(['xray_image' => 'Patient X-Ray image file is mandatory.'])->withInput();
         }
 
+        // Check if report PDF scan is being uploaded or already exists
+        $hasReportScan = ($res->radio_scan && $request->input('clear_scan') != '1') || $request->hasFile('radio_scan');
+
+        // Automated Signatory Resolution via User ID (Populate before validation if passed)
+        if ($request->filled('radiologist_user_id')) {
+            $rad = User::find($request->input('radiologist_user_id'));
+            if ($rad) {
+                $radioDataInput = $request->input('radio_data', []);
+                $radioDataInput['sig']['name'] = $rad->name;
+                $radioDataInput['sig']['lic'] = $rad->license_number ?? '';
+                $request->merge(['radio_data' => $radioDataInput]);
+            }
+        }
+
         // Extract case_no and enforce global uniqueness validation across all files
         $rules = [
             'case_no' => 'required|string|max:255|unique:appointment_radiology_reports,case_no,' . ($res->radiologyReport?->id ?? 'NULL'),
         ];
-
-        // Check if report PDF scan is being uploaded or already exists
-        $hasReportScan = ($res->radio_scan && $request->input('clear_scan') != '1') || $request->hasFile('radio_scan');
 
         if (!$hasReportScan) {
             $rules['radio_data.metadata.date'] = 'required|date';
@@ -83,7 +101,7 @@ class ImagingController extends Controller
         // 2. Handle File Uploads via Trait (Cleans up old files automatically)
         $this->uploadResultFile($request, $appointment, 'xray_image');
 
-        $radioData = $request->input('radio_data');
+        $radioData = $request->input('radio_data', []);
 
         // Check if any manual entries (findings/impression) are submitted in the request
         $hasManualInput = !empty($request->input('radio_data.findings')) || !empty($request->input('radio_data.impression'));
@@ -102,6 +120,7 @@ class ImagingController extends Controller
         }
 
         $res->refresh(); // Get updated scan path if just uploaded
+
         if ($res->radio_scan) {
             $radioData = [
                 'metadata' => [
@@ -130,10 +149,9 @@ class ImagingController extends Controller
             'radio_v1_at' => now(),
             'radio_v1_by' => auth()->id(),
 
-            // CLINICAL SIGNATORY: Manually typed name/lic (if not in scan mode)
+            // CLINICAL SIGNATORY: Manually typed or selected practitioner name/lic
             'radio_sig_name' => $radioData['sig']['name'] ?? null,
             'radio_sig_lic' => $radioData['sig']['lic'] ?? null,
-
             'radio_return_reason' => null // Clear correction instructions
         ]);
 
@@ -152,7 +170,7 @@ class ImagingController extends Controller
     }
 
     /**
-     * WORKSTATION: Drug Test Index
+     * WORKSTATION: Drug Test Index.
      */
     public function drugIndex(Appointment $appointment)
     {
@@ -173,7 +191,7 @@ class ImagingController extends Controller
     }
 
     /**
-     * WORKSTATION: Drug Test Save
+     * WORKSTATION: Drug Test Save.
      */
     public function drugSave(Request $request, Appointment $appointment)
     {
@@ -218,7 +236,6 @@ class ImagingController extends Controller
             'drug_v1_by_name' => auth()->user()->name,
             'drug_v1_at' => now(),
             'drug_v1_by' => auth()->id(),
-
             'drug_return_reason' => null
         ]);
 

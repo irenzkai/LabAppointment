@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('first_name', 60);
             $table->string('middle_name', 60)->nullable(); // Nullable per PSA guidelines
             $table->string('last_name', 60);
-            $table->string('suffix', 10)->nullable(); // Aligned with the newly introduced suffix field
+            $table->string('suffix', 10)->nullable();      // Aligned with suffix schema
 
             // 2. Profile Details
             $table->date('birthdate');
@@ -27,7 +27,7 @@ return new class extends Migration
             // 3. Split Address Fields (3NF Atomic - PSGC API Compatible)
             $table->string('street', 150);
             $table->string('barangay', 100);
-            $table->string('city', 100);       // City or Municipality
+            $table->string('city', 100); // City or Municipality
             $table->string('province', 100);
 
             // 4. Contact & Security
@@ -35,16 +35,24 @@ return new class extends Migration
             $table->string('phone', 11);            // Strictly 11-digit PH mobile format (09XXXXXXXXX)
             $table->string('password', 255);
 
-            // 5. System Flags & Permissions
+            // 5. System Flags, Roles & Clinical Credentials
             $table->enum('role', ['user', 'staff', 'lab_tech', 'admin'])->default('user');
+            $table->string('occupation', 100)->nullable();     // e.g., Medical Technologist, Pathologist, Radiologist, Attending Physician, Encoder, Receptionist
+            $table->string('license_number', 50)->nullable();  // PRC / DOH Professional License ID
             $table->boolean('is_active')->default(true);
             $table->timestamp('email_verified_at')->nullable();
             $table->timestamp('phone_verified_at')->nullable();
 
-            // 6. Audit & Data Retention Compliance [102]
+            // 6. Recognized Organization Integration & Partnership Status
+            $table->boolean('is_recognized_org')->default(false);
+            $table->string('organization_name', 150)->nullable();
+            $table->string('org_representative_name', 150)->nullable();
+            $table->string('org_representative_phone', 11)->nullable();
+            $table->enum('org_status', ['none', 'pending', 'approved', 'rejected'])->default('none');
+
+            // 7. Audit & Data Retention Compliance [102]
             $table->boolean('password_change_required')->default(false); // Force temporary password updates
             $table->softDeletes(); // Compliant deactivations
-
             $table->rememberToken();
             $table->timestamps();
         });

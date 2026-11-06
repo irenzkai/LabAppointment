@@ -2,10 +2,14 @@
 @section('title', 'Laboratory Historical Archive')
 @section('content')
 @php
-// Automatically fetch active services if a controller forgot to pass them
+// Automatically fetch active individual services and packages if not passed by controller
 if (!isset($availableServices)) {
-    $availableServices = \App\Models\Service::where('is_available', true)->orderBy('category')->orderBy('name')->get();
+    $availableServices = \App\Models\Service::where('is_available', true)->orderBy('name')->get();
 }
+if (!isset($availablePackages)) {
+    $availablePackages = \App\Models\Package::where('is_available', true)->orderBy('name')->get();
+}
+
 $existingRecords = $existingRecords ?? (is_array($labHistory->dynamic_data) ? array_reverse($labHistory->dynamic_data) : []);
 $status = $labHistory->permission_status ?? 'none';
 
@@ -56,7 +60,7 @@ $shouldOpenAddRecordByDefault = ($isAccessGranted && $activeTab === 'lab' && $is
             <h2 class="text-accent fw-bold mb-0 uppercase tracking-tight" style="font-size: 1.85rem; letter-spacing: 1px;">PATIENT ARCHIVE</h2>
             <p class="text-secondary mb-0 small">Records for: <span class="text-accent fw-bold uppercase">{{ $targetUser->name }}</span></p>
         </div>
-        <a href="{{ route('appointments.index') }}" class="btn btn-sm btn-back-appointments px-3 py-2 fw-bold text-uppercase d-inline-flex align-items-center gap-1.5">
+        <a href="{{ route('appointments.index') }}" class="btn btn-sm btn-back-appointments px-3 py-2 fw-bold text-uppercase d-inline-flex align-items-center gap-1">
             <i class="bi bi-arrow-left me-1"></i> BACK TO APPOINTMENTS
         </a>
     </div>
@@ -101,16 +105,16 @@ $shouldOpenAddRecordByDefault = ($isAccessGranted && $activeTab === 'lab' && $is
         </div>
     @endif
 
-    {{-- Nav Tabs (Instant Rendering & Full Width on Mobile) --}}
+    {{-- Nav Tabs --}}
     <ul class="nav nav-pills mb-4 border-bottom pb-3 gap-2" id="historyTabs" role="tablist" style="border-color: var(--border-color) !important;">
         <li class="nav-item flex-fill flex-sm-grow-0">
             <button class="nav-link w-100 {{ $activeTab === 'app' ? 'active' : '' }} fw-bold px-4 py-2 text-center" id="tab-btn-app-history" data-bs-toggle="pill" data-bs-target="#app-history" onclick="switchArchiveTab('app')">
-                APPOINTMENT HISTORY
+                APPOINTMENT HISTORY ({{ $appointments->count() }})
             </button>
         </li>
         <li class="nav-item flex-fill flex-sm-grow-0">
             <button class="nav-link w-100 {{ $activeTab === 'lab' ? 'active' : '' }} fw-bold px-4 py-2 text-center" id="tab-btn-lab-history" data-bs-toggle="pill" data-bs-target="#lab-history" onclick="switchArchiveTab('lab')">
-                LABORATORY RECORDS
+                LABORATORY RECORDS ({{ count($existingRecords) }})
             </button>
         </li>
     </ul>
@@ -144,7 +148,7 @@ $shouldOpenAddRecordByDefault = ($isAccessGranted && $activeTab === 'lab' && $is
                     </div>
 
                     <div id="workspace-container" class="h-100">
-                        {{-- Default Empty State Placeholder (Visible when none is selected) --}}
+                        {{-- Default Empty State Placeholder --}}
                         <div id="details-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center placeholder-compact h-100" style="min-height: 320px; background-color: var(--bg-card); border-radius: 14px;">
                             <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-inline-flex align-items-center justify-content-center" style="width: 58px; height: 58px;">
                                 <i class="bi bi-clipboard2-pulse-fill fs-2 text-accent"></i>
@@ -153,7 +157,7 @@ $shouldOpenAddRecordByDefault = ($isAccessGranted && $activeTab === 'lab' && $is
                             <p class="text-muted small mb-0" style="max-width: 380px; font-size: 0.83rem;">Select any clinical entry from the left-hand panel to review its test breakdowns, billing summaries, and context actions.</p>
                         </div>
 
-                        {{-- Hidden Detail Panels --}}
+                        {{-- Detail Panels --}}
                         @foreach($appointments as $app)
                             @include('appointments.partials.detail-card', ['app' => $app, 'is_staff' => false, 'isHistory' => true])
                         @endforeach
@@ -164,19 +168,16 @@ $shouldOpenAddRecordByDefault = ($isAccessGranted && $activeTab === 'lab' && $is
 
         {{-- TAB 2: LABORATORY RECORDS (Split-Pane Grid Layout) --}}
         <div class="tab-pane {{ $activeTab === 'lab' ? 'show active' : '' }}" id="lab-history">
-            {{-- HANDSHAKE ENFORCEMENT: Only opens when permission is granted or previous records exist --}}
             @if($isAccessGranted)
                 <div class="row g-4 align-items-start position-relative">
                     {{-- Left Side: Historical Records List --}}
                     <div class="col-12 col-lg-5 col-xl-4" id="left-history-lab-panel">
-                        {{-- Staff can ADD RECORD on other patients --}}
                         @if($isStaffViewingPatient)
                             <button type="button" class="btn-custom btn-accent w-100 py-2.5 mb-2 fw-bold uppercase shadow-sm" onclick="showAddRecordForm()">
                                 <i class="bi bi-plus-lg me-1"></i> ADD RECORD
                             </button>
                         @endif
 
-                        {{-- "Notify Patient" action button for staff --}}
                         @if($isStaffViewingPatient && count($existingRecords) > 0)
                             <form action="{{ route('history.notify-encoded', $targetUser->id) }}" method="POST" class="mb-3">
                                 @csrf
@@ -215,7 +216,6 @@ $shouldOpenAddRecordByDefault = ($isAccessGranted && $activeTab === 'lab' && $is
 
                     {{-- Right Side: Active Workspace (Sticky on Desktop) --}}
                     <div class="col-12 col-lg-7 col-xl-8 sticky-lg-top" style="top: 90px; align-self: flex-start;" id="right-history-lab-workspace">
-                        {{-- Mobile Return to Cards Button --}}
                         <div class="d-lg-none mb-3 d-none" id="mobile-back-to-lab-btn">
                             <button type="button" class="btn btn-sm btn-outline-secondary w-100 py-2 fw-bold uppercase d-flex align-items-center justify-content-center gap-2" onclick="scrollToHistoryList('lab')">
                                 <i class="bi bi-arrow-up-circle"></i>
@@ -224,7 +224,7 @@ $shouldOpenAddRecordByDefault = ($isAccessGranted && $activeTab === 'lab' && $is
                         </div>
 
                         <div id="lab-workspace-container" class="h-100">
-                            {{-- Default Placeholder (Visible if no record is selected and not adding record) --}}
+                            {{-- Default Placeholder --}}
                             <div id="record-placeholder" class="card p-4 text-center border-secondary bg-card d-flex flex-column align-items-center justify-content-center placeholder-compact h-100 {{ $shouldOpenAddRecordByDefault ? 'd-none' : '' }}" style="min-height: 320px; background-color: var(--bg-card); border-radius: 14px;">
                                 <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-inline-flex align-items-center justify-content-center" style="width: 58px; height: 58px;">
                                     <i class="bi bi-file-earmark-medical fs-2 text-accent"></i>
@@ -261,7 +261,7 @@ $shouldOpenAddRecordByDefault = ($isAccessGranted && $activeTab === 'lab' && $is
                                             <div class="mb-2"><strong>Age / Sex:</strong> {{ $record['age'] }} Years Old / {{ $record['sex'] }}</div>
                                             <div class="mb-3"><strong>Residential Address:</strong> {{ $record['address'] }}</div>
                                             <h6 class="text-accent small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3 mb-3"><i class="bi bi-list-check me-1"></i> Requested Procedures</h6>
-                                            <div class="d-flex flex-wrap gap-1.5">
+                                            <div class="d-flex flex-wrap gap-1">
                                                 @foreach($record['tests_requested'] ?? [] as $test)
                                                     <span class="badge border border-secondary border-opacity-25 text-secondary uppercase px-2 py-1.5 rounded" style="background-color: rgba(0,0,0,0.02); font-size: 0.7rem;">{{ $test }}</span>
                                                 @endforeach
@@ -325,116 +325,89 @@ $shouldOpenAddRecordByDefault = ($isAccessGranted && $activeTab === 'lab' && $is
                     </div>
                 </div>
             @else
-                {{-- FULL-WIDTH HANDSHAKE / REQUEST DATA IMPORT BOX CONTAINER --}}
+                {{-- FULL-WIDTH HANDSHAKE CONTAINER --}}
                 <div class="w-100 my-2" id="handshake-box-container">
                     <div class="handshake-box-wrapper w-100">
-                        @if(view()->exists('appointments.partials.handshake-panel'))
-                            @include('appointments.partials.handshake-panel', [
-                                'targetUser' => $targetUser,
-                                'status' => $status,
-                                'labHistory' => $labHistory,
-                                'isSelf' => $isSelf,
-                                'isPatientView' => $isPatientView
-                            ])
-                        @elseif(view()->exists('partials.handshake-panel'))
-                            @include('partials.handshake-panel', [
-                                'targetUser' => $targetUser,
-                                'status' => $status,
-                                'labHistory' => $labHistory,
-                                'isSelf' => $isSelf,
-                                'isPatientView' => $isPatientView
-                            ])
-                        @elseif(view()->exists('handshake-panel'))
-                            @include('handshake-panel', [
-                                'targetUser' => $targetUser,
-                                'status' => $status,
-                                'labHistory' => $labHistory,
-                                'isSelf' => $isSelf,
-                                'isPatientView' => $isPatientView
-                            ])
+                        @if($status === 'pending_staff')
+                            <div class="card p-4 p-md-5 text-center border-info bg-card shadow-sm w-100" style="border-radius: 16px; background-color: var(--bg-card); border-color: rgba(13, 202, 240, 0.4) !important;">
+                                <div class="bg-info bg-opacity-10 rounded-circle p-2.5 mb-3 text-info d-inline-flex align-items-center justify-content-center mx-auto" style="width: 58px; height: 58px;">
+                                    <i class="bi bi-person-check-fill fs-2 text-info"></i>
+                                </div>
+                                @if(Auth::user()->isEmployee() && !$isSelf)
+                                    <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Import Request Received</h5>
+                                    <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
+                                        The patient has authorized and requested to have their physical laboratory history digitized. You may now initialize and open the manual entry compilation tool.
+                                    </p>
+                                    <form action="{{ route('history.accept', ['user' => $targetUser->id]) }}" method="POST" class="m-0">
+                                        @csrf
+                                        <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
+                                            <i class="bi bi-check-circle-fill me-1.5"></i> ACCEPT & OPEN IMPORT TOOL
+                                        </button>
+                                    </form>
+                                @else
+                                    <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Awaiting Laboratory Review</h5>
+                                    <p class="text-muted small mb-3 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
+                                        Your request was successfully dispatched. Please wait while a laboratory technologist reviews and initializes your profile archive.
+                                    </p>
+                                    <div class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 py-2 px-3 uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+                                        <i class="bi bi-hourglass-split me-1"></i> STATUS: PENDING CLINICAL REVIEW
+                                    </div>
+                                @endif
+                            </div>
+                        @elseif($status === 'pending_patient')
+                            <div class="card p-4 p-md-5 text-center border-warning bg-card shadow-sm w-100" style="border-radius: 16px; background-color: var(--bg-card); border-color: rgba(255, 193, 7, 0.4) !important;">
+                                <div class="bg-warning bg-opacity-10 rounded-circle p-2.5 mb-3 text-warning d-inline-flex align-items-center justify-content-center mx-auto" style="width: 58px; height: 58px;">
+                                    <i class="bi bi-shield-exclamation fs-2 text-warning"></i>
+                                </div>
+                                @if($isPatientView)
+                                    <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Permission Requested</h5>
+                                    <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
+                                        The laboratory is requesting your authorization to digitize and link your previous physical clinical examination records. Do you authorize this request?
+                                    </p>
+                                    <form action="{{ route('history.accept', ['user' => $targetUser->id]) }}" method="POST" class="m-0">
+                                        @csrf
+                                        <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
+                                            <i class="bi bi-check2-circle me-1.5"></i> ALLOW & UNLOCK DIGITIZATION
+                                        </button>
+                                    </form>
+                                @else
+                                    <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Awaiting Patient Consent</h5>
+                                    <p class="text-muted small mb-3 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
+                                        An authorization request has been dispatched to the patient's portal. Awaiting patient handshake consent before opening records.
+                                    </p>
+                                    <div class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-2 px-3 uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+                                        <i class="bi bi-clock-history me-1"></i> STATUS: AWAITING USER CONSENT
+                                    </div>
+                                @endif
+                            </div>
                         @else
-                            {{-- Integrated Emergency Fallback with Full Staff & Patient Support --}}
-                            @if($status === 'pending_staff')
-                                <div class="card p-4 p-md-5 text-center border-info bg-card shadow-sm w-100" style="border-radius: 16px; background-color: var(--bg-card); border-color: rgba(13, 202, 240, 0.4) !important;">
-                                    <div class="bg-info bg-opacity-10 rounded-circle p-2.5 mb-3 text-info d-inline-flex align-items-center justify-content-center mx-auto" style="width: 58px; height: 58px;">
-                                        <i class="bi bi-person-check-fill fs-2 text-info"></i>
-                                    </div>
-                                    @if(Auth::user()->isEmployee() && !$isSelf)
-                                        <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Import Request Received</h5>
-                                        <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
-                                            The patient has authorized and requested to have their physical laboratory history digitized. You may now initialize and open the manual entry compilation tool.
-                                        </p>
-                                        <form action="{{ route('history.accept', ['user' => $targetUser->id]) }}" method="POST" class="m-0">
-                                            @csrf
-                                            <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
-                                                <i class="bi bi-check-circle-fill me-1.5"></i> ACCEPT & OPEN IMPORT TOOL
-                                            </button>
-                                        </form>
-                                    @else
-                                        <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Awaiting Laboratory Review</h5>
-                                        <p class="text-muted small mb-3 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
-                                            Your request was successfully dispatched. Please wait while a laboratory technologist reviews and initializes your profile archive.
-                                        </p>
-                                        <div class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 py-2 px-3 uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
-                                            <i class="bi bi-hourglass-split me-1"></i> STATUS: PENDING CLINICAL REVIEW
-                                        </div>
-                                    @endif
+                            <div class="card p-4 p-md-5 text-center border-secondary bg-card shadow-sm w-100" style="border-radius: 16px; background-color: var(--bg-card);">
+                                <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-inline-flex align-items-center justify-content-center mx-auto" style="width: 58px; height: 58px;">
+                                    <i class="bi bi-shield-lock-fill fs-2 text-accent"></i>
                                 </div>
-                            @elseif($status === 'pending_patient')
-                                <div class="card p-4 p-md-5 text-center border-warning bg-card shadow-sm w-100" style="border-radius: 16px; background-color: var(--bg-card); border-color: rgba(255, 193, 7, 0.4) !important;">
-                                    <div class="bg-warning bg-opacity-10 rounded-circle p-2.5 mb-3 text-warning d-inline-flex align-items-center justify-content-center mx-auto" style="width: 58px; height: 58px;">
-                                        <i class="bi bi-shield-exclamation fs-2 text-warning"></i>
-                                    </div>
-                                    @if($isPatientView)
-                                        <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Permission Requested</h5>
-                                        <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
-                                            The laboratory is requesting your authorization to digitize and link your previous physical clinical examination records. Do you authorize this request?
-                                        </p>
-                                        <form action="{{ route('history.accept', ['user' => $targetUser->id]) }}" method="POST" class="m-0">
-                                            @csrf
-                                            <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
-                                                <i class="bi bi-check2-circle me-1.5"></i> ALLOW & UNLOCK DIGITIZATION
-                                            </button>
-                                        </form>
-                                    @else
-                                        <h5 class="text-main uppercase fw-bold mb-2" style="font-size: 1.25rem; letter-spacing: 0.5px;">Awaiting Patient Consent</h5>
-                                        <p class="text-muted small mb-3 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
-                                            An authorization request has been dispatched to the patient's portal. Awaiting patient handshake consent before opening records.
-                                        </p>
-                                        <div class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 py-2 px-3 uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
-                                            <i class="bi bi-clock-history me-1"></i> STATUS: AWAITING USER CONSENT
-                                        </div>
-                                    @endif
-                                </div>
-                            @else
-                                <div class="card p-4 p-md-5 text-center border-secondary bg-card shadow-sm w-100" style="border-radius: 16px; background-color: var(--bg-card);">
-                                    <div class="bg-secondary bg-opacity-10 rounded-circle p-2.5 mb-3 text-accent d-inline-flex align-items-center justify-content-center mx-auto" style="width: 58px; height: 58px;">
-                                        <i class="bi bi-shield-lock-fill fs-2 text-accent"></i>
-                                    </div>
-                                    <h5 class="text-main fw-bold mb-2 uppercase" style="font-size: 1.25rem;">Historical Data Connection</h5>
-                                    @if($isPatientView)
-                                        <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
-                                            Your physical clinic records have not been digitized yet. Submit a request to have our laboratory team initialize your archival folder.
-                                        </p>
-                                        <form action="{{ route('history.request') }}" method="POST" class="m-0">
-                                            @csrf
-                                            <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
-                                                <i class="bi bi-send-fill me-1.5"></i> REQUEST DATA IMPORT
-                                            </button>
-                                        </form>
-                                    @else
-                                        <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
-                                            This patient has not requested a historical data import yet. Clinical protocol requires patient consent before historical physical records can be digitized. Send an authorization request to the patient's portal.
-                                        </p>
-                                        <form action="{{ route('history.staff-trigger', $targetUser->id) }}" method="POST" class="m-0">
-                                            @csrf
-                                            <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
-                                                <i class="bi bi-envelope-paper-fill me-1.5"></i> ASK PATIENT FOR PERMISSION
-                                            </button>
-                                        </form>
-                                    @endif
-                                </div>
-                            @endif
+                                <h5 class="text-main fw-bold mb-2 uppercase" style="font-size: 1.25rem;">Historical Data Connection</h5>
+                                @if($isPatientView)
+                                    <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
+                                        Your physical clinic records have not been digitized yet. Submit a request to have our laboratory team initialize your archival folder.
+                                    </p>
+                                    <form action="{{ route('history.request') }}" method="POST" class="m-0">
+                                        @csrf
+                                        <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
+                                            <i class="bi bi-send-fill me-1.5"></i> REQUEST DATA IMPORT
+                                        </button>
+                                    </form>
+                                @else
+                                    <p class="text-muted small mb-3.5 mx-auto" style="max-width: 540px; font-size: 0.88rem; line-height: 1.5;">
+                                        This patient has not requested a historical data import yet. Clinical protocol requires patient consent before historical physical records can be digitized. Send an authorization request to the patient's portal.
+                                    </p>
+                                    <form action="{{ route('history.staff-trigger', $targetUser->id) }}" method="POST" class="m-0">
+                                        @csrf
+                                        <button type="submit" class="btn-custom btn-accent py-2.5 px-5 fw-bold uppercase shadow-sm" style="font-size: 0.82rem;">
+                                            <i class="bi bi-envelope-paper-fill me-1.5"></i> ASK PATIENT FOR PERMISSION
+                                        </button>
+                                    </form>
+                                @endif
+                            </div>
                         @endif
                     </div>
                 </div>
@@ -460,7 +433,7 @@ $shouldOpenAddRecordByDefault = ($isAccessGranted && $activeTab === 'lab' && $is
         </div>
     </div>
 
-    {{-- 5. THEME-ADAPTIVE MODALS LOOP --}}
+    {{-- DELETE VOIDED APPOINTMENT MODAL (Formerly Expired) --}}
     @foreach($appointments as $app)
         @if(Auth::id() == $app->user_id)
             <div class="modal fade" id="deleteExpiredModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
@@ -469,8 +442,8 @@ $shouldOpenAddRecordByDefault = ($isAccessGranted && $activeTab === 'lab' && $is
                         <div class="mb-3">
                             <i class="bi bi-trash text-danger display-4 d-block"></i>
                         </div>
-                        <h5 class="text-main fw-bold mb-1 uppercase">Delete Expired Record?</h5>
-                        <p class="text-secondary small mb-4">Are you sure you want to remove this expired appointment from your dashboard? This action will hide the record from your view.</p>
+                        <h5 class="text-main fw-bold mb-1 uppercase">Delete Voided Record?</h5>
+                        <p class="text-secondary small mb-4">This appointment was marked as <strong>VOIDED</strong> due to the patient not arriving on scheduled time without prior notice. Are you sure you want to remove this voided record from your view?</p>
                         <div class="d-grid gap-2">
                             <form action="{{ route('appointments.soft-delete', $app->id) }}" method="POST" class="m-0">
                                 @csrf
@@ -497,7 +470,6 @@ $shouldOpenAddRecordByDefault = ($isAccessGranted && $activeTab === 'lab' && $is
 
 @push('scripts')
 <script>
-// --- GLOBAL WORKSPACE HANDLERS ---
 function switchArchiveTab(tabKey) {
     try {
         const url = new URL(window.location.href);
@@ -506,7 +478,6 @@ function switchArchiveTab(tabKey) {
         sessionStorage.setItem("archive_tab_{{ $targetUser->id }}", tabKey);
     } catch (e) {}
 
-    // On desktop, auto-select first card of the switched tab if none selected
     if (window.innerWidth >= 992) {
         if (tabKey === 'app') {
             const firstAppCard = document.querySelector('#app-history .app-list-card');
@@ -554,7 +525,6 @@ function showAppointmentDetails(appId) {
         listCard.classList.add('border-accent', 'shadow-neon');
     }
 
-    // Mobile Responsive Scroll & Return Control
     if (window.innerWidth < 992) {
         const backBtn = document.getElementById('mobile-back-to-app-btn');
         if (backBtn) backBtn.classList.remove('d-none');
@@ -595,7 +565,6 @@ function showRecordDetails(recordId) {
         sessionStorage.removeItem("archive_action_{{ $targetUser->id }}");
     } catch (e) {}
 
-    // Mobile Responsive Scroll & Return Control
     if (window.innerWidth < 992) {
         const backBtn = document.getElementById('mobile-back-to-lab-btn');
         if (backBtn) backBtn.classList.remove('d-none');
@@ -632,7 +601,6 @@ function showAddRecordForm() {
         sessionStorage.setItem("archive_action_{{ $targetUser->id }}", "add");
     } catch (e) {}
 
-    // Mobile Responsive Scroll & Return Control
     if (window.innerWidth < 992) {
         const backBtn = document.getElementById('mobile-back-to-lab-btn');
         if (backBtn) backBtn.classList.remove('d-none');
@@ -720,7 +688,6 @@ function previewHistFile(recordId, fileUrl, labelName, certNo = '') {
         }
     }
 
-    // Scroll to preview on small devices
     if (window.innerWidth < 992) {
         previewArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -730,8 +697,6 @@ function previewHistFile(recordId, fileUrl, labelName, certNo = '') {
 let currentScale = 1;
 let translateX = 0;
 let translateY = 0;
-let isDragging = false;
-let startX, startY;
 
 function zoomImage(amount, event) {
     if (event) event.stopPropagation();
@@ -753,7 +718,6 @@ function resetZoom(event) {
     currentScale = 1;
     translateX = 0;
     translateY = 0;
-    isDragging = false;
     const img = document.getElementById('lightbox_qr_img');
     if (img) {
         img.style.transform = `translate(0px, 0px) scale(1)`;
@@ -832,7 +796,6 @@ function toggleFullscreen(event) {
     }
 }
 
-// Hoist functions to window
 window.switchArchiveTab = switchArchiveTab;
 window.scrollToHistoryList = scrollToHistoryList;
 window.showAppointmentDetails = showAppointmentDetails;
@@ -848,7 +811,6 @@ window.zoomQR = zoomFile;
 window.closeQRLightbox = closeQRLightbox;
 window.toggleFullscreen = toggleFullscreen;
 
-// Check stored tab and action on restore
 window.addEventListener('load', () => {
     try {
         const storedAction = sessionStorage.getItem("archive_action_{{ $targetUser->id }}");
@@ -857,7 +819,6 @@ window.addEventListener('load', () => {
         }
     } catch (e) {}
 
-    // On Desktop, auto-select first item in active tab if not adding records
     if (window.innerWidth >= 992) {
         const activeTabEl = document.querySelector('#historyTabs .nav-link.active');
         const isLabActive = activeTabEl && activeTabEl.id === 'tab-btn-lab-history';

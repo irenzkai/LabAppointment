@@ -32,6 +32,23 @@
 
     // Dynamically reveal preview on page load if scan exists
     $showPreview = $isReadonly || $hasReportScan;
+
+    // Requested Examinations Breakdown
+    $requestedExaminations = $appointment->packages->pluck('name')->map(fn($n) => "[PKG] {$n}")
+        ->concat($appointment->services->pluck('name'))
+        ->implode(', ');
+
+    // Merge registered radiologists and all licensed clinical personnel into one selectable list
+    $allRadiologists = collect();
+    if (isset($radiologists) && $radiologists->isNotEmpty()) {
+        $allRadiologists = $allRadiologists->concat($radiologists);
+    }
+    $dbRadiologists = \App\Models\User::whereIn('role', ['admin', 'lab_tech', 'staff'])
+        ->where('is_active', true)
+        ->whereNotNull('license_number')
+        ->orderBy('last_name')
+        ->get();
+    $allRadiologists = $allRadiologists->concat($dbRadiologists)->unique('id')->sortBy('name')->values();
 @endphp
 
 <div class="container text-start animate-page pt-4 px-3 px-sm-4" id="radio-workstation-root">
@@ -109,7 +126,15 @@
                         </div>
                         <div class="text-main fw-bold small mb-1 text-break">{{ strtoupper($appointment->patient_name) }}</div>
                         <div class="text-secondary smaller mb-1">{{ $appointment->patient_age }} YRS / {{ strtoupper($appointment->patient_sex) }}</div>
-                        <div class="text-muted smaller text-break" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
+                        <div class="text-muted smaller text-break mb-2" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
+
+                        {{-- Requested Examinations Summary --}}
+                        <div class="pt-2 border-top border-secondary border-opacity-10">
+                            <small class="text-secondary d-block smaller fw-bold uppercase">Requested Examinations</small>
+                            <span class="small fw-semibold text-accent text-break" style="font-size: 0.75rem;">
+                                {{ $requestedExaminations ?: 'None registered' }}
+                            </span>
+                        </div>
 
                         {{-- Hidden snapshot payloads for backend backwards-compatibility --}}
                         <input type="hidden" name="radio_data[metadata][name]" value="{{ strtoupper($appointment->patient_name) }}">
@@ -151,23 +176,81 @@
                             @enderror
                         </div>
 
-                        {{-- Radiologist Signatory (Blank on Default) --}}
-                        <h6 class="text-accent mb-3 small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3">Manual Signatory (PDF)</h6>
+                        {{-- Radiologist Signatory --}}
+                        <h6 class="text-accent mb-3 small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3">Clinical Signatory</h6>
                         <div class="mb-3 border border-secondary border-opacity-10 p-2.5 rounded" style="background-color: rgba(0,0,0,0.015);">
-                            <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">Radiologist Name</label>
-                            <input type="text" name="radio_data[sig][name]" id="sig_radio_name" class="form-control mb-1 @error('radio_data.sig.name') is-invalid @enderror" placeholder="Radiologist Name" value="{{ old('radio_data.sig.name', $res->radio_data['sig']['name'] ?? ($res->radiologyReport?->radiologist_name ?? '')) }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
-                            <div class="invalid-feedback d-none mb-1" id="err_sig_radio_name"></div>
-                            @error('radio_data.sig.name')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
+                            <label class="text-secondary smaller fw-bold mb-1.5 d-block uppercase" style="font-size: 0.65rem;">Radiologist</label>
 
-                            <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">License / PRC No.</label>
-                            <input type="text" name="radio_data[sig][lic]" id="sig_radio_lic" class="form-control @error('radio_data.sig.lic') is-invalid @enderror" placeholder="License / Position" value="{{ old('radio_data.sig.lic', $res->radio_data['sig']['lic'] ?? ($res->radiologyReport?->radiologist_license ?? '')) }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
-                            <div class="invalid-feedback d-none" id="err_sig_radio_lic"></div>
-                            @error('radio_data.sig.lic')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
+                            {{-- Search & Select Dropdown --}}
+                            <div class="position-relative mb-2 signatory-search-wrapper" id="sig_radio_wrapper">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-secondary bg-opacity-10 text-muted border-secondary border-opacity-25">
+                                        <i class="bi bi-search"></i>
+                                    </span>
+                                    <input type="text" 
+                                           id="sig_radio_search" 
+                                           class="form-control form-control-sm signatory-search-input" 
+                                           placeholder="Search or choose radiologist..." 
+                                           autocomplete="off"
+                                           onfocus="openSignatoryMenu('radio')" 
+                                           oninput="filterSignatoryMenu('radio', this.value)"
+                                           {{ $hasReportScan ? 'disabled' : '' }}>
+                                    <button type="button" 
+                                            class="btn btn-outline-secondary btn-sm signatory-toggle-btn" 
+                                            onclick="toggleSignatoryMenu('radio')" 
+                                            tabindex="-1"
+                                            {{ $hasReportScan ? 'disabled' : '' }}>
+                                        <i class="bi bi-chevron-down" style="font-size: 0.7rem;"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="signatory-dropdown-list shadow-lg bg-card border rounded-3 p-1 d-none position-absolute w-100 mt-1" 
+                                     id="sig_radio_menu" 
+                                     style="z-index: 1050; max-height: 220px; overflow-y: auto; background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                                    @foreach($allRadiologists as $rad)
+                                        <div class="signatory-item p-2 rounded cursor-pointer transition-all d-flex justify-content-between align-items-center" 
+                                             data-name="{{ $rad->name }}" 
+                                             data-lic="{{ $rad->license_number ?: ($rad->occupation ?: 'Radiologist') }}" 
+                                             onclick="selectSignatory('radio', '{{ addslashes($rad->name) }}', '{{ addslashes($rad->license_number ?: ($rad->occupation ?: 'Radiologist')) }}')">
+                                            <div>
+                                                <span class="fw-bold small d-block text-main">{{ $rad->name }}</span>
+                                                <small class="text-muted" style="font-size: 0.68rem;">{{ $rad->occupation ?: 'Radiologist' }}</small>
+                                            </div>
+                                            @if($rad->license_number)
+                                                <span class="badge bg-secondary bg-opacity-10 text-accent font-monospace" style="font-size: 0.65rem;">
+                                                    PRC #{{ $rad->license_number }}
+                                                </span>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                    <div class="signatory-empty-msg text-muted small p-2 text-center d-none" id="sig_radio_empty">
+                                        No matching radiologists found
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Stacked Full-Width Name & License Inputs (Editable after selecting) --}}
+                            <div class="d-flex flex-column gap-2">
+                                <div>
+                                    <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">Radiologist Name</label>
+                                    <input type="text" name="radio_data[sig][name]" id="sig_radio_name" class="form-control form-control-sm @error('radio_data.sig.name') is-invalid @enderror" placeholder="Radiologist Full Name" value="{{ old('radio_data.sig.name', $res->radio_data['sig']['name'] ?? ($res->radiologyReport?->radiologist_name ?? '')) }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
+                                    <div class="invalid-feedback d-none" id="err_sig_radio_name"></div>
+                                    @error('radio_data.sig.name')
+                                        <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div>
+                                    <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">License / PRC No.</label>
+                                    <input type="text" name="radio_data[sig][lic]" id="sig_radio_lic" class="form-control form-control-sm @error('radio_data.sig.lic') is-invalid @enderror" placeholder="PRC License #" value="{{ old('radio_data.sig.lic', $res->radio_data['sig']['lic'] ?? ($res->radiologyReport?->radiologist_license ?? '')) }}" {{ $hasReportScan ? 'disabled' : 'required' }}>
+                                    <div class="invalid-feedback d-none" id="err_sig_radio_lic"></div>
+                                    @error('radio_data.sig.lic')
+                                        <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
                         </div>
+
                     </div>
                 </div>
             </div>
@@ -321,7 +404,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <form action="{{ route('workstation.verify', [$appointment->id, 'radio']) }}" method="POST" class="modal-content shadow-lg p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
             @csrf
-            <h5 class="text-neon fw-bold mb-1 uppercase">Clinical Verification</h5>
+            <h5 class="text-accent fw-bold mb-1 uppercase">Clinical Verification</h5>
             <p class="text-secondary small mb-4">Enter your name to verify that the uploaded medical scans match this clinical record.</p>
             <div class="mb-4">
                 <label class="smaller text-secondary fw-bold mb-1 uppercase">Verifier Name</label>
@@ -383,12 +466,80 @@ window.zoomQR = function(fileSrc) {
     }
 };
 
+// Searchable Signatory Dropdown Handlers
+window.openSignatoryMenu = function(key) {
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (menu) menu.classList.remove('d-none');
+};
+
+window.toggleSignatoryMenu = function(key) {
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (menu) {
+        menu.classList.toggle('d-none');
+        if (!menu.classList.contains('d-none')) {
+            document.getElementById(`sig_${key}_search`)?.focus();
+        }
+    }
+};
+
+window.filterSignatoryMenu = function(key, query) {
+    const q = (query || '').toLowerCase().trim();
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (!menu) return;
+    menu.classList.remove('d-none');
+
+    let matchCount = 0;
+    menu.querySelectorAll('.signatory-item').forEach(item => {
+        const name = (item.dataset.name || '').toLowerCase();
+        const lic = (item.dataset.lic || '').toLowerCase();
+        const match = name.includes(q) || lic.includes(q);
+        item.classList.toggle('d-none', !match);
+        if (match) matchCount++;
+    });
+
+    const emptyMsg = document.getElementById(`sig_${key}_empty`);
+    if (emptyMsg) {
+        emptyMsg.classList.toggle('d-none', matchCount > 0);
+    }
+};
+
+window.selectSignatory = function(key, name, lic) {
+    const searchInput = document.getElementById(`sig_${key}_search`);
+    const nameInput = document.getElementById(`sig_${key}_name`);
+    const licInput = document.getElementById(`sig_${key}_lic`);
+
+    if (searchInput) searchInput.value = name;
+    if (nameInput) {
+        nameInput.value = name;
+        nameInput.classList.remove('is-invalid');
+        const errDiv = document.getElementById(`err_sig_${key}_name`);
+        if (errDiv) errDiv.classList.add('d-none');
+    }
+    if (licInput) {
+        licInput.value = lic;
+        licInput.classList.remove('is-invalid');
+        const errDiv = document.getElementById(`err_sig_${key}_lic`);
+        if (errDiv) errDiv.classList.add('d-none');
+    }
+
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (menu) menu.classList.add('d-none');
+};
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.signatory-search-wrapper')) {
+        document.querySelectorAll('.signatory-dropdown-list').forEach(el => el.classList.add('d-none'));
+    }
+});
+
 // Setup and teardown required status on all manual input elements depending on current layout mode
 function setManualFieldsRequired(required) {
     const fields = [
         document.getElementById('case_no_field'), // Standalone case_no (Always Required)
         document.getElementById('radio_meta_date'),
         document.getElementById('technique_field'),
+        document.getElementById('sig_radio_search'),
         document.getElementById('sig_radio_name'),
         document.getElementById('sig_radio_lic'),
         document.getElementById('findings_field'),
@@ -400,6 +551,12 @@ function setManualFieldsRequired(required) {
             if (field.id === 'case_no_field') {
                 field.setAttribute('required', 'required');
                 field.removeAttribute('disabled');
+            } else if (field.id === 'sig_radio_search') {
+                if (required) {
+                    field.removeAttribute('disabled');
+                } else {
+                    field.setAttribute('disabled', 'disabled');
+                }
             } else {
                 if (required) {
                     field.setAttribute('required', 'required');
@@ -620,6 +777,13 @@ document.addEventListener('DOMContentLoaded', () => {
         form.querySelectorAll('input:not([type="hidden"]), textarea, select').forEach(el => el.disabled = true);
     }
 
+    // Pre-populate search input with existing radiologist name
+    const nameInput = document.getElementById('sig_radio_name');
+    const searchInput = document.getElementById('sig_radio_search');
+    if (nameInput && searchInput && nameInput.value) {
+        searchInput.value = nameInput.value;
+    }
+
     const selectEl = document.getElementById('return_reason_select');
     const textareaWrapper = document.getElementById('custom_return_reason_wrapper');
     const textareaEl = document.getElementById('reason_textarea');
@@ -748,7 +912,6 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 @endpush
 
-@push('styles')
 <style>
 #radio-workstation-root .form-control,
 #radio-workstation-root .form-select,
@@ -788,6 +951,12 @@ document.addEventListener('DOMContentLoaded', () => {
     background: rgba(0, 0, 0, 0.6);
     transition: opacity 0.22s ease-in-out;
 }
+.signatory-item {
+    cursor: pointer;
+}
+.signatory-item:hover {
+    background-color: rgba(25, 211, 140, 0.08) !important;
+}
 #radio-workstation-root .is-invalid {
     border-color: #ff4d4d !important;
     box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.15) !important;
@@ -798,4 +967,3 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 }
 </style>
-@endpush

@@ -1,13 +1,23 @@
+<!-- resources/views/appointments/encode.blade.php -->
 @extends('layouts.app')
 
 @section('title', 'Encode Results')
 
 @section('content')
 @php
+    // Eager load packages and their constituent services
+    $appointment->loadMissing(['packages.services', 'services']);
+
     $res = $appointment->result;
-    $selectedTypes = $autoReportTypes;
+    $selectedTypes = $autoReportTypes ?? [];
+    
     // Defined $isReadonly at the hub level so the main page and nested dynamic partials know when the folder is locked
     $isReadonly = ($appointment->status === 'released');
+
+    // Calculate confirmed price: Use positive stored payment_amount or fallback to calculated service/package sum
+    $confirmedPrice = ($appointment->payment_amount && floatval($appointment->payment_amount) > 0) 
+        ? floatval($appointment->payment_amount) 
+        : floatval($appointment->totalPrice());
 
     // Clean associative status themes mapping to prevent compiler syntax conflicts
     $statusThemes = [
@@ -48,12 +58,22 @@
         }
     }
 
-    // Also block final release if any of the dynamic custom worksheets are not verified yet
-    foreach($appointment->result->customWorkstationResults as $custom) {
+    // Safely retrieve custom workstation worksheets
+    $customWorksheets = $res 
+        ? ($res->relationLoaded('customWorkstationResults') ? $res->customWorkstationResults : $res->customWorkstationResults()->get()) 
+        : collect();
+
+    // Block final release if any of the dynamic custom worksheets are not verified yet
+    foreach($customWorksheets as $custom) {
         if ($custom->status !== 'verified') {
             $readyToRelease = false;
         }
     }
+
+    // Formatted list of all examinations (both packages and standalone services)
+    $requestedExaminations = $appointment->packages->pluck('name')->map(fn($n) => "[PKG] {$n}")
+        ->concat($appointment->services->pluck('name'))
+        ->implode(', ');
 @endphp
 
 <div id="results-hub-page" class="container text-start animate-page px-3 px-sm-4">
@@ -71,9 +91,9 @@
         </div>
     </div>
 
-    {{-- 2. PATIENT CONTEXT BAR (Theme-Aware Details Card with Accordion) --}}
+    {{-- 2. PATIENT CONTEXT BAR (Refined Noticeable Package Display & Extended Drawer) --}}
     <div class="mb-4 p-3 p-sm-4 rounded border border-secondary border-opacity-25 shadow-sm" style="background-color: var(--bg-card); color: var(--text-main);">
-        <div class="row align-items-center g-3">
+        <div class="row align-items-start g-3">
             <div class="col-12 col-md-7 text-start">
                 <h4 class="fw-bold mb-1 text-break" style="color: var(--text-main) !important;">{{ strtoupper($appointment->patient_name) }}</h4>
                 <div class="text-secondary smaller fw-bold uppercase d-flex flex-wrap align-items-center gap-1">
@@ -83,22 +103,51 @@
                     <span class="mx-1 text-opacity-50">|</span> 
                     <span>Tested: {{ $appointment->tested_at ? $appointment->tested_at->format('M d, Y') : 'Processing' }}</span>
                 </div>
+
+                {{-- Registered Examinations Summary --}}
                 <div class="text-accent smaller fw-bold uppercase mt-2 text-break">
-                    <i class="bi bi-flask-fill me-1"></i> Tests Requested: 
-                    <span style="color: var(--text-main);">{{ $appointment->services->pluck('name')->implode(', ') }}</span>
+                    <i class="bi bi-flask-fill me-1"></i> Tests & Packages: 
+                    <span style="color: var(--text-main);">{{ $requestedExaminations ?: 'None registered' }}</span>
                 </div>
+
+                {{-- NOTICEABLE PACKAGE INCLUSIONS (No Restricting Halfway Border Box) --}}
+                @if($appointment->packages->isNotEmpty())
+                    <div class="mt-3 pt-2">
+                        <div class="d-flex align-items-center gap-1 mb-1.5">
+                            <i class="bi bi-box-seam-fill text-accent fs-6"></i>
+                            <span class="text-accent fw-bold uppercase" style="font-size: 0.76rem; letter-spacing: 0.5px;">
+                                Package Inclusions & Tests:
+                            </span>
+                        </div>
+                        <div class="d-flex flex-column gap-2 ps-1">
+                            @foreach($appointment->packages as $pkg)
+                                @php
+                                    $isOrg = $pkg->isCustomOrgPackage() || !empty($pkg->organization_id);
+                                    $bundledNames = $pkg->services->pluck('name')->implode(', ');
+                                @endphp
+                                <div class="d-flex flex-wrap align-items-center gap-2 text-break">
+                                    <span class="badge {{ $isOrg ? 'bg-primary' : 'bg-success' }} text-white py-1 px-2 fw-bold me-1" style="font-size: 0.62rem; letter-spacing: 0.5px;">
+                                        {{ $isOrg ? 'ORG PKG' : 'PKG' }}
+                                    </span>
+                                    <strong class="text-main fw-bold small uppercase">{{ $pkg->name }}</strong>
+                                    <span class="text-secondary smaller fw-semibold">&mdash; {{ $bundledNames ?: 'No constituent tests defined' }}</span>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
             </div>
             
             <div class="col-12 col-md-5 d-flex justify-content-between justify-content-md-end align-items-center gap-3 flex-wrap">
-                <div class="text-start text-md-end">
+                <div class="text-start text-md-end" id="hub-folder-status-box">
                     <label class="text-secondary smaller fw-bold uppercase d-block mb-1">Folder Status</label>
                     <span class="badge {{ $appointment->status == 'released' ? 'bg-neon text-dark' : 'bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25' }} px-3 py-2 fs-6 uppercase">
                         {{ strtoupper($appointment->status) }}
                     </span>
                 </div>
                 
-                {{-- Accordion Toggle Button (Arrow Icon Only) --}}
-                <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center fw-bold uppercase flex-shrink-0" type="button" data-bs-toggle="collapse" data-bs-target="#patientDetailsAccordion" aria-expanded="false" aria-controls="patientDetailsAccordion" style="border-radius: 8px; width: 38px; height: 38px; padding: 0;" title="Toggle Details">
+                {{-- Accordion Toggle Button --}}
+                <button class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center fw-bold uppercase flex-shrink-0" type="button" data-bs-toggle="collapse" data-bs-target="#patientDetailsAccordion" aria-expanded="false" aria-controls="patientDetailsAccordion" style="border-radius: 8px; width: 38px; height: 38px; padding: 0;" title="Toggle Extended Details">
                     <i class="bi bi-chevron-down transition-all" id="accordionChevron"></i>
                 </button>
             </div>
@@ -126,7 +175,7 @@
                     </div>
                 </div>
 
-                {{-- Address & Organization --}}
+                {{-- Address & Organization & Full Breakdown --}}
                 <div class="col-12 col-md-4 drawer-col-border px-md-3">
                     <h6 class="text-accent fw-bold small uppercase mb-3" style="letter-spacing: 0.5px;">
                         <i class="bi bi-geo-alt me-1.5"></i>Location & Entity
@@ -136,11 +185,50 @@
                         <span class="small fw-semibold text-break">{{ $appointment->patient_address }}</span>
                     </div>
                     @if($appointment->organization_name)
-                    <div>
+                    <div class="mb-2">
                         <small class="text-secondary d-block smaller fw-bold uppercase">Organization / Batch</small>
                         <span class="small fw-semibold text-break">{{ $appointment->organization_name }} (Batch #{{ $appointment->batch_id }})</span>
                     </div>
                     @endif
+                    <div>
+                        <small class="text-secondary d-block smaller fw-bold uppercase mb-2">Examinations Breakdown</small>
+                        
+                        {{-- Detailed Package Breakdowns with Clear Space Between Tag and Name --}}
+                        @if($appointment->packages->isNotEmpty())
+                            <div class="d-flex flex-column gap-2 mb-2">
+                                @foreach($appointment->packages as $pkg)
+                                    @php
+                                        $isOrgPkg = $pkg->isCustomOrgPackage() || !empty($pkg->organization_id);
+                                    @endphp
+                                    <div class="p-2.5 rounded border" style="background-color: var(--bg-main); border-color: var(--border-color) !important;">
+                                        <div class="d-flex align-items-center gap-2 mb-1.5 flex-wrap">
+                                            <span class="badge {{ $isOrgPkg ? 'bg-primary' : 'bg-success' }} text-white py-1 px-2 fw-bold me-1" style="font-size: 0.62rem; letter-spacing: 0.5px;">
+                                                {{ $isOrgPkg ? 'ORG PKG' : 'PKG' }}
+                                            </span>
+                                            <strong class="text-main small uppercase fw-bold">{{ $pkg->name }}</strong>
+                                        </div>
+                                        <div class="text-secondary smaller" style="font-size: 0.74rem; line-height: 1.4;">
+                                            <span class="text-muted fw-bold">Contains:</span>
+                                            <span class="text-main fw-semibold ms-1">{{ $pkg->services->pluck('name')->implode(', ') ?: 'No tests listed' }}</span>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+
+                        {{-- Standalone Individual Tests --}}
+                        @if($appointment->services->isNotEmpty())
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                @foreach($appointment->services as $s)
+                                    <span class="badge border border-secondary border-opacity-25 text-secondary uppercase px-2 py-0.5" style="font-size: 0.65rem;">
+                                        {{ $s->name }}
+                                    </span>
+                                @endforeach
+                            </div>
+                        @elseif($appointment->packages->isEmpty())
+                            <span class="text-muted small italic" style="font-size: 0.65rem;">None registered</span>
+                        @endif
+                    </div>
                 </div>
 
                 {{-- Billing & Referral Details --}}
@@ -155,7 +243,7 @@
                         </div>
                         <div class="mb-2">
                             <small class="text-secondary d-block smaller fw-bold uppercase">Confirmed Price</small>
-                            <span class="small fw-bold text-accent">₱{{ number_format($appointment->payment_amount ?: $appointment->totalPrice(), 2) }}</span>
+                            <span class="small fw-bold text-accent">₱{{ number_format($confirmedPrice, 2) }}</span>
                         </div>
                         @if($appointment->referral_note)
                         <div class="mb-2">
@@ -167,7 +255,7 @@
                         @endif
                     </div>
 
-                    {{-- Relocated Edit Patient Details Button --}}
+                    {{-- Edit Patient Details Action Button --}}
                     @if(!$isReadonly && auth()->user()->isEmployee())
                     <div class="mt-3 pt-3 border-top border-secondary border-opacity-10 text-end">
                         <a href="{{ route('appointments.edit-details', $appointment->id) }}?from=hub" class="btn btn-sm btn-accent fw-bold uppercase py-2 px-3 shadow-sm w-100" style="border-radius: 6px; font-size: 0.75rem;" title="Revise Details">
@@ -198,7 +286,7 @@
     </div>
 
     {{-- 4. MODULAR PROGRESS GRID --}}
-    <div class="row g-4">
+    <div class="row g-4" id="workstations-grid-container">
         {{-- A. Original Workstations Loop --}}
         @foreach($selectedTypes as $type)
         @php
@@ -207,30 +295,28 @@
             $currentStatus = $res->$statusField ?? 'pending';
             $theme = $statusThemes[$currentStatus] ?? $statusThemes['pending'];
 
-            // Audit Names (System account names)
+            $audit = $res->audits->where('workstation_type', $type)->first();
             $v1NameField = $prefix . '_v1_by_name';
             $v2NameField = $prefix . '_v2_by_name';
-            $encoderName = $res->$v1NameField ?? '---';
-            $verifierName = $res->$v2NameField ?? '---';
+            $encoderName = $audit->v1_by_name ?? ($res->$v1NameField ?? '---');
+            $verifierName = $audit->v2_by_name ?? ($res->$v2NameField ?? '---');
 
-            // Formatted Timestamps
             $v1AtField = $prefix . '_v1_at';
             $v2AtField = ($type == 'lab' ? 'lab_v2_at' : $prefix . '_verified_at');
+            $encodedAt = ($audit && $audit->v1_at) 
+                ? \Carbon\Carbon::parse($audit->v1_at) 
+                : (($res && $res->$v1AtField) ? \Carbon\Carbon::parse($res->$v1AtField) : null);
+            $verifiedAt = ($audit && $audit->v2_at) 
+                ? \Carbon\Carbon::parse($audit->v2_at) 
+                : (($res && $res->$v2AtField) ? \Carbon\Carbon::parse($res->$v2AtField) : null);
 
-            $encodedAt = ($res && $res->$v1AtField) ? \Carbon\Carbon::parse($res->$v1AtField) : null;
-            $verifiedAt = ($res && $res->$v2AtField) ? \Carbon\Carbon::parse($res->$v2AtField) : null;
-
-            // Map route identifier correctly
             $routeAction = match($type) {
                 'radio' => 'radiology',
                 default => $type
             };
 
-            // Check if this specific workstation result has been edited/corrected
-            $audit = $res->audits->where('workstation_type', $type)->first();
             $isEdited = $appointment->results_released_at && $audit && \Carbon\Carbon::parse($audit->updated_at)->gt(\Carbon\Carbon::parse($appointment->results_released_at));
 
-            // Return reason value
             $returnReasonField = $prefix . '_return_reason';
             $returnReasonValue = $res->$returnReasonField ?? '';
         @endphp
@@ -260,7 +346,7 @@
                     </div>
                 </div>
 
-                {{-- Return Reason Alert (Specific to this form) --}}
+                {{-- Return Reason Alert --}}
                 @if($currentStatus == 'returned' && $returnReasonValue)
                 <div class="alert bg-danger bg-opacity-10 border-danger text-danger py-2 px-3 small mb-3">
                     <div class="fw-bold uppercase smaller mb-1" style="font-size: 0.65rem;">Correction Reason:</div>
@@ -268,7 +354,7 @@
                 </div>
                 @endif
 
-                {{-- System Audit Trail (Theme-Aware Container) --}}
+                {{-- System Audit Trail --}}
                 <div class="mb-4 p-3 rounded border border-secondary border-opacity-10" style="background-color: rgba(0, 0, 0, 0.02);">
                     <div class="row g-2">
                         <div class="col-6 pe-2">
@@ -309,9 +395,9 @@
         @endforeach
 
         {{-- B. Dynamic/Custom Worksheets Loop --}}
-        @foreach($appointment->result->customWorkstationResults as $custom)
+        @foreach($customWorksheets as $custom)
         @php
-            $customAudit = $appointment->result->audits->where('workstation_type', "custom_{$custom->id}")->first();
+            $customAudit = $res ? $res->audits->where('workstation_type', "custom_{$custom->id}")->first() : null;
             $customEncoderName = $customAudit->v1_by_name ?? '---';
             $customVerifierName = $customAudit->v2_by_name ?? '---';
             $customEncodedAt = $customAudit && $customAudit->v1_at ? \Carbon\Carbon::parse($customAudit->v1_at) : null;
@@ -319,7 +405,6 @@
 
             $customStatus = $custom->status ?? 'pending';
             $customTheme = $statusThemes[$customStatus] ?? $statusThemes['pending'];
-            $hasFile = !empty($custom->scan_path);
         @endphp
         <div class="col-12 col-md-6">
             <div class="card p-3 p-sm-4 shadow-sm workstation-card h-100" style="background-color: var(--bg-card); color: var(--text-main); border-left: 4px solid {{ $customStatus === 'verified' ? '#19d38c' : ($customStatus === 'returned' ? '#dc3545' : '#0dcaf0') }} !important; border-top-color: var(--border-color); border-right-color: var(--border-color); border-bottom-color: var(--border-color);">
@@ -401,7 +486,7 @@
     </div>
 
     {{-- 5. FINAL RELEASE SECTION --}}
-    <div class="mt-5 pt-4 border-top text-center" style="border-color: var(--border-color) !important;">
+    <div class="mt-5 pt-4 border-top text-center" id="hub-release-container" style="border-color: var(--border-color) !important;">
         @if($readyToRelease && $appointment->status !== 'released')
         <div class="mb-4">
             <h4 class="text-accent fw-bold mb-1 uppercase fs-4">Ready for Clinical Release</h4>
@@ -432,7 +517,7 @@
         @elseif($appointment->status === 'released')
         <div class="p-3 p-sm-4 rounded border border-accent" style="background-color: rgba(25, 211, 140, 0.05); max-width: 600px; margin: 0 auto;">
             <p class="text-accent fw-bold mb-1 uppercase small">Folder Release Complete</p>
-            <p class="small mb-0" style="color: var(--text-main);">Patient notified and record locked on {{ $appointment->updated_at->format('M d, Y | h:i A') }}</p>
+            <p class="small mb-0" style="color: var(--text-main);">Patient notified and record locked on {{ $appointment->updated_at ? $appointment->updated_at->format('M d, Y | h:i A') : 'N/A' }}</p>
         </div>
         @else
         <div class="p-3 p-sm-4 rounded border border-secondary border-dashed" style="max-width: 600px; margin: 0 auto; background-color: rgba(0, 0, 0, 0.02);">
@@ -449,54 +534,56 @@
     @include('appointments.partials.encode.delete-original-modals')
 
     {{-- Delete Modals for Custom Workstations --}}
-    @foreach($appointment->result->customWorkstationResults as $custom)
-    <div class="modal fade" id="deleteCustomWorksheetModal_{{ $custom->id }}" tabindex="-1" aria-labelledby="deleteCustomWorksheetModalLabel_{{ $custom->id }}" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content shadow-lg p-3 p-sm-4 text-start" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="fw-bold uppercase mb-0 text-danger" id="deleteCustomWorksheetModalLabel_{{ $custom->id }}">
-                        <i class="bi bi-exclamation-triangle-fill me-1.5"></i> Remove Custom Worksheet
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                
-                <p class="text-secondary small mb-3">
-                    Are you sure you want to remove the custom worksheet <strong style="color: var(--text-main);">{{ $custom->name }}</strong> (Cert: #{{ $custom->cert_no }})? This action cannot be undone and will permanently remove associated scan files.
-                </p>
-
-                <form action="{{ route('workstation.custom.destroy', [$appointment->id, $custom->id]) }}" method="POST">
-                    @csrf
-                    @method('DELETE')
+    <div id="custom-delete-modals-wrapper">
+        @foreach($customWorksheets as $custom)
+        <div class="modal fade" id="deleteCustomWorksheetModal_{{ $custom->id }}" tabindex="-1" aria-labelledby="deleteCustomWorksheetModalLabel_{{ $custom->id }}" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content shadow-lg p-3 p-sm-4 text-start" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-bold uppercase mb-0 text-danger" id="deleteCustomWorksheetModalLabel_{{ $custom->id }}">
+                            <i class="bi bi-exclamation-triangle-fill me-1.5"></i> Remove Custom Worksheet
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
                     
-                    <div class="mb-3">
-                        <label class="form-label text-secondary smaller fw-bold uppercase">Reason for Deletion <span class="text-danger">*</span></label>
-                        <select id="delete_custom_reason_select_{{ $custom->id }}" name="reason" class="form-select form-select-sm" onchange="toggleCustomReasonField({{ $custom->id }}, this)" required>
-                            <option value="" disabled selected>-- Select Justification --</option>
-                            <option value="Worksheet entered in error">Worksheet entered in error</option>
-                            <option value="Duplicate worksheet created">Duplicate worksheet created</option>
-                            <option value="Cancelled by patient request">Cancelled by patient request</option>
-                            <option value="Doctor canceled test order">Doctor canceled test order</option>
-                            <option value="Incorrect test category assigned">Incorrect test category assigned</option>
-                            <option value="Others">Others (Specify below)</option>
-                        </select>
-                    </div>
+                    <p class="text-secondary small mb-3">
+                        Are you sure you want to remove the custom worksheet <strong style="color: var(--text-main);">{{ $custom->name }}</strong> (Cert: #{{ $custom->cert_no }})? This action cannot be undone and will permanently remove associated scan files.
+                    </p>
 
-                    <div id="delete_custom_reason_wrapper_{{ $custom->id }}" class="mb-3 d-none">
-                        <label class="form-label text-secondary smaller fw-bold uppercase">Specify Reason <span class="text-danger">*</span></label>
-                        <textarea id="delete_custom_reason_{{ $custom->id }}" class="form-control form-control-sm" rows="3" placeholder="Enter detailed clinical audit justification (min 5 characters)..."></textarea>
-                    </div>
+                    <form action="{{ route('workstation.custom.destroy', [$appointment->id, $custom->id]) }}" method="POST">
+                        @csrf
+                        @method('DELETE')
+                        
+                        <div class="mb-3">
+                            <label class="form-label text-secondary smaller fw-bold uppercase">Reason for Deletion <span class="text-danger">*</span></label>
+                            <select id="delete_custom_reason_select_{{ $custom->id }}" name="reason" class="form-select form-select-sm" onchange="toggleCustomReasonField({{ $custom->id }}, this)" required>
+                                <option value="" disabled selected>-- Select Justification --</option>
+                                <option value="Worksheet entered in error">Worksheet entered in error</option>
+                                <option value="Duplicate worksheet created">Duplicate worksheet created</option>
+                                <option value="Cancelled by patient request">Cancelled by patient request</option>
+                                <option value="Doctor canceled test order">Doctor canceled test order</option>
+                                <option value="Incorrect test category assigned">Incorrect test category assigned</option>
+                                <option value="Others">Others (Specify below)</option>
+                            </select>
+                        </div>
 
-                    <div class="d-flex flex-column flex-sm-row gap-2 justify-content-end mt-4">
-                        <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-2 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-sm btn-danger px-4 py-2 fw-bold uppercase">
-                            <i class="bi bi-trash me-1"></i> Confirm Delete
-                        </button>
-                    </div>
-                </form>
+                        <div id="delete_custom_reason_wrapper_{{ $custom->id }}" class="mb-3 d-none">
+                            <label class="form-label text-secondary smaller fw-bold uppercase">Specify Reason <span class="text-danger">*</span></label>
+                            <textarea id="delete_custom_reason_{{ $custom->id }}" class="form-control form-control-sm" rows="3" placeholder="Enter detailed clinical audit justification (min 5 characters)..."></textarea>
+                        </div>
+
+                        <div class="d-flex flex-column flex-sm-row gap-2 justify-content-end mt-4">
+                            <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-2 fw-bold uppercase" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-sm btn-danger px-4 py-2 fw-bold uppercase">
+                                <i class="bi bi-trash me-1"></i> Confirm Delete
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
+        @endforeach
     </div>
-    @endforeach
 @endif
 
 {{-- Centralized Universal Lightbox Partial --}}
@@ -525,14 +612,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
 
-            const oldContext = document.querySelector('.col-md-4.text-md-end');
-            const newContext = doc.querySelector('.col-md-4.text-md-end');
-            if (oldContext && newContext) {
-                oldContext.innerHTML = newContext.innerHTML;
+            const oldStatusBox = document.getElementById('hub-folder-status-box');
+            const newStatusBox = doc.getElementById('hub-folder-status-box');
+            if (oldStatusBox && newStatusBox) {
+                oldStatusBox.innerHTML = newStatusBox.innerHTML;
             }
 
-            const oldGrid = document.querySelector('.row.g-4');
-            const newGrid = doc.querySelector('.row.g-4');
+            const oldGrid = document.getElementById('workstations-grid-container');
+            const newGrid = doc.getElementById('workstations-grid-container');
             if (oldGrid && newGrid) {
                 oldGrid.style.transition = 'opacity 0.2s ease-out';
                 oldGrid.style.opacity = '0';
@@ -543,10 +630,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }, 200);
             }
 
-            const oldRelease = document.querySelector('.mt-5.pt-4');
-            const newRelease = doc.querySelector('.mt-5.pt-4') || doc.querySelector('.mt-5.pt-5');
+            const oldRelease = document.getElementById('hub-release-container');
+            const newRelease = doc.getElementById('hub-release-container');
             if (oldRelease && newRelease) {
                 oldRelease.innerHTML = newRelease.innerHTML;
+            }
+
+            const oldModals = document.getElementById('custom-delete-modals-wrapper');
+            const newModals = doc.getElementById('custom-delete-modals-wrapper');
+            if (oldModals && newModals) {
+                oldModals.innerHTML = newModals.innerHTML;
             }
         })
         .catch(error => console.error('Results Hub sync failed:', error));

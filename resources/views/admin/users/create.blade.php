@@ -158,14 +158,75 @@
                         </div>
                         <div class="col-md-6">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Access Role</label>
-                            <select name="role" id="role" class="form-select @error('role') is-invalid @enderror" required>
-                                <option value="user" {{ old('role') == 'user' ? 'selected' : '' }}>Patient / User</option>
+                            <select name="role" id="role" class="form-select @error('role') is-invalid @enderror" onchange="handleRoleChange(this.value)" required>
+                                <option value="user" {{ old('role', 'user') == 'user' ? 'selected' : '' }}>Patient / User</option>
                                 <option value="staff" {{ old('role') == 'staff' ? 'selected' : '' }}>Clinic Staff</option>
                                 <option value="lab_tech" {{ old('role') == 'lab_tech' ? 'selected' : '' }}>Laboratory Technician</option>
                             </select>
                             <div class="invalid-feedback d-none" id="err_role"></div>
                             @error('role') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
                         </div>
+
+                        {{-- Dynamic Clinical Role Credentials (Visible for Staff & Lab Tech) --}}
+                        <div id="clinical_credentials_container" class="col-12 {{ in_array(old('role'), ['staff', 'lab_tech']) ? '' : 'd-none' }}">
+                            <div class="p-3 rounded border border-secondary border-opacity-25 bg-secondary bg-opacity-10">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="bi bi-person-badge-fill text-accent me-2"></i>
+                                    <span class="small fw-bold text-accent uppercase" id="credentials_box_title">
+                                        {{ old('role') === 'lab_tech' ? 'Laboratory Technician & Professional Credentials' : 'Clinic Staff Designation' }}
+                                    </span>
+                                </div>
+                                <div class="row g-3">
+                                    {{-- Occupation / Designation --}}
+                                    <div class="col-12 {{ old('role') === 'lab_tech' ? 'col-md-6' : 'col-md-12' }}" id="occupation_wrapper">
+                                        <label class="small text-secondary fw-bold mb-1 uppercase">
+                                            Occupation / Official Designation <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text" 
+                                            name="occupation" 
+                                            id="occupation" 
+                                            class="form-control @error('occupation') is-invalid @enderror" 
+                                            list="occupation_suggestions" 
+                                            placeholder="{{ old('role') === 'lab_tech' ? 'e.g. Medical Technologist, Pathologist, Radiologist' : 'e.g. Receptionist, Clinical Encoder, Clinic Manager' }}" 
+                                            value="{{ old('occupation') }}">
+                                        <datalist id="occupation_suggestions">
+                                            <option value="Receptionist">
+                                            <option value="Clinical Encoder">
+                                            <option value="Clinic Manager">
+                                            <option value="Clinic Nurse">
+                                            <option value="Admissions Officer">
+                                            <option value="Medical Technologist">
+                                            <option value="Pathologist">
+                                            <option value="Radiologist">
+                                            <option value="Attending Physician">
+                                            <option value="Laboratory Supervisor">
+                                        </datalist>
+                                        <div class="invalid-feedback d-none" id="err_occupation"></div>
+                                        @error('occupation') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
+                                        <small class="text-muted smaller d-block mt-1" id="occupation_help_text">
+                                            Designate official position for signature and audit logs.
+                                        </small>
+                                    </div>
+                                    {{-- Professional License / PRC ID --}}
+                                    <div class="col-12 col-md-6 {{ old('role') === 'lab_tech' ? '' : 'd-none' }}" id="license_wrapper">
+                                        <label class="small text-secondary fw-bold mb-1 uppercase">
+                                            Professional License / PRC No. <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text" 
+                                            name="license_number" 
+                                            id="license_number" 
+                                            class="form-control uppercase @error('license_number') is-invalid @enderror" 
+                                            placeholder="e.g. PRC-MT-0012345" 
+                                            maxlength="50"
+                                            value="{{ old('license_number') }}">
+                                        <div class="invalid-feedback d-none" id="err_license_number"></div>
+                                        @error('license_number') <div class="text-danger small mt-1 fw-bold">{{ $message }}</div> @enderror
+                                        <small class="text-muted smaller d-block mt-1">Required for certified laboratory technologists and pathologists.</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="col-md-6">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Initial Password</label>
                             <input type="password" name="password" id="password" class="form-control @error('password') is-invalid @enderror" placeholder="Min. 8 characters" required>
@@ -278,6 +339,90 @@ function syncCreatePhone() {
         hidden.value = display.value ? '09' + display.value.trim() : '';
         clearFieldError(display);
     }
+}
+
+function handleRoleChange(newRole) {
+    const credsContainer = document.getElementById('clinical_credentials_container');
+    const licenseWrapper = document.getElementById('license_wrapper');
+    const occWrapper = document.getElementById('occupation_wrapper');
+    const occInput = document.getElementById('occupation');
+    const licInput = document.getElementById('license_number');
+    const credsTitle = document.getElementById('credentials_box_title');
+    const occHelp = document.getElementById('occupation_help_text');
+    const datalist = document.getElementById('occupation_suggestions');
+
+    if (!credsContainer || !occInput || !licInput) return;
+
+    if (newRole === 'user') {
+        // Demoted / set to patient: Clear both occupation and license number, hide container
+        credsContainer.classList.add('d-none');
+        occInput.value = '';
+        licInput.value = '';
+        occInput.removeAttribute('required');
+        licInput.removeAttribute('required');
+        clearFieldError(occInput);
+        clearFieldError(licInput);
+    } else if (newRole === 'staff') {
+        // Configured as staff: Require occupation, clear and hide license number
+        credsContainer.classList.remove('d-none');
+        if (licenseWrapper) licenseWrapper.classList.add('d-none');
+        if (occWrapper) {
+            occWrapper.className = 'col-12 col-md-12';
+        }
+        licInput.value = '';
+        licInput.removeAttribute('required');
+        clearFieldError(licInput);
+
+        occInput.setAttribute('required', 'required');
+        occInput.setAttribute('placeholder', 'e.g. Receptionist, Clinical Encoder, Clinic Manager');
+        if (credsTitle) credsTitle.innerText = 'Clinic Staff Designation';
+        if (occHelp) occHelp.innerText = 'Designate official staff position for reception, admissions, and audit logs.';
+
+        if (datalist) {
+            datalist.innerHTML = `
+                <option value="Receptionist">
+                <option value="Clinical Encoder">
+                <option value="Clinic Manager">
+                <option value="Clinic Nurse">
+                <option value="Admissions Officer">
+            `;
+        }
+
+        // If current value is a labtech title, clear it
+        const labTitles = ['MEDICAL TECHNOLOGIST', 'PATHOLOGIST', 'RADIOLOGIST'];
+        if (labTitles.includes(occInput.value.trim().toUpperCase())) {
+            occInput.value = '';
+        }
+    } else if (newRole === 'lab_tech') {
+        // Configured as lab technician: Require both occupation and license number
+        credsContainer.classList.remove('d-none');
+        if (licenseWrapper) licenseWrapper.classList.remove('d-none');
+        if (occWrapper) {
+            occWrapper.className = 'col-12 col-md-6';
+        }
+        occInput.setAttribute('required', 'required');
+        licInput.setAttribute('required', 'required');
+        occInput.setAttribute('placeholder', 'e.g. Medical Technologist, Pathologist, Radiologist');
+        if (credsTitle) credsTitle.innerText = 'Laboratory Technician & Professional Credentials';
+        if (occHelp) occHelp.innerText = 'Required for clinical verification sign-off and lab audit logs.';
+
+        if (datalist) {
+            datalist.innerHTML = `
+                <option value="Medical Technologist">
+                <option value="Pathologist">
+                <option value="Radiologist">
+                <option value="Attending Physician">
+                <option value="Laboratory Supervisor">
+            `;
+        }
+
+        // If current value is a staff title, clear it
+        const staffTitles = ['RECEPTIONIST', 'CLINICAL ENCODER', 'ADMISSIONS OFFICER'];
+        if (staffTitles.includes(occInput.value.trim().toUpperCase())) {
+            occInput.value = '';
+        }
+    }
+    clearFieldError(document.getElementById('role'));
 }
 
 function toggleCreateReason(val) {
@@ -417,6 +562,34 @@ function validateCreateUserForm(e) {
         markInvalid(email, 'err_email', 'Please enter a valid email address with a domain.');
     }
 
+    // Role-dependent clinical credentials validation
+    const role = document.getElementById('role')?.value;
+    const occInput = document.getElementById('occupation');
+    const licInput = document.getElementById('license_number');
+
+    if (role === 'user') {
+        if (occInput) occInput.value = '';
+        if (licInput) licInput.value = '';
+    } else if (role === 'staff') {
+        if (licInput) licInput.value = '';
+        if (!occInput || !occInput.value.trim()) {
+            markInvalid(occInput, 'err_occupation', 'Designation / Occupation is required for clinic staff.');
+        } else if (occInput.value.trim().length > 100) {
+            markInvalid(occInput, 'err_occupation', 'Occupation cannot exceed 100 characters.');
+        }
+    } else if (role === 'lab_tech') {
+        if (!occInput || !occInput.value.trim()) {
+            markInvalid(occInput, 'err_occupation', 'Designation / Occupation is required for laboratory technicians.');
+        } else if (occInput.value.trim().length > 100) {
+            markInvalid(occInput, 'err_occupation', 'Occupation cannot exceed 100 characters.');
+        }
+        if (!licInput || !licInput.value.trim()) {
+            markInvalid(licInput, 'err_license_number', 'Professional license number (PRC/DOH) is required for laboratory technicians.');
+        } else if (licInput.value.trim().length > 50) {
+            markInvalid(licInput, 'err_license_number', 'License number cannot exceed 50 characters.');
+        }
+    }
+
     const pass = document.getElementById('password');
     const passConf = document.getElementById('password_confirmation');
     if (!pass || !pass.value) {
@@ -523,6 +696,12 @@ function compileCreateAddress() {
 document.addEventListener('DOMContentLoaded', () => {
     fetchCreateProvinces();
     syncCreatePhone();
+
+    const roleElem = document.getElementById('role');
+    if (roleElem) {
+        handleRoleChange(roleElem.value);
+    }
+
     document.querySelectorAll('#createUserForm input, #createUserForm select').forEach(input => {
         input.addEventListener('input', () => clearFieldError(input));
         input.addEventListener('change', () => clearFieldError(input));

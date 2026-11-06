@@ -1,9 +1,11 @@
+<!-- resources/views/appointments/partials/actions.blade.php -->
 @php
     // Evaluates if the current view context is the Staff Master Queue
     $isStaffView = !empty($is_staff) && auth()->check() && auth()->user()->isEmployee();
-    $isExpired = $app->isExpired();
-    $statusColor = $isExpired ? 'danger' : match($app->status) {
+    $isVoided = $app->isVoided();
+    $statusColor = $isVoided ? 'danger' : match($app->status) {
         'pending' => 'warning',
+        'needs_review' => 'warning',
         'approved' => 'info',
         'tested' => 'info',
         'encoded' => 'info',
@@ -13,13 +15,14 @@
         'canceled' => 'danger',
         default => 'secondary'
     };
-    $statusLabel = $isExpired ? 'EXPIRED' : strtoupper($app->status);
+    $statusLabel = $isVoided ? 'VOIDED' : strtoupper($app->status);
 
-    // Calculate worksheet progress metrics for encoding and verification
+    // Calculate worksheet progress metrics for encoding and verification across services & packages
     $res = $app->result;
     $includedReports = $res ? ($res->included_reports ?? []) : [];
-    if (empty($includedReports) && $app->relationLoaded('services')) {
-        $serviceNames = $app->services->pluck('name')->map(fn($n) => strtoupper($n))->toArray();
+    if (empty($includedReports)) {
+        $allServices = $app->allServices();
+        $serviceNames = $allServices->pluck('name')->map(fn($n) => strtoupper($n))->toArray();
         $autoReports = [];
         foreach ($serviceNames as $name) {
             if (str_contains($name, 'DRUG TEST')) $autoReports[] = 'drug';
@@ -36,7 +39,6 @@
     $customCount = 0;
     $customEncoded = 0;
     $customVerified = 0;
-
     if ($res) {
         $customWorksheets = $res->relationLoaded('customWorkstationResults')
             ? $res->customWorkstationResults
@@ -64,7 +66,6 @@
             default => 'lab_status',
         };
         $st = $res ? ($res->$field ?? 'pending') : 'pending';
-
         if ($st === 'verified') {
             $encodedCount++;
             $verifiedCount++;
@@ -78,8 +79,65 @@
 @endphp
 
 <div class="mt-2 text-start" id="actions-pane-{{ $app->id }}">
-    {{-- 1. FEEDBACK: SHOW RETURN REASON (Visible to Everyone) --}}
-    @if($app->status == 'returned' && $app->return_reason)
+    {{-- 1. PATIENT AGREEMENT BANNER (Staff Returned with Proposed Suggestions) --}}
+    @if($app->hasSuggestedChanges() && ($app->status === 'needs_review' || $app->status === 'returned'))
+        @php $suggested = $app->suggested_changes; @endphp
+        <div class="alert-clinical p-3 mb-3 border-warning" style="background-color: rgba(255, 193, 7, 0.08); border-left: 4px solid var(--bs-warning) !important; border-radius: 8px;">
+            <div class="d-flex align-items-center mb-1">
+                <i class="bi bi-pencil-square text-warning me-2"></i>
+                <small class="text-warning fw-bold uppercase" style="font-size: 0.65rem; letter-spacing: 1px;">
+                    Staff Proposed Adjustments Awaiting Patient Confirmation
+                </small>
+            </div>
+            <p class="small mb-2 italic" style="line-height: 1.4; color: var(--text-main);">
+                "{{ $suggested['reason'] ?? $app->return_reason }}"
+            </p>
+            <div class="small text-muted mb-2">
+                <strong>Proposed Schedule:</strong> {{ !empty($suggested['appointment_date']) ? \Carbon\Carbon::parse($suggested['appointment_date'])->format('M d, Y') : '' }} at {{ !empty($suggested['time_slot']) ? date('h:i A', strtotime($suggested['time_slot'])) : '' }}
+            </div>
+
+            {{-- Display Suggested Tests / Packages if specified --}}
+            @if(!empty($suggested['package_ids']) || !empty($suggested['service_ids']))
+                <div class="mb-3 pt-2 border-top border-secondary border-opacity-10">
+                    <small class="text-accent fw-800 d-block mb-1 fs-x-small uppercase"><i class="bi bi-check2-all me-1"></i>Suggested Tests & Packages:</small>
+                    <div class="d-flex flex-wrap gap-1">
+                        @if(!empty($suggested['package_ids']))
+                            @foreach(\App\Models\Package::whereIn('id', (array)$suggested['package_ids'])->get() as $pPkg)
+                                <span class="badge bg-success bg-opacity-15 text-accent border border-success border-opacity-30 px-2 py-0.5 rounded fw-semibold" style="font-size: 0.65rem;">
+                                    [PKG] {{ strtoupper($pPkg->name) }}
+                                </span>
+                            @endforeach
+                        @endif
+                        @if(!empty($suggested['service_ids']))
+                            @foreach(\App\Models\Service::whereIn('id', (array)$suggested['service_ids'])->get() as $pSvc)
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-0.5 rounded fw-semibold" style="font-size: 0.65rem;">
+                                    {{ strtoupper($pSvc->name) }}
+                                </span>
+                            @endforeach
+                        @endif
+                    </div>
+                </div>
+            @endif
+
+            @if(!$isStaffView && Auth::id() == $app->user_id)
+                <div class="d-flex flex-column flex-sm-row gap-2 mt-2">
+                    <a href="{{ route('appointments.resubmit', [$app->id, 'use_suggestions' => 1]) }}" class="btn-custom btn-accent flex-grow-1 py-2 fw-bold uppercase shadow-sm d-inline-flex align-items-center justify-content-center gap-1 text-decoration-none" style="font-size: 0.75rem;">
+                        <span>Review Suggestions</span>
+                    </a>
+                    <a href="{{ route('appointments.resubmit', [$app->id, 'use_suggestions' => 0]) }}" class="btn-custom btn-danger-custom flex-grow-1 py-2 fw-bold uppercase d-inline-flex align-items-center justify-content-center gap-1 text-decoration-none" style="font-size: 0.75rem;">
+                        <span>Resubmit Original</span>
+                    </a>
+                </div>
+            @elseif($isStaffView)
+                <div class="small text-muted fst-italic mt-2">
+                    <i class="bi bi-hourglass-split me-1"></i>Awaiting patient review and resubmission.
+                </div>
+            @endif
+        </div>
+    @endif
+
+    {{-- 2. FEEDBACK: SHOW RETURN REASON (Standard Return w/o suggestions) --}}
+    @if($app->status == 'returned' && $app->return_reason && !$app->hasSuggestedChanges())
         <div class="alert-clinical p-3 mb-3 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
             <div class="d-flex align-items-center mb-1">
                 <i class="bi bi-exclamation-octagon-fill text-danger me-2"></i>
@@ -93,10 +151,9 @@
         </div>
     @endif
 
-    {{-- 2. RETEST NOTICE (Context-Aware: Distinguishes Patient vs Staff) --}}
+    {{-- 3. RETEST NOTICE --}}
     @if($app->status == 'retest')
         @if($isStaffView)
-            {{-- Staff View (Master Queue Only) --}}
             <div class="alert-clinical p-3 mb-3 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
                 <div class="d-flex align-items-center mb-1">
                     <i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>
@@ -111,7 +168,6 @@
                 @endif
             </div>
         @else
-            {{-- Patient / Personal View --}}
             <div class="alert-clinical p-3 mb-3 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
                 <div class="d-flex align-items-center mb-1">
                     <i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>
@@ -132,9 +188,8 @@
         @endif
     @endif
 
-    {{-- 3. CANCELED & REFUND HANDSHAKE NOTICES (Visible to Everyone) --}}
+    {{-- 4. CANCELED & REFUND NOTICES --}}
     @if($app->status == 'canceled')
-        {{-- Prominent Cancellation Reason Banner --}}
         @if($app->cancellation_reason || ($app->payment_status !== 'invalid' && $app->return_reason))
             <div class="alert-clinical p-3 mb-3 text-danger border-danger" style="background-color: rgba(220, 53, 69, 0.05); border-left: 4px solid var(--bs-danger) !important; border-radius: 8px;">
                 <div class="d-flex align-items-center mb-1">
@@ -151,9 +206,8 @@
 
         @if($app->payment_method === 'Cashless')
             @if($isStaffView)
-                {{-- Staff View (Master Queue Only) --}}
                 @if($app->payment_status === 'paid')
-                    <div class="alert-clinical p-3 mb-3 text-warning border-warning" style="background-color: rgba(255, 193, 7, 0.05); border-left: 4px solid var(--bs-warning) !important; border-radius: 8px;">
+                    <div class="alert alert-clinical p-3 mb-3 text-warning border-warning" style="background-color: rgba(255, 193, 7, 0.05); border-left: 4px solid var(--bs-warning) !important; border-radius: 8px;">
                         <div class="d-flex align-items-center mb-1">
                             <i class="bi bi-hourglass-split text-warning me-2"></i>
                             <small class="text-warning fw-bold uppercase" style="font-size: 0.65rem; letter-spacing: 1px;">Refund Action Pending</small>
@@ -176,9 +230,8 @@
                     </div>
                 @endif
             @else
-                {{-- Patient / Personal View --}}
                 @if($app->payment_status === 'paid')
-                    <div class="alert-clinical p-3 mb-3 text-warning border-warning" style="background-color: rgba(255, 193, 7, 0.05); border-left: 4px solid var(--bs-warning) !important; border-radius: 8px;">
+                    <div class="alert alert-clinical p-3 mb-3 text-warning border-warning" style="background-color: rgba(255, 193, 7, 0.05); border-left: 4px solid var(--bs-warning) !important; border-radius: 8px;">
                         <div class="d-flex align-items-center mb-1">
                             <i class="bi bi-hourglass-split text-warning me-2"></i>
                             <small class="text-warning fw-bold uppercase" style="font-size: 0.65rem; letter-spacing: 1px;">Please wait for your payment to be refunded</small>
@@ -219,7 +272,7 @@
         @endif
     @endif
 
-    {{-- 4. DOCTOR'S REFERRAL NOTE ATTACHMENT (Visible to Everyone) --}}
+    {{-- 5. DOCTOR'S REFERRAL NOTE --}}
     @if($app->referral_note)
         @php $refExt = pathinfo($app->referral_note, PATHINFO_EXTENSION); @endphp
         <div class="border rounded p-3 mb-3" style="background-color: rgba(25, 211, 140, 0.05); border-color: rgba(25, 211, 140, 0.15) !important;">
@@ -237,7 +290,7 @@
         </div>
     @endif
 
-    {{-- 5. SINGLE APPOINTMENT PAYMENT RECEIPT AUDIT TRAIL (Cashless verification - Non-batch only) --}}
+    {{-- 6. CASHLESS PAYMENT RECEIPT (Single Booking) --}}
     @if($app->payment_method === 'Cashless' && !$app->batch_id && $app->payment_status !== 'refunded')
         <div class="border rounded p-3 mb-3" style="background-color: rgba(25, 211, 140, 0.05); border-color: rgba(25, 211, 140, 0.15) !important;">
             <div class="d-flex justify-content-between align-items-center mb-2.5">
@@ -262,7 +315,6 @@
             @endif
         </div>
     @elseif($app->payment_status === 'refunded')
-        {{-- Refunded Status --}}
         <div class="alert-clinical p-3 mb-3 text-success border-success" style="background-color: rgba(25, 211, 140, 0.05); border-left: 4px solid var(--bs-success) !important; border-radius: 8px;">
             <div class="d-flex align-items-center mb-1">
                 <i class="bi bi-patch-check-fill text-success me-2"></i>
@@ -285,9 +337,9 @@
         </div>
     @endif
 
-    {{-- Staff manual verification & rollback controls for individual single bookings only in Master Queue --}}
+    {{-- Staff manual verification controls in Master Queue --}}
     @if($isStaffView)
-        @if(!$isExpired && !$app->batch_id && $app->payment_method === 'Cashless')
+        @if(!$isVoided && !$app->batch_id && $app->payment_method === 'Cashless')
             @if($app->payment_status === 'unpaid')
                 <div class="d-flex gap-2 mb-2">
                     <button type="button" class="btn-custom btn-accent flex-grow-1 py-2 fw-bold uppercase shadow-sm small" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#confirmPaymentModal{{ $app->id }}">
@@ -307,11 +359,11 @@
         @endif
     @endif
 
-    {{-- 6. INTERNAL PERSONNEL CONTROLS (Staff, Lab Tech, Admin in Master Queue Only) --}}
+    {{-- 7. INTERNAL PERSONNEL CONTROLS (Staff Master Queue Only) --}}
     @if($isStaffView)
         <div class="staff-action-container">
-            @if(!$isExpired)
-                {{-- STEP A: PENDING -> APPROVE (WITH CONFIRMATION MODAL) or RETURN --}}
+            @if(!$isVoided)
+                {{-- STEP A: PENDING -> APPROVE / RETURN (Includes Two-Way Return) --}}
                 @if($app->status == 'pending')
                     @php
                         $isApproveDisabled = ($app->payment_method === 'Cashless' && $app->payment_status !== 'paid');
@@ -322,12 +374,12 @@
                                 {{ $isApproveDisabled ? 'disabled title="Cashless payment must be confirmed before approval"' : 'data-bs-toggle=modal data-bs-target=#approveModal' . $app->id }}>
                             <i class="bi bi-check-circle me-1"></i> APPROVE
                         </button>
-                        <button type="button" class="btn-custom btn-danger-custom px-4" data-bs-toggle="modal" data-bs-target="#retModal{{ $app->id }}">
-                            RETURN
+                        <button type="button" class="btn-custom btn-danger-custom px-4" data-bs-toggle="modal" data-bs-target="#retModal{{ $app->id }}" title="Return appointment (with or without suggested modifications)">
+                            <i class="bi bi-arrow-return-left me-1"></i> RETURN
                         </button>
                     </div>
 
-                    {{-- Single Appointment Approval Confirmation Modal (Teleported to body via JS) --}}
+                    {{-- Single Appointment Approval Confirmation Modal --}}
                     <div class="modal fade action-teleport-modal" id="approveModal{{ $app->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index: 1060 !important;">
                         <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
                             <form action="{{ route('appointments.status', $app->id) }}" method="POST" class="modal-content shadow-lg border-0 ajax-action-form" data-app-id="{{ $app->id }}" onsubmit="handleAjaxActionSubmit(event, this)" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color) !important; color: var(--text-main);">
@@ -375,38 +427,33 @@
                     </div>
                 @endif
 
-                {{-- Confirm Refund option on Canceled, Paid folders --}}
+                {{-- Confirm Refund on Canceled/Paid --}}
                 @if($app->status === 'canceled' && $app->payment_status === 'paid')
                     <button type="button" class="btn-custom btn-accent btn-success w-100 py-2 fw-bold text-center mb-2" data-bs-toggle="modal" data-bs-target="#confirmRefundModal{{ $app->id }}">
                         <i class="bi bi-cash-stack me-1"></i> CONFIRM REFUND
                     </button>
                 @endif
 
-                {{-- STEP B: APPROVED / RETEST -> MARK AS TESTED & RETURN (Staff Can Return Approved Appointments) --}}
+                {{-- STEP B: APPROVED / RETEST ONLY (Excludes unapproved 'needs_review') --}}
                 @if($app->status == 'approved' || $app->status == 'retest')
                     @can('isLabTech')
                         <div class="d-flex gap-2 mb-2">
                             <button type="button" class="btn-custom btn-accent flex-grow-1 py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#testModal{{ $app->id }}" onclick="if(typeof setModalMainAction === 'function'){ setModalMainAction({{ $app->id }}, 'tested'); }">
                                 <i class="bi bi-person-check me-1"></i> MARK AS TESTED
                             </button>
-                            @if($app->status === 'approved')
-                                <button type="button" class="btn-custom btn-danger-custom px-3 py-2 fw-bold small d-inline-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#retModal{{ $app->id }}" title="Return approved appointment for patient correction/rescheduling">
-                                    <span>RETURN</span>
-                                </button>
-                            @endif
+                            <button type="button" class="btn-custom btn-danger-custom px-4" data-bs-toggle="modal" data-bs-target="#retModal{{ $app->id }}" title="Return approved appointment for patient correction/rescheduling">
+                                <i class="bi bi-arrow-return-left me-1"></i> RETURN
+                            </button>
                         </div>
                         @include('appointments.partials.mark-tested-modal')
                     @else
-                        {{-- Dedicated Demographic Edit & Return for Normal Staff (No Testing Authority) --}}
                         <div class="d-flex gap-2 mb-2">
                             <a href="{{ route('appointments.edit-details', $app->id) }}?from=queue" class="btn-custom btn-outline-accent flex-grow-1 py-2 fw-bold text-center text-decoration-none shadow-sm uppercase" style="font-size: 0.70rem;">
                                 <i class="bi bi-pencil-square me-1"></i> Edit Demographics
                             </a>
-                            @if($app->status === 'approved')
-                                <button type="button" class="btn-custom btn-danger-custom px-3 py-2 fw-bold small d-inline-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#retModal{{ $app->id }}" title="Return approved appointment for patient correction/rescheduling">
-                                    <span>RETURN</span>
-                                </button>
-                            @endif
+                            <button type="button" class="btn-custom btn-danger-custom px-4" data-bs-toggle="modal" data-bs-target="#retModal{{ $app->id }}" title="Return approved appointment for patient correction/rescheduling">
+                                <i class="bi bi-arrow-return-left me-1"></i> RETURN
+                            </button>
                         </div>
                         <div class="alert small py-2 mb-2 text-center" style="background-color: rgba(25, 211, 140, 0.05); color: var(--text-main); border: 1.5px solid var(--border-color); border-radius: 8px;">
                             <i class="bi bi-hourglass-split me-1 text-warning"></i> Awaiting Clinical Sampling (Lab Tech Only)
@@ -417,11 +464,10 @@
                 {{-- STEP C: TESTED -> ENCODE RESULTS & PROGRESS BREAKDOWN --}}
                 @if($app->status == 'tested')
                     <div class="mb-2.5 text-center">
-                        <div class="d-inline-flex align-items-center justify-content-center gap-1.5 text-muted fw-bold text-uppercase mb-2" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+                        <div class="d-inline-flex align-items-center justify-content-center gap-1 text-muted fw-bold text-uppercase mb-2" style="font-size: 0.68rem; letter-spacing: 0.5px;">
                             <i class="bi bi-file-earmark-medical text-accent"></i>
                             <span>{{ $totalWorksheets }} {{ $totalWorksheets === 1 ? 'Worksheet' : 'Worksheets' }}</span>
                         </div>
-
                         <div class="row g-2 mb-2">
                             <div class="col-6">
                                 <div class="p-2 rounded border text-center h-100 d-flex flex-column justify-content-center shadow-sm"
@@ -455,7 +501,6 @@
                             </div>
                         </div>
                     </div>
-
                     <div class="d-grid gap-2">
                         <a href="{{ route('appointments.encode', $app->id) }}" class="btn-custom btn-outline-accent py-2 fw-bold text-center text-decoration-none shadow d-flex justify-content-between align-items-center">
                             <span><i class="bi bi-pencil-square me-1.5"></i> ENCODE RESULTS</span>
@@ -475,11 +520,10 @@
                 {{-- STEP D: ENCODED -> VERIFICATION TRACKER --}}
                 @if($app->status == 'encoded')
                     <div class="mb-2.5 text-center">
-                        <div class="d-inline-flex align-items-center justify-content-center gap-1.5 text-muted fw-bold text-uppercase mb-2" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+                        <div class="d-inline-flex align-items-center justify-content-center gap-1 text-muted fw-bold text-uppercase mb-2" style="font-size: 0.68rem; letter-spacing: 0.5px;">
                             <i class="bi bi-file-earmark-medical text-accent"></i>
                             <span>{{ $totalWorksheets }} {{ $totalWorksheets === 1 ? 'Worksheet' : 'Worksheets' }}</span>
                         </div>
-
                         <div class="row g-2 mb-2">
                             <div class="col-6">
                                 <div class="p-2 rounded border text-center h-100 d-flex flex-column justify-content-center shadow-sm"
@@ -512,7 +556,6 @@
                                 </div>
                             </div>
                         </div>
-
                         @if($toEncodeCount > 0)
                             <div class="smaller text-danger fw-semibold d-flex align-items-center justify-content-center gap-1 mb-2" style="font-size: 0.72rem;">
                                 <i class="bi bi-exclamation-circle-fill"></i>
@@ -520,7 +563,6 @@
                             </div>
                         @endif
                     </div>
-
                     <div class="d-grid">
                         @can('isLabTech')
                             <button type="button" class="btn-custom btn-accent w-100 py-2 d-flex justify-content-between align-items-center" onclick="if(typeof promptAccess === 'function'){ promptAccess('{{ $app->id }}', 'hub', 'edit'); }">
@@ -537,17 +579,17 @@
                     </div>
                 @endif
             @else
-                <div class="alert alert-clinical border-danger text-danger text-center p-2.5 small mb-0" style="background-color: rgba(220, 53, 69, 0.05);">
-                    <i class="bi bi-exclamation-triangle-fill me-1"></i> This clinical appointment has expired (24-hour unprogressed rule). Awaiting patient rescheduling.
+                <div class="alert alert-clinical border-danger text-danger text-center p-3 small mb-0" style="background-color: rgba(220, 53, 69, 0.05);">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i> This clinical appointment has been updated to <strong>VOIDED</strong> due to the patient not arriving on scheduled time without prior notice.
                 </div>
             @endif
         </div>
     @endif
 
-    {{-- 7. USER/PATIENT CONTROL (RESUBMIT & CANCELLATION) --}}
+    {{-- 8. PATIENT CONTROL (RESUBMIT & CANCELLATION) --}}
     @if(Auth::id() == $app->user_id && !$isStaffView)
-        {{-- UPDATE & RESUBMIT: Available for returned, canceled, or expired (NOT for retest or released) --}}
-        @if(($app->status == 'returned' || $app->status == 'canceled' || $isExpired) && $app->status !== 'released')
+        {{-- UPDATE & RESUBMIT: Available for standard returned, canceled, or voided (NOT when suggestions are pending review, retest, or released) --}}
+        @if((($app->status === 'returned' && !$app->hasSuggestedChanges()) || $app->status === 'canceled' || ($app->status === 'needs_review' && !$app->hasSuggestedChanges()) || $isVoided) && $app->status !== 'released')
             <div class="d-flex gap-2">
                 <a href="{{ route('appointments.resubmit', $app->id) }}" class="btn-custom btn-accent flex-grow-1 py-3 fw-bold shadow text-center text-decoration-none">
                     <i class="bi bi-arrow-repeat me-2"></i> UPDATE & RESUBMIT APPOINTMENT
@@ -558,18 +600,18 @@
             </div>
         @endif
 
-        {{-- Show individual cancel button ONLY if pending (NOT for approved, retest, tested, encoded, released) --}}
-        @if($app->status === 'pending' && !$isExpired)
+        {{-- Show individual cancel button ONLY if pending or needs_review --}}
+        @if(($app->status === 'pending' || $app->status === 'needs_review') && !$isVoided)
             <button type="button" class="btn-custom btn-outline-danger w-100 py-2 fw-bold text-center mt-2" data-bs-toggle="modal" data-bs-target="#cancelAppointmentModal{{ $app->id }}">
                 <i class="bi bi-x-circle me-1"></i> CANCEL APPOINTMENT
             </button>
         @endif
 
-        @if($isExpired && !$app->deleted_by_patient)
+        @if($isVoided && !$app->deleted_by_patient)
             <div class="border-top border-secondary border-opacity-10 mt-3 pt-3">
                 @if($app->canBeDeletedByPatient())
                     <button type="button" class="btn-custom btn-outline-danger w-100 py-2 fw-bold uppercase" data-bs-toggle="modal" data-bs-target="#deleteExpiredModal{{ $app->id }}">
-                        <i class="bi bi-trash me-1"></i> Delete Expired Record
+                        <i class="bi bi-trash me-1"></i> Delete Voided Record
                     </button>
                 @else
                     <div class="alert alert-clinical border-secondary text-secondary text-center p-2 small mb-0">
@@ -581,98 +623,46 @@
     @endif
 </div>
 
+{{-- AUTOMATIC MODAL TELEPORTATION SCRIPT: Moves modals to <body> to prevent stacking context traps --}}
 <script>
-/**
- * 1. AUTOMATIC MODAL TELEPORTATION (Solves Backdrop Stacking Context Bugs)
- * Moves all modals out of transformed/animated containers and mounts them as direct children of <body>.
- */
-function teleportActionModals() {
-    document.querySelectorAll('.action-teleport-modal, .appointment-detail-pane .modal').forEach(modal => {
-        if (modal.parentElement !== document.body) {
-            document.body.appendChild(modal);
-        }
-    });
-}
-
-teleportActionModals();
-document.addEventListener('DOMContentLoaded', teleportActionModals);
-
-// Ensure modal is attached to document.body before Bootstrap shows backdrop
-document.addEventListener('show.bs.modal', function(e) {
-    if (e.target && e.target.classList.contains('modal') && e.target.parentElement !== document.body) {
-        document.body.appendChild(e.target);
-    }
-}, true);
-
-// Clean up any stray backdrops when modal closes
-document.addEventListener('hidden.bs.modal', function() {
-    if (!document.querySelector('.modal.show')) {
-        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
-        document.body.classList.remove('modal-open');
-        document.body.style.removeProperty('padding-right');
-        document.body.style.removeProperty('overflow');
-    }
-});
-
-/**
- * 2. SAFE AJAX ACTION SUBMISSION HANDLER
- */
-if (!window.handleAjaxActionSubmit) {
-    window.handleAjaxActionSubmit = async function(e, form) {
-        e.preventDefault();
-        const btn = form.querySelector('button[type="submit"]');
-        const originalText = btn ? btn.innerHTML : '';
-        if (btn) {
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Processing...';
-        }
-
-        try {
-            const formData = new FormData(form);
-            const csrfToken = form.querySelector('input[name="_token"]')?.value 
-                || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') 
-                || '';
-
-            const response = await fetch(form.action, {
-                method: form.method || 'POST',
-                body: formData,
-                headers: {
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': csrfToken
+(function() {
+    function teleportModalsToBody() {
+        const pane = document.getElementById('actions-pane-{{ $app->id }}');
+        if (pane) {
+            pane.querySelectorAll('.modal').forEach(function(m) {
+                if (m.parentElement !== document.body) {
+                    const stale = document.getElementById(m.id);
+                    if (stale && stale !== m && stale.parentElement === document.body) {
+                        stale.remove();
+                    }
+                    document.body.appendChild(m);
                 }
             });
+        }
+    }
 
-            // Dismiss any open parent modal
-            const modalEl = form.closest('.modal');
-            if (modalEl && typeof bootstrap !== 'undefined') {
-                const modalInstance = bootstrap.Modal.getInstance(modalEl);
-                if (modalInstance) {
-                    modalInstance.hide();
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', teleportModalsToBody);
+    } else {
+        teleportModalsToBody();
+    }
+
+    if (!window.__modalGlobalTeleportHandlerBound) {
+        window.__modalGlobalTeleportHandlerBound = true;
+        document.addEventListener('show.bs.modal', function(e) {
+            const modal = e.target;
+            if (modal && modal.classList && modal.classList.contains('modal')) {
+                if (modal.parentElement !== document.body) {
+                    if (modal.id) {
+                        const stale = document.getElementById(modal.id);
+                        if (stale && stale !== modal && stale.parentElement === document.body) {
+                            stale.remove();
+                        }
+                    }
+                    document.body.appendChild(modal);
                 }
             }
-
-            // Immediately destroy lingering backdrops to avoid grey overlay lock
-            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-            document.body.classList.remove('modal-open');
-            document.body.style.removeProperty('overflow');
-            document.body.style.removeProperty('padding-right');
-
-            // Dynamically refresh master queue without page reload
-            if (typeof fetchQueueWithParams === 'function') {
-                await fetchQueueWithParams(window.location.href);
-            } else if (typeof syncMasterQueue === 'function') {
-                syncMasterQueue();
-            }
-
-        } catch (err) {
-            console.error('AJAX Action Error:', err);
-        } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = originalText;
-            }
-        }
-    };
-}
+        }, true);
+    }
+})();
 </script>

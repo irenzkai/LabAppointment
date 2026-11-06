@@ -23,6 +23,23 @@
 
     // Dynamically reveal preview on page load if scan exists
     $showPreview = $isReadonly || $hasScan;
+
+    // Requested Examinations Breakdown
+    $requestedExaminations = $appointment->packages->pluck('name')->map(fn($n) => "[PKG] {$n}")
+        ->concat($appointment->services->pluck('name'))
+        ->implode(', ');
+
+    // Merge registered attending physicians and all licensed clinical personnel into one selectable list
+    $allPhysicians = collect();
+    if (isset($physicians) && $physicians->isNotEmpty()) {
+        $allPhysicians = $allPhysicians->concat($physicians);
+    }
+    $dbPhysicians = \App\Models\User::whereIn('role', ['admin', 'staff', 'lab_tech'])
+        ->where('is_active', true)
+        ->whereNotNull('license_number')
+        ->orderBy('last_name')
+        ->get();
+    $allPhysicians = $allPhysicians->concat($dbPhysicians)->unique('id')->sortBy('name')->values();
 @endphp
 
 <div class="container text-start animate-page pt-4 px-3 px-sm-4" id="medical-workstation-root">
@@ -106,7 +123,15 @@
                         </div>
                         <div class="text-main fw-bold small mb-1 text-break">{{ strtoupper($appointment->patient_name) }}</div>
                         <div class="text-secondary smaller mb-1">{{ $appointment->patient_age }} YRS / {{ strtoupper($appointment->patient_sex) }}</div>
-                        <div class="text-muted smaller text-break" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
+                        <div class="text-muted smaller text-break mb-2" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
+
+                        {{-- Requested Examinations Summary --}}
+                        <div class="pt-2 border-top border-secondary border-opacity-10">
+                            <small class="text-secondary d-block smaller fw-bold uppercase">Requested Examinations</small>
+                            <span class="small fw-semibold text-accent text-break" style="font-size: 0.75rem;">
+                                {{ $requestedExaminations ?: 'None registered' }}
+                            </span>
+                        </div>
 
                         {{-- Hidden snapshot payloads for backend backwards-compatibility --}}
                         <input type="hidden" name="med_cert_data[metadata][name]" value="{{ strtoupper($appointment->patient_name) }}">
@@ -129,19 +154,76 @@
                         {{-- Clinical Signatory --}}
                         <h6 class="text-accent mb-3 small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3">Clinical Signatory</h6>
                         <div class="mb-0 border border-secondary border-opacity-10 p-2.5 rounded" style="background-color: rgba(0,0,0,0.015);">
-                            <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">Physician Name</label>
-                            <input type="text" name="med_cert_data[sig][name]" id="sig_med_name" class="form-control mb-1 @error('med_cert_data.sig.name') is-invalid @enderror" placeholder="Physician Name" value="{{ old('med_cert_data.sig.name', $res->med_cert_data['sig']['name'] ?? ($res->medCert?->physician_name ?? '')) }}" {{ $hasScan ? 'disabled' : 'required' }}>
-                            <div class="invalid-feedback d-none mb-1" id="err_sig_med_name"></div>
-                            @error('med_cert_data.sig.name')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
+                            <label class="text-secondary smaller fw-bold mb-1.5 d-block uppercase" style="font-size: 0.65rem;">Attending Physician</label>
 
-                            <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">License / PRC No.</label>
-                            <input type="text" name="med_cert_data[sig][lic]" id="sig_med_lic" class="form-control @error('med_cert_data.sig.lic') is-invalid @enderror" placeholder="License / PRC No." value="{{ old('med_cert_data.sig.lic', $res->med_cert_data['sig']['lic'] ?? ($res->medCert?->physician_license ?? '')) }}" {{ $hasScan ? 'disabled' : 'required' }}>
-                            <div class="invalid-feedback d-none" id="err_sig_med_lic"></div>
-                            @error('med_cert_data.sig.lic')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
+                            {{-- Search & Select Dropdown --}}
+                            <div class="position-relative mb-2 signatory-search-wrapper" id="sig_med_wrapper">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-secondary bg-opacity-10 text-muted border-secondary border-opacity-25">
+                                        <i class="bi bi-search"></i>
+                                    </span>
+                                    <input type="text" 
+                                           id="sig_med_search" 
+                                           class="form-control form-control-sm signatory-search-input" 
+                                           placeholder="Search or choose physician..." 
+                                           autocomplete="off"
+                                           onfocus="openSignatoryMenu('med')" 
+                                           oninput="filterSignatoryMenu('med', this.value)"
+                                           {{ $hasScan ? 'disabled' : '' }}>
+                                    <button type="button" 
+                                            class="btn btn-outline-secondary btn-sm signatory-toggle-btn" 
+                                            onclick="toggleSignatoryMenu('med')" 
+                                            tabindex="-1"
+                                            {{ $hasScan ? 'disabled' : '' }}>
+                                        <i class="bi bi-chevron-down" style="font-size: 0.7rem;"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="signatory-dropdown-list shadow-lg bg-card border rounded-3 p-1 d-none position-absolute w-100 mt-1" 
+                                     id="sig_med_menu" 
+                                     style="z-index: 1050; max-height: 220px; overflow-y: auto; background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                                    @foreach($allPhysicians as $doc)
+                                        <div class="signatory-item p-2 rounded cursor-pointer transition-all d-flex justify-content-between align-items-center" 
+                                             data-name="{{ $doc->name }}" 
+                                             data-lic="{{ $doc->license_number ?: ($doc->occupation ?: 'Licensed Physician') }}" 
+                                             onclick="selectSignatory('med', '{{ addslashes($doc->name) }}', '{{ addslashes($doc->license_number ?: ($doc->occupation ?: 'Licensed Physician')) }}')">
+                                            <div>
+                                                <span class="fw-bold small d-block text-main">{{ $doc->name }}</span>
+                                                <small class="text-muted" style="font-size: 0.68rem;">{{ $doc->occupation ?: 'Physician' }}</small>
+                                            </div>
+                                            @if($doc->license_number)
+                                                <span class="badge bg-secondary bg-opacity-10 text-accent font-monospace" style="font-size: 0.65rem;">
+                                                    PRC #{{ $doc->license_number }}
+                                                </span>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                    <div class="signatory-empty-msg text-muted small p-2 text-center d-none" id="sig_med_empty">
+                                        No matching physicians found
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Stacked Full-Width Name & License Inputs (Editable after selecting) --}}
+                            <div class="d-flex flex-column gap-2">
+                                <div>
+                                    <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">Physician Name</label>
+                                    <input type="text" name="med_cert_data[sig][name]" id="sig_med_name" class="form-control form-control-sm @error('med_cert_data.sig.name') is-invalid @enderror" placeholder="Physician Full Name" value="{{ old('med_cert_data.sig.name', $res->med_cert_data['sig']['name'] ?? ($res->medCert?->physician_name ?? '')) }}" {{ $hasScan ? 'disabled' : 'required' }}>
+                                    <div class="invalid-feedback d-none" id="err_sig_med_name"></div>
+                                    @error('med_cert_data.sig.name')
+                                        <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div>
+                                    <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">License / PRC No.</label>
+                                    <input type="text" name="med_cert_data[sig][lic]" id="sig_med_lic" class="form-control form-control-sm @error('med_cert_data.sig.lic') is-invalid @enderror" placeholder="License / PRC No." value="{{ old('med_cert_data.sig.lic', $res->med_cert_data['sig']['lic'] ?? ($res->medCert?->physician_license ?? '')) }}" {{ $hasScan ? 'disabled' : 'required' }}>
+                                    <div class="invalid-feedback d-none" id="err_sig_med_lic"></div>
+                                    @error('med_cert_data.sig.lic')
+                                        <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -241,7 +323,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <form action="{{ route('workstation.verify', [$appointment->id, 'med_cert']) }}" method="POST" class="modal-content shadow-lg p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
             @csrf
-            <h5 class="text-neon fw-bold mb-1 uppercase">Clinical Verification</h5>
+            <h5 class="text-accent fw-bold mb-1 uppercase">Clinical Verification</h5>
             <p class="text-secondary small mb-4">Enter your name to sign-off and approve this medical certificate.</p>
             <div class="mb-4">
                 <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Verifier Full Name</label>
@@ -249,7 +331,7 @@
             </div>
             <div class="d-flex flex-column flex-sm-row gap-2">
                 <button type="button" class="btn btn-outline-secondary flex-grow-1 py-2.5" data-bs-dismiss="modal">CANCEL</button>
-                <button type="submit" class="btn btn-neon flex-grow-1 py-2.5 fw-bold uppercase">Sign & Approve</button>
+                <button type="submit" class="btn btn-accent flex-grow-1 py-2.5 fw-bold uppercase">Sign & Approve</button>
             </div>
         </form>
     </div>
@@ -303,11 +385,79 @@ window.zoomQR = function(fileSrc) {
     }
 };
 
+// Searchable Signatory Dropdown Handlers
+window.openSignatoryMenu = function(key) {
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (menu) menu.classList.remove('d-none');
+};
+
+window.toggleSignatoryMenu = function(key) {
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (menu) {
+        menu.classList.toggle('d-none');
+        if (!menu.classList.contains('d-none')) {
+            document.getElementById(`sig_${key}_search`)?.focus();
+        }
+    }
+};
+
+window.filterSignatoryMenu = function(key, query) {
+    const q = (query || '').toLowerCase().trim();
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (!menu) return;
+    menu.classList.remove('d-none');
+
+    let matchCount = 0;
+    menu.querySelectorAll('.signatory-item').forEach(item => {
+        const name = (item.dataset.name || '').toLowerCase();
+        const lic = (item.dataset.lic || '').toLowerCase();
+        const match = name.includes(q) || lic.includes(q);
+        item.classList.toggle('d-none', !match);
+        if (match) matchCount++;
+    });
+
+    const emptyMsg = document.getElementById(`sig_${key}_empty`);
+    if (emptyMsg) {
+        emptyMsg.classList.toggle('d-none', matchCount > 0);
+    }
+};
+
+window.selectSignatory = function(key, name, lic) {
+    const searchInput = document.getElementById(`sig_${key}_search`);
+    const nameInput = document.getElementById(`sig_${key}_name`);
+    const licInput = document.getElementById(`sig_${key}_lic`);
+
+    if (searchInput) searchInput.value = name;
+    if (nameInput) {
+        nameInput.value = name;
+        nameInput.classList.remove('is-invalid');
+        const errDiv = document.getElementById(`err_sig_${key}_name`);
+        if (errDiv) errDiv.classList.add('d-none');
+    }
+    if (licInput) {
+        licInput.value = lic;
+        licInput.classList.remove('is-invalid');
+        const errDiv = document.getElementById(`err_sig_${key}_lic`);
+        if (errDiv) errDiv.classList.add('d-none');
+    }
+
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (menu) menu.classList.add('d-none');
+};
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.signatory-search-wrapper')) {
+        document.querySelectorAll('.signatory-dropdown-list').forEach(el => el.classList.add('d-none'));
+    }
+});
+
 // Setup and teardown required status on all manual input elements depending on current layout mode
 function setManualFieldsRequired(required) {
     const fields = [
         document.getElementById('cert_no_field'), // Standalone cert_no (Always Required)
         document.getElementById('med_tested_date'),
+        document.getElementById('sig_med_search'),
         document.getElementById('sig_med_name'),
         document.getElementById('sig_med_lic'),
         document.getElementById('findings_field'),
@@ -319,6 +469,12 @@ function setManualFieldsRequired(required) {
             if (field.id === 'cert_no_field') {
                 field.setAttribute('required', 'required');
                 field.removeAttribute('disabled');
+            } else if (field.id === 'sig_med_search') {
+                if (required) {
+                    field.removeAttribute('disabled');
+                } else {
+                    field.setAttribute('disabled', 'disabled');
+                }
             } else {
                 if (required) {
                     field.setAttribute('required', 'required');
@@ -364,13 +520,11 @@ function toggleScanPriority(input) {
 
             setManualFieldsRequired(false);
 
-            // Only hide the optional report scan box
             if (document.getElementById('report-scan-upload-box')) {
                 document.getElementById('report-scan-upload-box').classList.add('d-none');
             }
             document.getElementById('scan-preview-zone').classList.remove('d-none');
 
-            // Maintains side-by-side grid structure
             document.getElementById('main-panel-container').className = 'col-12 col-lg-8';
         };
         reader.readAsDataURL(file);
@@ -403,13 +557,11 @@ function removeScan() {
     const manualPanel = document.getElementById('manual-panel');
     if (manualPanel) manualPanel.classList.remove('d-none');
 
-    // Restores optional manual entry fields nested within the sidebar
     const sidebarContainer = document.getElementById('sidebar-manual-fields');
     if (sidebarContainer) sidebarContainer.classList.remove('d-none');
 
     setManualFieldsRequired(true);
 
-    // Restore the optional report scan upload box
     if (document.getElementById('report-scan-upload-box')) {
         document.getElementById('report-scan-upload-box').classList.remove('d-none');
     }
@@ -457,6 +609,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if("{{ $isReadonly }}") {
         const form = document.getElementById('medForm');
         form.querySelectorAll('input:not([type="hidden"]), textarea, select').forEach(el => el.disabled = true);
+    }
+
+    // Pre-populate search input with existing physician name
+    const nameInput = document.getElementById('sig_med_name');
+    const searchInput = document.getElementById('sig_med_search');
+    if (nameInput && searchInput && nameInput.value) {
+        searchInput.value = nameInput.value;
     }
 
     const selectEl = document.getElementById('return_reason_select');
@@ -616,6 +775,12 @@ document.addEventListener('DOMContentLoaded', () => {
     opacity: 0;
     background: rgba(0, 0, 0, 0.6);
     transition: opacity 0.22s ease-in-out;
+}
+.signatory-item {
+    cursor: pointer;
+}
+.signatory-item:hover {
+    background-color: rgba(25, 211, 140, 0.08) !important;
 }
 #medical-workstation-root .is-invalid {
     border-color: #ff4d4d !important;

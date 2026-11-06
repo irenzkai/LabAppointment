@@ -18,7 +18,7 @@ return new class extends Migration
             $table->foreignId('user_id')
                 ->constrained('users')
                 ->onDelete('cascade');
-                
+            
             $table->foreignId('dependent_id')
                 ->nullable()
                 ->constrained('dependents')
@@ -28,10 +28,10 @@ return new class extends Migration
             $table->string('patient_first_name', 60)->nullable();
             $table->string('patient_middle_name', 60)->nullable();
             $table->string('patient_last_name', 60)->nullable();
-            $table->string('patient_suffix', 10)->nullable(); // Added to match new suffix schema
-            $table->string('patient_name', 255)->nullable();  // Full display name snapshot
+            $table->string('patient_suffix', 10)->nullable(); // Added to match suffix schema
+            $table->string('patient_name', 255)->nullable();   // Full display name snapshot
             $table->string('patient_email', 191)->nullable();
-            $table->string('patient_phone', 11)->nullable();  // Snapshotted PH standard mobile number
+            $table->string('patient_phone', 11)->nullable();   // Snapshotted PH standard mobile number
             $table->enum('patient_sex', ['Male', 'Female'])->nullable();
             $table->date('patient_birthdate')->nullable();
 
@@ -40,7 +40,7 @@ return new class extends Migration
 
             // 4. ORGANIZATION & BATCHING
             $table->string('organization_name', 100)->nullable(); // Company name for bulk bookings
-            $table->string('batch_id', 10)->nullable();            // Batch identifier for corporate groups
+            $table->string('batch_id', 10)->nullable();           // Batch identifier for corporate groups
 
             // 5. SCHEDULE & LOCATION
             $table->date('appointment_date');
@@ -49,7 +49,7 @@ return new class extends Migration
             // Decomposed composite patient_address snapshot (PSGC API Compatible)
             $table->string('patient_street', 150)->nullable();
             $table->string('patient_barangay', 100)->nullable();
-            $table->string('patient_city', 100)->nullable();       // City or Municipality
+            $table->string('patient_city', 100)->nullable(); // City or Municipality
             $table->string('patient_province', 100)->nullable();
 
             // 6. PAYMENT STATE & SETTLEMENT METHODS
@@ -58,7 +58,7 @@ return new class extends Migration
             $table->string('payment_receipt', 255)->nullable(); // Path to proof-of-payment file
             $table->decimal('payment_amount', 8, 2)->default(0.00); // Standard PH decimal scale
 
-            // 7. STATUS LOGIC & SOFT DELETION
+            // 7. STATUS LOGIC, REVISION WORKFLOW & SOFT DELETION
             $table->enum('status', [
                 'pending', 
                 'approved', 
@@ -67,17 +67,19 @@ return new class extends Migration
                 'released', 
                 'canceled', 
                 'returned', 
+                'needs_review', // Staff proposed changes awaiting patient agreement
                 'retest'
             ])->default('pending');
+
+            $table->json('suggested_changes')->nullable(); // Holds proposed date, slot, services, or packages from staff
             $table->boolean('deleted_by_patient')->default(false); // Soft-delete toggle for patients
-            $table->text('return_reason')->nullable();  
-            $table->text('cancellation_reason')->nullable();           // Auditable rejection notes
+            $table->text('return_reason')->nullable(); 
+            $table->text('cancellation_reason')->nullable(); // Auditable rejection notes
 
             // 8. WORKFLOW TIMESTAMPS
             $table->timestamp('tested_at')->nullable();
             $table->dateTime('result_estimated_at')->nullable();
             $table->timestamp('results_released_at')->nullable();
-
             $table->timestamps();
         });
     }

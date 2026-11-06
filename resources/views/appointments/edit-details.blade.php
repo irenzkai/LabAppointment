@@ -1,729 +1,779 @@
+<!-- resources/views/appointments/edit-details.blade.php -->
 @extends('layouts.app')
-@section('title', 'Edit Details - Ref #' . $appointment->id)
+@section('title', 'Edit Demographics & Clinical Requests - Ref #' . $appointment->id)
+
 @section('content')
 @php
- $previousUrl = url()->previous();
- $from = request('from');
- $customId = request('custom_id');
- // Auto-detect custom_id from previous URL if not explicitly provided in request
- if (!$customId && preg_match('/workstation\/custom\/\d+\/(\d+)/', $previousUrl, $matches)) {
-     $customId = $matches[1];
- }
- // Auto-detect $from workstation route from previous URL if not explicitly passed
- if (!$from) {
-     if (str_contains($previousUrl, 'workstation/radiology')) { 
-         $from = 'radio';
-     } elseif (str_contains($previousUrl, 'workstation/lab')) {
-         $from = 'lab';
-     } elseif (str_contains($previousUrl, 'workstation/medical')) {
-         $from = 'med_cert';
-     } elseif (str_contains($previousUrl, 'workstation/drug')) {
-         $from = 'drug';
-     } elseif (str_contains($previousUrl, 'workstation/custom')) {
-         $from = 'custom';
-     } elseif (str_contains($previousUrl, 'encode')) {
-         $from = 'hub';
-     } elseif (str_contains($previousUrl, 'view=queue') || str_contains($previousUrl, 'appointments')) {
-         $from = 'queue';
-     }
- }
+    $from = request('from', 'queue');
+    $customId = request('custom_id');
+    
+    // Resolve clean return URL based on where the staff member navigated from
+    $backUrl = match($from) {
+        'hub' => route('appointments.encode', $appointment->id),
+        'radio', 'radiology' => route('workstation.radiology', $appointment->id),
+        'lab' => route('workstation.lab', $appointment->id),
+        'med_cert', 'medical' => route('workstation.med_cert', $appointment->id),
+        'drug' => route('workstation.drug', $appointment->id),
+        'custom' => ($customId ? route('workstation.custom', [$appointment->id, $customId]) : route('appointments.encode', $appointment->id)),
+        default => route('appointments.index', ['view' => 'queue', 'id' => $appointment->id]),
+    };
 
- // Context-aware Back URL and Button Label determination
- if ($from === 'radio' || $from === 'radiology') {
-     $backUrl = route('workstation.radiology', $appointment->id);
-     $backLabel = 'Back to Radiology Workstation';
- } elseif ($from === 'lab') {
-     $backUrl = route('workstation.lab', $appointment->id);
-     $backLabel = 'Back to Lab Workstation';
- } elseif ($from === 'med_cert' || $from === 'medical') {
-     $backUrl = route('workstation.med_cert', $appointment->id);
-     $backLabel = 'Back to Medical Cert Workstation';
- } elseif ($from === 'drug') {
-     $backUrl = route('workstation.drug', $appointment->id);
-     $backLabel = 'Back to Drug Test Workstation';
- } elseif ($from === 'custom' && $customId) {
-     $backUrl = route('workstation.custom', [$appointment->id, $customId]);
-     $backLabel = 'Back to Custom Workstation';
- } elseif ($from === 'hub' || str_contains($previousUrl, 'encode')) {
-     $backUrl = route('appointments.encode', $appointment->id);
-     $backLabel = 'Back to Results Hub';
- } else {
-     $backUrl = route('appointments.index', ['view' => 'queue', 'id' => $appointment->id]);
-     $backLabel = 'Back to Master Queue';
- }
- $isDependent = $appointment->dependent_id !== null;
- $maxBday = $isDependent ? now()->format('Y-m-d') : now()->subYears(18)->format('Y-m-d');
- $minBday = $isDependent ? now()->subYears(18)->addDay()->format('Y-m-d') : '';
- $currentServiceIds = old('service_ids', $appointment->services->pluck('id')->toArray());
- 
- // Evaluate initial price safely to prevent database 0.00 defaults from clobbering calculated test sum
- $initialPrice = ($appointment->payment_amount && floatval($appointment->payment_amount) > 0) 
-     ? floatval($appointment->payment_amount) 
-     : floatval($appointment->totalPrice());
+    $activePackageIds = old('package_ids', $appointment->packages->pluck('id')->toArray());
+    $activeServiceIds = old('service_ids', $appointment->services->pluck('id')->toArray());
+    $patientSex = strtolower(old('patient_sex', $appointment->patient_sex ?? 'both'));
+    $currentAmount = old('payment_amount', $appointment->payment_amount ?: $appointment->totalPrice());
+
+    $initialStreet = old('patient_street', $appointment->patient_street);
+    $initialProv = old('patient_province', $appointment->patient_province);
+    $initialCity = old('patient_city', $appointment->patient_city);
+    $initialBrgy = old('patient_barangay', $appointment->patient_barangay);
+
+    // Fetch and merge any organization-specific packages
+    $bookedPackages = $appointment->packages()->with(['services', 'organization'])->get();
+    $orgPackages = collect();
+
+    if (!empty($appointment->organization_id)) {
+        $orgPackages = \App\Models\Package::with(['services', 'organization'])
+            ->where('organization_id', $appointment->organization_id)
+            ->where('is_available', true)
+            ->get();
+    } elseif ($appointment->user && method_exists($appointment->user, 'organizations')) {
+        $orgIds = $appointment->user->organizations()->pluck('id')->toArray();
+        if (!empty($orgIds)) {
+            $orgPackages = \App\Models\Package::with(['services', 'organization'])
+                ->whereIn('organization_id', $orgIds)
+                ->where('is_available', true)
+                ->get();
+        }
+    }
+
+    // Comprehensive catalog of all available packages (Global + Appointment's Packages + Org Packages)
+    $allDisplayPackages = $packages->concat($bookedPackages)->concat($orgPackages)->unique('id')->sortBy('name');
+    $allDisplayPackages->loadMissing(['services', 'organization']);
 @endphp
 
-<div class="container text-start animate-page py-4 px-3 px-sm-4" id="edit-details-page-root">
- {{-- HEADER BAR WITH CONTEXT-AWARE BACK LINK --}}
- <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
- <div>
- <h2 class="text-accent fw-bold mb-0 uppercase tracking-tight fs-3 fs-md-2" style="letter-spacing: 1px;">
- <i class="bi bi-pencil-square me-2"></i>Edit Patient Details & Services
- </h2>
- <p class="text-secondary mb-0 small">Revise demographics, residential address, or diagnostic service requests for Ref #{{ $appointment->id }}.</p>
- </div>
- <div class="d-flex flex-wrap gap-2 align-items-center w-100 w-md-auto justify-content-start justify-content-md-end">
- <button type="button" class="btn btn-reset-custom flex-grow-1 flex-md-grow-0 justify-content-center" onclick="resetReviseForm()">
- <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Edits
- </button>
- <a href="{{ $backUrl }}" class="btn-custom btn-outline-secondary px-3 px-sm-4 py-2 fw-bold text-uppercase text-decoration-none btn-cancel-custom flex-grow-1 flex-md-grow-0 text-center" style="font-size: 0.75rem;">
- <i class="bi bi-arrow-left me-1"></i> {{ $backLabel }}
- </a> 
- </div>
- </div>
+<div class="container text-start animate-page py-3 px-3 px-sm-4" id="edit-details-root">
+    {{-- Header Action Bar --}}
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-3 mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
+        <div>
+            <h2 class="text-accent fw-bold mb-1 uppercase tracking-tight fs-3 fs-md-2">
+                <i class="bi bi-pencil-square me-2"></i>Edit Patient Demographics & Tests
+            </h2>
+            <p class="text-secondary small mb-0">
+                Updating record for <strong class="text-main">{{ strtoupper($appointment->patient_name) }}</strong> &bull; Ref #{{ $appointment->id }}
+                @if($appointment->organization_name)
+                    &bull; <span class="badge bg-secondary bg-opacity-25 text-main uppercase smaller">{{ $appointment->organization_name }}</span>
+                @endif
+            </p>
+        </div>
+        <div class="flex-shrink-0">
+            <a href="{{ $backUrl }}" class="btn btn-outline-secondary btn-sm fw-bold uppercase px-3 py-2 text-decoration-none d-inline-flex align-items-center gap-1" style="border-radius: 8px;">
+                <i class="bi bi-arrow-left"></i>
+                <span>Back to {{ strtoupper($from) }}</span>
+            </a>
+        </div>
+    </div>
 
- {{-- REVISION FORM --}}
- <form action="{{ route('internal.appointment-details.update', $appointment->id) }}" method="POST" id="revise_details_form" novalidate>
- @csrf
- @method('PUT')
- {{-- Hidden origin tracking --}}
- <input type="hidden" name="from" value="{{ $from }}">
- <input type="hidden" name="custom_id" value="{{ $customId }}">
- <div class="row g-4 align-items-stretch">
- {{-- LEFT COLUMN: IDENTITY & ADDRESS --}}
- <div class="col-12 col-lg-6 d-flex flex-column gap-4">
- {{-- 1. Patient Identity Card --}}
- <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm h-100">
- <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
- <i class="bi bi-person-bounding-box me-2"></i>1. Personal Identity
- </h5>
- <div class="row g-3">
- {{-- First Name --}}
- <div class="col-12 col-sm-6 col-md-3">
- <div class="d-flex align-items-center mb-1" style="height: 22px;">
- <label class="smaller fw-bold uppercase mb-0 text-nowrap" style="color: var(--text-muted);">First Name</label>
- </div>
- <input type="text" name="patient_first_name" id="patient_first_name" class="form-control uppercase fw-bold @error('patient_first_name') is-invalid @enderror" value="{{ old('patient_first_name', $appointment->patient_first_name) }}" required>
- <div class="invalid-feedback d-none" id="err_patient_first_name"></div>
- @error('patient_first_name')
- <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
- @enderror
- </div>
+    {{-- Validation Error Alerts --}}
+    @if($errors->any())
+        <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 text-danger p-3 rounded-3 mb-4 shadow-sm">
+            <div class="d-flex align-items-center gap-2 mb-1 fw-bold">
+                <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                <span>Please correct the following errors before saving:</span>
+            </div>
+            <ul class="mb-0 ps-3 small">
+                @foreach($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
 
- {{-- Middle Name (Expanded width + compact switch alignment) --}}
- <div class="col-12 col-sm-6 col-md-4">
- <div class="d-flex justify-content-between align-items-center mb-1 flex-nowrap" style="height: 22px;">
- <label class="smaller fw-bold mb-0 uppercase text-nowrap" style="color: var(--text-muted);">Middle Name</label>
- <div class="form-check form-switch mb-0 d-inline-flex align-items-center gap-1 ps-0" style="min-height: auto;">
- <input class="form-check-input m-0 cursor-pointer" type="checkbox" id="no_middle_name_toggle" onclick="toggleMiddleName(this)" {{ $appointment->patient_middle_name === 'N/A' ? 'checked' : '' }} style="width: 1.8em; height: 0.95em; cursor: pointer; float: none;">
- <label class="smaller text-muted user-select-none cursor-pointer mb-0" style="font-size: 0.65rem; line-height: 1;" for="no_middle_name_toggle">None</label>
- </div>
- </div>
- <input type="text" name="patient_middle_name" id="patient_middle_name" class="form-control uppercase fw-bold @error('patient_middle_name') is-invalid @enderror" value="{{ old('patient_middle_name', $appointment->patient_middle_name === 'N/A' ? '' : $appointment->patient_middle_name) }}" {{ $appointment->patient_middle_name === 'N/A' ? 'readonly' : '' }}>
- <div class="invalid-feedback d-none" id="err_patient_middle_name"></div>
- @error('patient_middle_name')
- <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
- @enderror
- </div>
+    {{-- Main Editing Form --}}
+    <form action="{{ route('internal.appointment-details.update', $appointment->id) }}" method="POST" id="editDetailsForm" novalidate>
+        @csrf
+        @method('PUT')
+        
+        {{-- Navigation tracking flags --}}
+        <input type="hidden" name="from" value="{{ $from }}">
+        <input type="hidden" name="custom_id" value="{{ $customId }}">
 
- {{-- Last Name --}}
- <div class="col-12 col-sm-6 col-md-3">
- <div class="d-flex align-items-center mb-1" style="height: 22px;">
- <label class="smaller fw-bold uppercase mb-0 text-nowrap" style="color: var(--text-muted);">Last Name</label>
- </div>
- <input type="text" name="patient_last_name" id="patient_last_name" class="form-control uppercase fw-bold @error('patient_last_name') is-invalid @enderror" value="{{ old('patient_last_name', $appointment->patient_last_name) }}" required>
- <div class="invalid-feedback d-none" id="err_patient_last_name"></div>
- @error('patient_last_name')
- <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
- @enderror
- </div>
+        <div class="row g-4 align-items-stretch">
+            {{-- LEFT COLUMN: PATIENT IDENTITY, PSGC ADDRESS & AUDIT REASON --}}
+            <div class="col-lg-6 d-flex flex-column gap-4">
+                {{-- 1. Personal Identity --}}
+                <div class="card p-4 border-secondary bg-card shadow-sm h-100" style="border-color: var(--border-color) !important; border-radius: 14px;">
+                    <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
+                        <i class="bi bi-person-vcard me-2"></i>1. Personal Identity
+                    </h5>
 
- {{-- Suffix (Compact width appropriate for short suffixes) --}}
- <div class="col-12 col-sm-6 col-md-2">
- <div class="d-flex align-items-center mb-1" style="height: 22px;">
- <label class="smaller fw-bold uppercase mb-0 text-nowrap" style="color: var(--text-muted);">Suffix (Opt.)</label>
- </div>
- <input type="text" name="patient_suffix" id="revise_suffix" list="suffix_options" class="form-control uppercase fw-bold @error('patient_suffix') is-invalid @enderror" value="{{ old('patient_suffix', $appointment->patient_suffix) }}" placeholder="e.g. JR">
- <datalist id="suffix_options">
- <option value="JR"><option value="SR"><option value="II"><option value="III"><option value="IV"><option value="V">
- </datalist>
- <div class="invalid-feedback d-none" id="err_patient_suffix"></div>
- @error('patient_suffix')
- <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
- @enderror
- </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="small text-secondary fw-bold mb-1 uppercase">First Name <span class="text-danger">*</span></label>
+                            <input type="text" name="patient_first_name" id="patient_first_name" class="form-control fw-bold uppercase @error('patient_first_name') is-invalid @enderror" value="{{ old('patient_first_name', $appointment->patient_first_name) }}" required>
+                            @error('patient_first_name') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
+                        </div>
 
- {{-- Sex --}}
- <div class="col-12 col-sm-6">
- <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Sex</label>
- <select name="patient_sex" id="patient_sex" class="form-select @error('patient_sex') is-invalid @enderror" required>
- <option value="Male" {{ old('patient_sex', $appointment->patient_sex) === 'Male' ? 'selected' : '' }}>Male</option>
- <option value="Female" {{ old('patient_sex', $appointment->patient_sex) === 'Female' ? 'selected' : '' }}>Female</option>
- </select>
- <div class="invalid-feedback d-none" id="err_patient_sex"></div>
- @error('patient_sex')
- <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
- @enderror
- </div>
+                        <div class="col-md-6">
+                            <label class="small text-secondary fw-bold mb-1 uppercase">Middle Name</label>
+                            <input type="text" name="patient_middle_name" id="patient_middle_name" class="form-control uppercase" value="{{ old('patient_middle_name', $appointment->patient_middle_name === 'N/A' ? '' : $appointment->patient_middle_name) }}" placeholder="Leave blank if N/A">
+                            @error('patient_middle_name') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
+                        </div>
 
- {{-- Birthdate --}}
- <div class="col-12 col-sm-6">
- <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Birthdate</label>
- <input type="date" name="patient_birthdate" id="revise_bday" class="form-control @error('patient_birthdate') is-invalid @enderror" 
- value="{{ old('patient_birthdate', $appointment->patient_birthdate ? $appointment->patient_birthdate->format('Y-m-d') : '') }}" 
- @if($minBday) min="{{ $minBday }}" @endif 
- max="{{ $maxBday }}" 
- onchange="validateBirthdateInput()" required>
- <div class="invalid-feedback d-none" id="err_patient_birthdate"></div>
- @error('patient_birthdate')
- <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
- @enderror
- <small class="text-muted smaller mt-1 d-block">
- {{ $isDependent ? 'Dependents must be minors under 18 years of age.' : 'Patients must be at least 18 years of age for personal bookings.' }}
- </small>
- </div>
+                        <div class="col-md-8">
+                            <label class="small text-secondary fw-bold mb-1 uppercase">Last Name <span class="text-danger">*</span></label>
+                            <input type="text" name="patient_last_name" id="patient_last_name" class="form-control fw-bold uppercase @error('patient_last_name') is-invalid @enderror" value="{{ old('patient_last_name', $appointment->patient_last_name) }}" required>
+                            @error('patient_last_name') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
+                        </div>
 
- {{-- Phone Number --}}
- <div class="col-12">
- <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Contact Phone</label>
- <div class="input-group">
- <span class="input-group-text border-secondary bg-secondary bg-opacity-25 text-main fw-bold">09</span>
- @php
- $rawPhone = old('patient_phone', $appointment->patient_phone);
- $displayPhone = str_starts_with($rawPhone, '09') ? substr($rawPhone, 2) : $rawPhone;
- @endphp
- <input type="text" id="revise_phone_display" class="form-control py-2.5 shadow-none @error('patient_phone') is-invalid @enderror" placeholder="171234567" maxlength="9" value="{{ $displayPhone }}" oninput="this.value = this.value.replace(/[^0-9]/g, ''); syncRevisePhone();" required>
- </div>
- <input type="hidden" name="patient_phone" id="revise_in_phone" value="{{ $rawPhone }}">
- <div class="invalid-feedback d-none" id="err_patient_phone"></div>
- @error('patient_phone')
- <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
- @enderror
- </div>
- </div>
- </div>
+                        <div class="col-md-4">
+                            <label class="small text-secondary fw-bold mb-1 uppercase">Suffix</label>
+                            <input type="text" name="patient_suffix" id="patient_suffix" class="form-control uppercase" value="{{ old('patient_suffix', $appointment->patient_suffix) }}" placeholder="e.g. JR, SR, III" maxlength="10">
+                            @error('patient_suffix') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
+                        </div>
 
- {{-- 2. Residential Address Card --}}
- <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm h-100">
- <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
- <i class="bi bi-geo-alt-fill me-2"></i>2. Residential Address
- </h5>
- <div class="alert alert-clinical p-2.5 mb-3 border border-secondary border-opacity-10 text-start" style="background-color: rgba(0,0,0,0.015); border-radius: 8px;">
- <div class="text-accent fw-bold fs-x-small uppercase tracking-wider mb-1" style="font-size: 0.65rem;">Saved Address on File:</div>
- <div class="text-main small text-break">{{ $appointment->patient_address }}</div>
- </div>
- <div class="row g-3">
- <div class="col-12 col-sm-6">
- <label class="smaller text-muted fw-bold mb-1 uppercase">Province</label>
- <select name="patient_province" id="revise_province" class="form-select @error('patient_province') is-invalid @enderror" required>
- <option value="">Loading Provinces...</option>
- </select>
- <div class="invalid-feedback d-none" id="err_patient_province"></div>
- @error('patient_province')
- <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
- @enderror
- </div>
- <div class="col-12 col-sm-6">
- <label class="smaller text-muted fw-bold mb-1 uppercase">City / Municipality</label>
- <select name="patient_city" id="revise_city" class="form-select @error('patient_city') is-invalid @enderror" disabled required>
- <option value="">Select Province First</option>
- </select>
- <div class="invalid-feedback d-none" id="err_patient_city"></div>
- @error('patient_city')
- <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
- @enderror
- </div>
- <div class="col-12 col-sm-6">
- <label class="smaller text-muted fw-bold mb-1 uppercase">Barangay</label>
- <select name="patient_barangay" id="revise_barangay" class="form-select @error('patient_barangay') is-invalid @enderror" disabled required>
- <option value="">Select City First</option>
- </select>
- <div class="invalid-feedback d-none" id="err_patient_barangay"></div>
- @error('patient_barangay')
- <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
- @enderror
- </div>
- <div class="col-12 col-sm-6">
- <label class="smaller text-muted fw-bold mb-1 uppercase">Street / House No.</label>
- <input type="text" name="patient_street" id="revise_street" class="form-control uppercase @error('patient_street') is-invalid @enderror" value="{{ old('patient_street', $appointment->patient_street) }}" required>
- <div class="invalid-feedback d-none" id="err_patient_street"></div>
- @error('patient_street')
- <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
- @enderror
- </div>
- </div>
- </div>
- </div>
+                        <div class="col-md-4">
+                            <label class="small text-secondary fw-bold mb-1 uppercase">Biological Sex <span class="text-danger">*</span></label>
+                            <select name="patient_sex" id="patient_sex" class="form-select fw-semibold @error('patient_sex') is-invalid @enderror" required onchange="handleSexChange(this.value)">
+                                <option value="Male" {{ $patientSex === 'male' ? 'selected' : '' }}>MALE</option>
+                                <option value="Female" {{ $patientSex === 'female' ? 'selected' : '' }}>FEMALE</option>
+                            </select>
+                            @error('patient_sex') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
+                        </div>
 
- {{-- RIGHT COLUMN: SERVICES & JUSTIFICATION --}}
- <div class="col-12 col-lg-6 d-flex flex-column gap-4">
- {{-- 3. Services & Billing Card --}}
- <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm h-100">
- <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
- <i class="bi bi-flask me-2"></i>3. Requested Medical Services & Billing
- </h5>
- <div class="mb-2">
- <input type="text" id="revise_service_search" class="form-control form-control-sm" placeholder="Search services/tests..." onkeyup="filterServices()">
- </div>
- <div class="p-3 border rounded row g-2 custom-scroll mb-3" id="services_container" style="max-height: 220px; overflow-y: auto; background-color: var(--bg-main) !important; border: 1.5px solid var(--border-color) !important;">
- @foreach($services as $service)
- <div class="form-check col-12 col-sm-6 mb-1 revise-service-item">
- <input class="form-check-input service-checkbox" type="checkbox" name="service_ids[]" value="{{ $service->id }}" id="revise_service_{{ $service->id }}" data-price="{{ $service->price }}" {{ in_array($service->id, $currentServiceIds) ? 'checked' : '' }} onchange="updateServicePriceTotal(true)">
- <label class="form-check-label text-main small cursor-pointer text-break" for="revise_service_{{ $service->id }}">
- {{ $service->name }} (₱{{ number_format($service->price, 2) }})
- </label>
- </div>
- @endforeach
- </div>
- <div class="invalid-feedback d-none mb-3 text-danger fw-bold" id="err_service_ids"></div>
- @error('service_ids')
- <div class="text-danger small mb-3 fw-bold">{{ $message }}</div>
- @enderror
+                        <div class="col-md-4">
+                            <label class="small text-secondary fw-bold mb-1 uppercase">Birthdate <span class="text-danger">*</span></label>
+                            <input type="date" name="patient_birthdate" id="patient_birthdate" class="form-control fw-semibold @error('patient_birthdate') is-invalid @enderror" value="{{ old('patient_birthdate', $appointment->patient_birthdate ? \Carbon\Carbon::parse($appointment->patient_birthdate)->format('Y-m-d') : '') }}" max="{{ date('Y-m-d') }}" required>
+                            @error('patient_birthdate') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
+                        </div>
 
- <div class="col-12 mt-2">
- <label class="smaller fw-bold uppercase mb-1 text-accent" style="font-size: 0.75rem;">
- <i class="bi bi-cash-coin me-1"></i>Confirmed Collection Price / Total Bill (PHP)
- </label>
- <input type="number" step="0.01" name="payment_amount" id="payment_amount" class="form-control py-2 fw-bold text-accent @error('payment_amount') is-invalid @enderror" value="{{ old('payment_amount', number_format($initialPrice, 2, '.', '')) }}" required min="0">
- <div class="invalid-feedback d-none" id="err_payment_amount"></div>
- @error('payment_amount')
- <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
- @enderror
- <small class="text-muted smaller mt-1 d-block">Price automatically updates when checking/unchecking tests above, but can be manually overridden if needed.</small>
- </div>
- </div>
+                        <div class="col-md-4">
+                            <label class="small text-secondary fw-bold mb-1 uppercase">Phone Number <span class="text-danger">*</span></label>
+                            <input type="text" name="patient_phone" id="patient_phone" class="form-control fw-semibold @error('patient_phone') is-invalid @enderror" value="{{ old('patient_phone', $appointment->patient_phone) }}" placeholder="09XXXXXXXXX" maxlength="11" required>
+                            @error('patient_phone') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+                </div>
 
- {{-- 4. Administrative Justification Card --}}
- <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm h-100">
- <h5 class="text-danger fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
- <i class="bi bi-shield-exclamation me-1"></i>4. Administrative Justification
- </h5>
- <div class="mb-3">
- <label class="smaller text-muted d-block mb-2">Select the official justification for modifying this record for the audit log.</label>
- <select id="revise_reason_select" name="reason" class="form-select @error('reason') is-invalid @enderror" required>
- <option value="" disabled selected>-- Select a valid justification --</option>
- <option value="Routine administrative update / profile maintenance">Routine administrative update / profile maintenance</option>
- <option value="Official request for details correction">Official request for details correction</option>
- <option value="Correction of typographical / data entry error">Correction of typographical / data entry error</option>
- <option value="Others">Others (Specify below)</option>
- </select>
- <div class="invalid-feedback d-none" id="err_reason"></div>
- @error('reason')
- <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
- @enderror
- </div>
- <div id="revise_custom_reason_wrapper" class="mb-0 d-none">
- <label class="smaller fw-bold uppercase mb-1">Specify Custom Reason</label>
- <textarea id="revise_custom_reason" class="form-control" rows="3" placeholder="Explain the profile revision justification..."></textarea>
- </div>
- </div>
- </div>
- </div>
+                {{-- 2. Residential Address with PSGC API Dropdowns --}}
+                <div class="card p-4 border-secondary bg-card shadow-sm" style="border-color: var(--border-color) !important; border-radius: 14px;">
+                    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2" style="border-color: var(--border-color) !important;">
+                        <h5 class="text-accent fw-bold uppercase mb-0 small">
+                            <i class="bi bi-geo-alt me-2"></i>2. Clinical Residential Address (PSGC Standard)
+                        </h5>
+                        <span id="psgcStatusBadge" class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 fs-x-small">
+                            <i class="bi bi-cloud-check me-1"></i>PSGC Live
+                        </span>
+                    </div>
 
- {{-- Submit Action Toolbar --}}
- <div class="d-flex flex-column flex-sm-row gap-2 gap-sm-3 mt-4">
- <a href="{{ $backUrl }}" class="btn-custom btn-outline-secondary w-100 w-sm-50 py-2.5 py-sm-3 fw-bold uppercase text-decoration-none text-center btn-cancel-custom" style="font-size: 0.85rem;">
- Cancel
- </a>
- <button type="submit" class="btn-custom btn-accent w-100 w-sm-50 py-2.5 py-sm-3 fw-bold uppercase shadow-sm">
- Save Revisions <i class="bi bi-check-circle-fill ms-1"></i>
- </button>
- </div>
- </form>
+                    <div class="row g-3">
+                        {{-- Province Dropdown --}}
+                        <div class="col-md-6">
+                            <label class="small text-secondary fw-bold mb-1 uppercase">Province <span class="text-danger">*</span></label>
+                            <select name="patient_province" id="patient_province" class="form-select fw-semibold @error('patient_province') is-invalid @enderror" onchange="fetchCities(this.value)" required>
+                                <option value="">Loading Provinces...</option>
+                            </select>
+                            @error('patient_province') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
+                        </div>
+
+                        {{-- City / Municipality Dropdown --}}
+                        <div class="col-md-6">
+                            <label class="small text-secondary fw-bold mb-1 uppercase">City / Municipality <span class="text-danger">*</span></label>
+                            <select name="patient_city" id="patient_city" class="form-select fw-semibold @error('patient_city') is-invalid @enderror" onchange="fetchBarangays(this.value)" disabled required>
+                                <option value="">Select Province First</option>
+                            </select>
+                            @error('patient_city') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
+                        </div>
+
+                        {{-- Barangay Dropdown --}}
+                        <div class="col-md-6">
+                            <label class="small text-secondary fw-bold mb-1 uppercase">Barangay <span class="text-danger">*</span></label>
+                            <select name="patient_barangay" id="patient_barangay" class="form-select fw-semibold @error('patient_barangay') is-invalid @enderror" disabled required>
+                                <option value="">Select City First</option>
+                            </select>
+                            @error('patient_barangay') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
+                        </div>
+
+                        {{-- Street / House No. --}}
+                        <div class="col-md-6">
+                            <label class="small text-secondary fw-bold mb-1 uppercase">Street / House No. <span class="text-danger">*</span></label>
+                            <input type="text" name="patient_street" id="patient_street" class="form-control uppercase fw-semibold @error('patient_street') is-invalid @enderror" value="{{ $initialStreet }}" placeholder="House No., Building, Street Name" required>
+                            @error('patient_street') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+                </div>
+
+                {{-- 3. Medical Audit Trail Justification --}}
+                <div class="card p-4 border-warning bg-card shadow-sm" style="border-color: rgba(255, 193, 7, 0.4) !important; border-radius: 14px;">
+                    <h5 class="text-warning fw-bold uppercase mb-2 small d-flex align-items-center gap-2">
+                        <i class="bi bi-shield-exclamation fs-5"></i>
+                        <span>3. Reason for Demographic Revision (Required)</span>
+                    </h5>
+                    <p class="text-muted smaller mb-3">
+                        Republic Act No. 10173 mandates an auditable clinical justification whenever patient records are revised by laboratory staff.
+                    </p>
+
+                    <div class="mb-3">
+                        <label class="small text-secondary fw-bold mb-1 uppercase">Preset Justification</label>
+                        <select id="reason_preset_select" class="form-select @error('reason') is-invalid @enderror" onchange="handleReasonPresetChange(this)">
+                            <option value="" disabled selected>-- Select an Audit Justification --</option>
+                            <option value="Mismatched patient identification documents on arrival">Mismatched patient identification documents on arrival</option>
+                            <option value="Correction of typographical error in demographic details">Correction of typographical error in demographic details</option>
+                            <option value="Patient requested revision of contact details during check-in">Patient requested revision of contact details during check-in</option>
+                            <option value="Physician recommended diagnostic test adjustment">Physician recommended diagnostic test adjustment</option>
+                            <option value="Billing adjustments requested by clinic administrator">Billing adjustments requested by clinic administrator</option>
+                            <option value="Others">Others (Specify below)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="small text-secondary fw-bold mb-1 uppercase">Official Audit Reason <span class="text-danger">*</span></label>
+                        <textarea name="reason" id="audit_reason_input" class="form-control @error('reason') is-invalid @enderror" rows="3" placeholder="Enter clinical reason (minimum 5 characters)..." required>{{ old('reason') }}</textarea>
+                        @error('reason') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
+                    </div>
+                </div>
+            </div>
+
+            {{-- RIGHT COLUMN: DIAGNOSTIC TESTS, PACKAGES & BILLING --}}
+            <div class="col-lg-6 d-flex flex-column gap-4">
+                <div class="card p-4 border-secondary bg-card shadow-sm h-100 d-flex flex-column justify-content-between" style="border-color: var(--border-color) !important; border-radius: 14px;">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3" style="border-color: var(--border-color) !important;">
+                            <h5 class="text-accent fw-bold uppercase mb-0 small">
+                                <i class="bi bi-flask me-2"></i>4. Diagnostic Tests & Packages
+                            </h5>
+                            <span class="badge bg-secondary bg-opacity-25 text-main small" id="testsSelectedCounter">0 Selected</span>
+                        </div>
+
+                        {{-- Search Filter --}}
+                        <div class="mb-3">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-card border-secondary border-opacity-25 text-muted"><i class="bi bi-search"></i></span>
+                                <input type="text" id="catalogSearchInput" class="form-control shadow-none" placeholder="Search tests or packages..." onkeyup="filterCatalogItems(this.value)">
+                            </div>
+                        </div>
+
+                        {{-- Sub-Tabs: Packages vs Individual Tests --}}
+                        <ul class="nav nav-pills mb-3 gap-2 border-bottom border-secondary border-opacity-10 pb-2" role="tablist">
+                            <li class="nav-item">
+                                <button class="nav-link active fw-bold px-3 py-1.5 uppercase btn-sm" data-bs-toggle="pill" data-bs-target="#tab-packages" type="button" role="tab" style="font-size: 0.72rem;">
+                                    <i class="bi bi-box-seam me-1"></i> Health Packages ({{ $allDisplayPackages->count() }})
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link fw-bold px-3 py-1.5 uppercase btn-sm" data-bs-toggle="pill" data-bs-target="#tab-services" type="button" role="tab" style="font-size: 0.72rem;">
+                                    <i class="bi bi-flask me-1"></i> Individual Tests ({{ $services->count() }})
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content mb-3" id="catalogTabContent">
+                            {{-- Packages List (Global & Organization Packages) --}}
+                            <div class="tab-pane fade show active" id="tab-packages" role="tabpanel">
+                                <div class="p-2 border rounded custom-scroll" style="max-height: 280px; overflow-y: auto; background-color: var(--bg-main) !important; border-color: var(--border-color) !important;">
+                                    @forelse($allDisplayPackages as $pkg)
+                                        @php
+                                            $pkgGender = strtolower($pkg->gender_restriction ?? 'both');
+                                            $isPkgChecked = in_array($pkg->id, $activePackageIds);
+                                            $isOrgPkg = $pkg->isCustomOrgPackage() || !empty($pkg->organization_id);
+                                        @endphp
+                                        <div class="form-check p-2 mb-1.5 border rounded bg-card d-flex align-items-center justify-content-between gap-2 catalog-item pkg-item-wrap" id="pkg_wrap_{{ $pkg->id }}" data-name="{{ strtoupper($pkg->name) }}" data-gender="{{ $pkgGender }}">
+                                            <div class="d-flex align-items-center gap-2 flex-grow-1 text-truncate">
+                                                <input class="form-check-input ms-0 me-1 edit-pkg-cb" type="checkbox" name="package_ids[]" value="{{ $pkg->id }}" id="pkg_cb_{{ $pkg->id }}" data-price="{{ $pkg->price }}" data-services="{{ json_encode($pkg->services->pluck('id')->toArray()) }}" {{ $isPkgChecked ? 'checked' : '' }} onchange="onCatalogSelectionChange()">
+                                                <label class="form-check-label text-main small cursor-pointer text-truncate fw-bold mb-0" for="pkg_cb_{{ $pkg->id }}">
+                                                    @if($isOrgPkg)
+                                                        <span class="badge bg-primary text-white py-0.5 px-1 me-1" style="font-size: 0.58rem; letter-spacing: 0.5px;">ORG PKG</span>
+                                                    @else
+                                                        <span class="badge bg-success bg-opacity-15 text-accent py-0.5 px-1 me-1" style="font-size: 0.58rem;">PKG</span>
+                                                    @endif
+                                                    {{ strtoupper($pkg->name) }}
+                                                    @if($isOrgPkg && $pkg->organization)
+                                                        <span class="text-secondary smaller fw-normal ms-1">({{ $pkg->organization->name }})</span>
+                                                    @endif
+                                                </label>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2">
+                                                {{-- HIGH-CONTRAST CONFLICT BADGE: Solid Red with Bold White Text --}}
+                                                <span class="badge bg-danger text-white border border-danger px-2 py-0.5 fw-bold pkg-conflict-badge d-none smaller shadow-sm" style="font-size: 0.62rem; letter-spacing: 0.5px;">
+                                                    <i class="bi bi-slash-circle me-1"></i>Conflicting
+                                                </span>
+                                                <span class="text-accent smaller fw-bold text-nowrap">₱{{ number_format($pkg->price, 2) }}</span>
+                                            </div>
+                                        </div>
+                                    @empty
+                                        <div class="p-3 text-center text-muted small italic">No packages available.</div>
+                                    @endforelse
+                                </div>
+                            </div>
+
+                            {{-- Individual Services List --}}
+                            <div class="tab-pane fade" id="tab-services" role="tabpanel">
+                                <div class="p-2 border rounded custom-scroll" style="max-height: 280px; overflow-y: auto; background-color: var(--bg-main) !important; border-color: var(--border-color) !important;">
+                                    @foreach($services as $svc)
+                                        @php
+                                            $svcGender = strtolower($svc->gender_restriction ?? 'both');
+                                            $isSvcChecked = in_array($svc->id, $activeServiceIds);
+                                        @endphp
+                                        <div class="form-check p-2 mb-1.5 border rounded bg-card d-flex align-items-center justify-content-between gap-2 catalog-item svc-item-wrap" id="svc_wrap_{{ $svc->id }}" data-name="{{ strtoupper($svc->name) }}" data-gender="{{ $svcGender }}">
+                                            <div class="d-flex align-items-center gap-2 flex-grow-1 text-truncate">
+                                                <input class="form-check-input ms-0 me-1 edit-svc-cb" type="checkbox" name="service_ids[]" value="{{ $svc->id }}" id="svc_cb_{{ $svc->id }}" data-price="{{ $svc->price }}" {{ $isSvcChecked ? 'checked' : '' }} onchange="onCatalogSelectionChange()">
+                                                <label class="form-check-label text-main small cursor-pointer text-truncate mb-0" for="svc_cb_{{ $svc->id }}">
+                                                    {{ strtoupper($svc->name) }}
+                                                </label>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2">
+                                                {{-- HIGH-CONTRAST COVERED BADGE: Solid Yellow with Bold Dark Text --}}
+                                                <span class="badge bg-warning text-dark border border-warning px-2 py-0.5 fw-bold svc-covered-badge d-none smaller shadow-sm" style="font-size: 0.62rem; letter-spacing: 0.5px;">
+                                                    <i class="bi bi-box-seam me-1"></i>In Package
+                                                </span>
+                                                <span class="text-muted smaller fw-bold text-nowrap">₱{{ number_format($svc->price, 2) }}</span>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- High-Contrast Conflict Error Alert Box --}}
+                        <div id="catalog_conflict_msg" class="alert alert-danger text-danger border-danger p-2.5 rounded-3 mb-3 d-none smaller fw-bold shadow-sm" style="background-color: rgba(220, 53, 69, 0.12) !important; border: 1.5px solid #dc3545 !important;">
+                            <i class="bi bi-exclamation-octagon-fill me-1"></i> <span id="catalog_conflict_text"></span>
+                        </div>
+                    </div>
+
+                    {{-- Billing & Actions Footer --}}
+                    <div>
+                        <div class="card p-3 bg-secondary bg-opacity-10 border border-secondary border-opacity-25 rounded-3 mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="small fw-bold text-secondary uppercase">Calculated Catalog Total:</span>
+                                <span class="text-accent fw-bold fs-5" id="calculatedTotalDisplay">₱0.00</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center pt-2 border-top border-secondary border-opacity-10">
+                                <div>
+                                    <label class="small text-secondary fw-bold uppercase d-block mb-0">Confirmed Payment Amount (PHP) <span class="text-danger">*</span></label>
+                                    <small class="text-muted smaller">Amount collected or charged for this booking.</small>
+                                </div>
+                                <div class="d-flex align-items-center gap-2" style="max-width: 170px;">
+                                    <input type="number" step="0.01" min="0" name="payment_amount" id="payment_amount_input" class="form-control form-control-sm text-end fw-bold text-accent" value="{{ $currentAmount }}" required>
+                                    <button type="button" class="btn btn-sm btn-outline-accent py-1 px-2" title="Sync with Calculated Total" onclick="syncPriceToCalculated()">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Submission Buttons --}}
+                        <div class="d-flex gap-2">
+                            <a href="{{ $backUrl }}" class="btn btn-outline-secondary w-50 py-2.5 fw-bold uppercase text-center text-decoration-none" style="border-radius: 8px;">
+                                Cancel
+                            </a>
+                            <button type="submit" class="btn btn-accent w-50 py-2.5 fw-bold uppercase shadow-sm" style="border-radius: 8px;" id="btnSubmitRevisions">
+                                <i class="bi bi-check2-circle me-1"></i> Save Revisions
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
 </div>
-
-{{-- Includes the Unified Lightbox Partial --}}
-@include('layouts.partials.lightbox-overlay')
-@endsection
 
 @push('styles')
 <style>
-.btn-reset-custom { 
- background-color: transparent !important;
- border: 1.5px solid var(--text-muted) !important;
- color: var(--text-muted) !important; 
- font-size: 0.75rem !important;
- font-weight: 700 !important;
- text-transform: uppercase;
- letter-spacing: 0.5px;
- padding: 6px 14px !important;
- border-radius: 6px !important;
- transition: all 0.2s ease-in-out;
- display: inline-flex;
- align-items: center;
- cursor: pointer;
+/* Guaranteed High-Contrast Overrides */
+.pkg-conflict-badge {
+    background-color: #dc3545 !important;
+    color: #ffffff !important;
+    border: 1px solid #b02a37 !important;
 }
-.btn-reset-custom:hover, .btn-reset-custom:focus {
- border-color: #ffc107 !important;
- color: #ffc107 !important;
- background-color: rgba(255, 193, 7, 0.08) !important;
- box-shadow: none !important;
+
+.svc-covered-badge {
+    background-color: #ffc107 !important;
+    color: #1c232d !important;
+    border: 1px solid #d39e00 !important;
 }
-.btn-cancel-custom {
- color: var(--text-muted) !important;
- border: 1.5px solid var(--border-color) !important;
- background-color: transparent !important;
- transition: all 0.2s ease-in-out;
-}
-.btn-cancel-custom:hover, .btn-cancel-custom:focus {
- color: var(--text-main) !important;
- background-color: rgba(255, 255, 255, 0.08) !important;
- border-color: var(--border-color) !important;
- box-shadow: none !important;
-}
-#edit-details-page-root .is-invalid {
- border-color: #ff4d4d !important;
- box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.15) !important;
+
+#catalog_conflict_msg {
+    color: #dc3545 !important;
 }
 </style>
 @endpush
 
 @push('scripts')
 <script>
-const savedProvince = "{{ $appointment->patient_province }}";
-const savedCity = "{{ $appointment->patient_city }}";
-const savedBarangay = "{{ $appointment->patient_barangay }}";
-const isDependentRecord = @json($appointment->dependent_id !== null);
+// Includes all available packages + booked custom org packages for conflict checking
+const packagesMap = @json($allDisplayPackages->keyBy('id'));
+const servicesMap = @json($services->keyBy('id'));
+const apiBase = "https://psgc.gitlab.io/api";
 
-document.addEventListener('DOMContentLoaded', async () => {
- // Initialize Unified Address Cascade
- await window.initUnifiedAddressCascade({
- provEl: document.getElementById('revise_province'),
- cityEl: document.getElementById('revise_city'),
- brgyEl: document.getElementById('revise_barangay'),
- streetEl: document.getElementById('revise_street'),
- savedProv: savedProvince,
- savedCity: savedCity, 
- savedBrgy: savedBarangay
- }); 
+const initialStreet = @json($initialStreet);
+const initialProv = @json($initialProv);
+const initialCity = @json($initialCity);
+const initialBrgy = @json($initialBrgy);
 
- // Evaluate and update price on initial load
- updateServicePriceTotal(false);
+// =========================================================================
+// 1. PSGC ADDRESS ENGINE
+// =========================================================================
+function findOptionFlexibly(selectEl, searchVal) {
+    if (!selectEl || !searchVal) return null;
+    const target = searchVal.toString().trim().toUpperCase();
+    return Array.from(selectEl.options).find(opt => {
+        if (!opt.value && !opt.text) return false;
+        const optVal = opt.value.toString().trim().toUpperCase();
+        const optText = opt.text.toString().trim().toUpperCase();
+        if (optVal === target || optText === target) return true;
+        const normOpt = optText.replace(/\b(CITY|PROVINCE|MUNICIPALITY) OF\b/g, '').replace(/[^A-Z0-9]/g, '');
+        const normTarget = target.replace(/\b(CITY|PROVINCE|MUNICIPALITY) OF\b/g, '').replace(/[^A-Z0-9]/g, '');
+        return normOpt && normOpt === normTarget;
+    });
+}
 
- const reasonSelect = document.getElementById('revise_reason_select');
- const textareaWrapper = document.getElementById('revise_custom_reason_wrapper');
- const textareaEl = document.getElementById('revise_custom_reason');
+async function fetchProvinces(targetProv = null, targetCity = null, targetBrgy = null) {
+    const provSel = document.getElementById('patient_province');
+    if (!provSel) return;
+    try {
+        const res = await fetch(`${apiBase}/provinces.json`);
+        const data = await res.json();
+        provSel.innerHTML = '<option value="">Select Province</option>';
+        data.sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.name;
+            opt.dataset.code = p.code;
+            opt.textContent = p.name;
+            provSel.appendChild(opt);
+        });
 
- if (reasonSelect && textareaEl && textareaWrapper) {
- reasonSelect.addEventListener('change', function() {
- clearFieldError(this);
- if (this.value === 'Others') {
- textareaWrapper.classList.remove('d-none');
- textareaEl.setAttribute('required', 'required');
- textareaEl.setAttribute('name', 'reason');
- reasonSelect.removeAttribute('name');
- textareaEl.value = '';
- } else {
- textareaWrapper.classList.add('d-none');
- textareaEl.removeAttribute('required');
- textareaEl.removeAttribute('name');
- reasonSelect.setAttribute('name', 'reason');
- }
- });
- }
+        if (targetProv) {
+            let matched = findOptionFlexibly(provSel, targetProv);
+            if (!matched) {
+                matched = document.createElement('option');
+                matched.value = targetProv;
+                matched.textContent = targetProv;
+                provSel.appendChild(matched);
+            }
+            provSel.value = matched.value;
+            await fetchCities(matched.value, targetCity, targetBrgy);
+        }
+    } catch (e) {
+        console.error("Provinces fetch error:", e);
+        if (targetProv) {
+            provSel.innerHTML = `<option value="${targetProv}" selected>${targetProv}</option>`;
+        }
+    }
+}
 
- // Attach real-time error dismissal listeners
- document.querySelectorAll('#revise_details_form input, #revise_details_form select').forEach(input => {
- input.addEventListener('input', () => clearFieldError(input));
- input.addEventListener('change', () => clearFieldError(input));
- });
+async function fetchCities(provName, targetCity = null, targetBrgy = null) {
+    const provSel = document.getElementById('patient_province');
+    const citySel = document.getElementById('patient_city');
+    const brgySel = document.getElementById('patient_barangay');
+    if (!citySel || !brgySel) return;
+    
+    citySel.disabled = true;
+    brgySel.disabled = true;
+    citySel.innerHTML = '<option value="">Loading Cities...</option>';
+    brgySel.innerHTML = '<option value="">Select City First</option>';
 
- document.getElementById('revise_details_form')?.addEventListener('submit', validateEditDetailsForm);
+    if (!provName) {
+        citySel.innerHTML = '<option value="">Select Province First</option>';
+        return;
+    }
+
+    const matchedProv = findOptionFlexibly(provSel, provName);
+    const provCode = matchedProv ? matchedProv.dataset.code : null;
+
+    if (!provCode) {
+        citySel.disabled = false;
+        if (targetCity) {
+            citySel.innerHTML = `<option value="${targetCity}" selected>${targetCity}</option>`;
+            brgySel.disabled = false;
+            if (targetBrgy) {
+                brgySel.innerHTML = `<option value="${targetBrgy}" selected>${targetBrgy}</option>`;
+            }
+        } else {
+            citySel.innerHTML = '<option value="">Select City</option>';
+        }
+        return;
+    }
+
+    try {
+        const res = await fetch(`${apiBase}/provinces/${provCode}/cities-municipalities.json`);
+        const data = await res.json();
+        citySel.innerHTML = '<option value="">Select City</option>';
+        data.sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.dataset.code = c.code;
+            opt.textContent = c.name;
+            citySel.appendChild(opt);
+        });
+        citySel.disabled = false;
+
+        if (targetCity) {
+            let matchedCity = findOptionFlexibly(citySel, targetCity);
+            if (!matchedCity) {
+                matchedCity = document.createElement('option');
+                matchedCity.value = targetCity;
+                matchedCity.textContent = targetCity;
+                citySel.appendChild(matchedCity);
+            }
+            citySel.value = matchedCity.value;
+            await fetchBarangays(matchedCity.value, targetBrgy);
+        }
+    } catch (e) {
+        console.error("Cities fetch error:", e);
+        citySel.disabled = false;
+        if (targetCity) {
+            citySel.innerHTML = `<option value="${targetCity}" selected>${targetCity}</option>`;
+        }
+    }
+}
+
+async function fetchBarangays(cityName, targetBrgy = null) {
+    const citySel = document.getElementById('patient_city');
+    const brgySel = document.getElementById('patient_barangay');
+    if (!brgySel) return;
+    
+    brgySel.disabled = true;
+    brgySel.innerHTML = '<option value="">Loading Barangays...</option>';
+
+    if (!cityName) {
+        brgySel.innerHTML = '<option value="">Select City First</option>';
+        return;
+    }
+
+    const matchedCity = findOptionFlexibly(citySel, cityName);
+    const cityCode = matchedCity ? matchedCity.dataset.code : null;
+
+    if (!cityCode) {
+        brgySel.disabled = false;
+        if (targetBrgy) {
+            brgySel.innerHTML = `<option value="${targetBrgy}" selected>${targetBrgy}</option>`;
+        } else {
+            brgySel.innerHTML = '<option value="">Select Barangay</option>';
+        }
+        return;
+    }
+
+    try {
+        const res = await fetch(`${apiBase}/cities-municipalities/${cityCode}/barangays.json`);
+        const data = await res.json();
+        brgySel.innerHTML = '<option value="">Select Barangay</option>';
+        data.sort((a, b) => a.name.localeCompare(b.name)).forEach(b => {
+            const opt = document.createElement('option');
+            opt.value = b.name;
+            opt.dataset.code = b.code;
+            opt.textContent = b.name;
+            brgySel.appendChild(opt);
+        });
+        brgySel.disabled = false;
+
+        if (targetBrgy) {
+            let matchedBrgy = findOptionFlexibly(brgySel, targetBrgy);
+            if (!matchedBrgy) {
+                matchedBrgy = document.createElement('option');
+                matchedBrgy.value = targetBrgy;
+                matchedBrgy.textContent = targetBrgy;
+                brgySel.appendChild(matchedBrgy);
+            }
+            brgySel.value = matchedBrgy.value;
+        }
+    } catch (e) {
+        console.error("Barangays fetch error:", e);
+        brgySel.disabled = false;
+        if (targetBrgy) {
+            brgySel.innerHTML = `<option value="${targetBrgy}" selected>${targetBrgy}</option>`;
+        }
+    }
+}
+
+// =========================================================================
+// 2. DIAGNOSTIC CATALOG SELECTION & CONFLICT ENGINE
+// =========================================================================
+function filterCatalogItems(query) {
+    const q = (query || '').toUpperCase().trim();
+    document.querySelectorAll('.catalog-item').forEach(item => {
+        const name = item.dataset.name || '';
+        item.classList.toggle('d-none', q !== '' && !name.includes(q));
+    });
+}
+
+function handleSexChange(sex) {
+    const s = (sex || '').toLowerCase();
+    document.querySelectorAll('.catalog-item').forEach(item => {
+        const restriction = (item.dataset.gender || 'both').toLowerCase();
+        let hide = false;
+        if (s === 'male' && restriction === 'female') hide = true;
+        if (s === 'female' && restriction === 'male') hide = true;
+        
+        if (hide) {
+            item.classList.add('d-none');
+            const cb = item.querySelector('input[type="checkbox"]');
+            if (cb) cb.checked = false;
+        } else {
+            item.classList.remove('d-none');
+        }
+    });
+    onCatalogSelectionChange();
+}
+
+function onCatalogSelectionChange() {
+    recalculateDependencies();
+    updateTotals();
+}
+
+function recalculateDependencies() {
+    const activePackages = Array.from(document.querySelectorAll('.edit-pkg-cb:checked'));
+    const coveredServices = new Set();
+    
+    // 1. Gather all services inside checked packages
+    activePackages.forEach(pkgCb => {
+        const pkgId = pkgCb.value;
+        const pkg = packagesMap[pkgId];
+        if (pkg && pkg.services) {
+            pkg.services.forEach(svc => coveredServices.add(svc.id.toString()));
+        } else if (pkgCb.dataset.services) {
+            try {
+                const sArr = JSON.parse(pkgCb.dataset.services);
+                sArr.forEach(id => coveredServices.add(id.toString()));
+            } catch(e) {}
+        }
+    });
+
+    const checkedIndividualServices = new Set();
+    document.querySelectorAll('.edit-svc-cb:checked').forEach(svcCb => {
+        checkedIndividualServices.add(svcCb.value.toString());
+    });
+
+    // 2. Package conflict check (Package vs Package & Package vs Individual)
+    document.querySelectorAll('.edit-pkg-cb').forEach(pkgCb => {
+        const pkgId = pkgCb.value;
+        const pkg = packagesMap[pkgId];
+        let pkgServiceIds = [];
+        if (pkg && pkg.services) {
+            pkgServiceIds = pkg.services.map(s => s.id.toString());
+        } else if (pkgCb.dataset.services) {
+            try {
+                pkgServiceIds = JSON.parse(pkgCb.dataset.services).map(String);
+            } catch(e) {}
+        }
+
+        const wrap = document.getElementById(`pkg_wrap_${pkgId}`);
+        const badge = wrap ? wrap.querySelector('.pkg-conflict-badge') : null;
+
+        if (pkgCb.checked) {
+            pkgCb.disabled = false;
+            if (wrap) {
+                wrap.classList.remove('opacity-50');
+                wrap.removeAttribute('title');
+            }
+            if (badge) badge.classList.add('d-none');
+            return;
+        }
+
+        const conflictsWithPackage = pkgServiceIds.some(id => coveredServices.has(id));
+        const conflictsWithIndividual = pkgServiceIds.some(id => checkedIndividualServices.has(id));
+        const isConflicting = conflictsWithPackage || conflictsWithIndividual;
+
+        if (isConflicting) {
+            pkgCb.disabled = true;
+            if (wrap) {
+                wrap.classList.add('opacity-50');
+                wrap.style.cursor = 'not-allowed';
+                wrap.setAttribute('title', 'Conflicting package shares tests with already selected items.');
+            }
+            if (badge) badge.classList.remove('d-none');
+        } else {
+            pkgCb.disabled = false;
+            if (wrap) {
+                wrap.classList.remove('opacity-50');
+                wrap.style.cursor = 'default';
+                wrap.removeAttribute('title');
+            }
+            if (badge) badge.classList.add('d-none');
+        }
+    });
+
+    // 3. Individual services conflict check (Package vs Service)
+    document.querySelectorAll('.edit-svc-cb').forEach(svcCb => {
+        const isCovered = coveredServices.has(svcCb.value.toString());
+        const wrap = document.getElementById(`svc_wrap_${svcCb.value}`);
+        const badge = wrap ? wrap.querySelector('.svc-covered-badge') : null;
+
+        if (isCovered) {
+            svcCb.checked = false;
+            svcCb.disabled = true;
+            if (wrap) {
+                wrap.classList.add('opacity-50');
+                wrap.style.cursor = 'not-allowed';
+                wrap.setAttribute('title', 'Already included in a selected package.');
+            }
+            if (badge) badge.classList.remove('d-none');
+        } else {
+            svcCb.disabled = false;
+            if (wrap) {
+                wrap.classList.remove('opacity-50');
+                wrap.style.cursor = 'default';
+                wrap.removeAttribute('title');
+            }
+            if (badge) badge.classList.add('d-none');
+        }
+    });
+
+    // Update Counter
+    const totalCount = document.querySelectorAll('.edit-pkg-cb:checked').length + document.querySelectorAll('.edit-svc-cb:checked').length;
+    const counterEl = document.getElementById('testsSelectedCounter');
+    if (counterEl) {
+        counterEl.innerText = `${totalCount} Selected`;
+    }
+}
+
+function updateTotals() {
+    let sum = 0;
+    document.querySelectorAll('.edit-pkg-cb:checked').forEach(cb => {
+        sum += parseFloat(cb.dataset.price || 0);
+    });
+    document.querySelectorAll('.edit-svc-cb:checked').forEach(cb => {
+        sum += parseFloat(cb.dataset.price || 0);
+    });
+
+    const displayEl = document.getElementById('calculatedTotalDisplay');
+    if (displayEl) {
+        displayEl.innerText = '₱' + sum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+}
+
+function syncPriceToCalculated() {
+    let sum = 0;
+    document.querySelectorAll('.edit-pkg-cb:checked').forEach(cb => {
+        sum += parseFloat(cb.dataset.price || 0);
+    });
+    document.querySelectorAll('.edit-svc-cb:checked').forEach(cb => {
+        sum += parseFloat(cb.dataset.price || 0);
+    });
+    const input = document.getElementById('payment_amount_input');
+    if (input) {
+        input.value = sum.toFixed(2);
+    }
+}
+
+function handleReasonPresetChange(select) {
+    const input = document.getElementById('audit_reason_input');
+    if (!input || !select.value) return;
+    if (select.value === 'Others') {
+        input.value = '';
+        input.focus();
+    } else {
+        input.value = select.value;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Initialize PSGC Cascading Address dropdowns with patient's registered address
+    fetchProvinces(initialProv, initialCity, initialBrgy);
+
+    // 2. Initialize catalog gender and conflict restrictions
+    handleSexChange(document.getElementById('patient_sex')?.value || 'Male');
+    onCatalogSelectionChange();
 });
-
-/* -------------------------------------------------------------------------- */
-/* DYNAMIC SERVICE PRICE CALCULATION */
-/* -------------------------------------------------------------------------- */
-function updateServicePriceTotal(forceFromCheckboxes = true) {
- let sum = 0;
- document.querySelectorAll('.service-checkbox:checked').forEach(cb => {
- sum += parseFloat(cb.dataset.price || 0);
- });
-
- const priceInput = document.getElementById('payment_amount');
- if (priceInput) {
- const currentVal = parseFloat(priceInput.value || 0);
- if (forceFromCheckboxes || currentVal === 0 || isNaN(currentVal)) {
- priceInput.value = sum.toFixed(2);
- }
- clearFieldError(priceInput);
- }
-
- resortReviseServices();
-}
-
-/* -------------------------------------------------------------------------- */
-/* IN-PAGE "RESET EDITS" CONTROLLER (NO CONFIRMATION POPUP) */
-/* -------------------------------------------------------------------------- */
-async function resetReviseForm() {
- document.getElementById('patient_first_name').value = "{{ $appointment->patient_first_name }}";
- document.getElementById('patient_middle_name').value = "{{ $appointment->patient_middle_name === 'N/A' ? '' : $appointment->patient_middle_name }}";
- document.getElementById('no_middle_name_toggle').checked = "{{ $appointment->patient_middle_name }}" === "N/A";
- document.getElementById('patient_middle_name').readOnly = "{{ $appointment->patient_middle_name }}" === "N/A";
- document.getElementById('patient_last_name').value = "{{ $appointment->patient_last_name }}";
- document.getElementById('revise_suffix').value = "{{ $appointment->patient_suffix }}";
- document.getElementById('patient_sex').value = "{{ $appointment->patient_sex }}";
- document.getElementById('revise_bday').value = "{{ $appointment->patient_birthdate ? $appointment->patient_birthdate->format('Y-m-d') : '' }}";
-
- let origPhone = "{{ $appointment->patient_phone }}".trim();
- if (origPhone.startsWith('+639')) origPhone = '09' + origPhone.substring(4);
- if (origPhone.startsWith('639')) origPhone = '09' + origPhone.substring(3);
-
- document.getElementById('revise_phone_display').value = origPhone.startsWith('09') ? origPhone.substring(2) : origPhone;
- document.getElementById('revise_in_phone').value = origPhone;
-
- await window.initUnifiedAddressCascade({
- provEl: document.getElementById('revise_province'),
- cityEl: document.getElementById('revise_city'),
- brgyEl: document.getElementById('revise_barangay'),
- streetEl: document.getElementById('revise_street'),
- savedProv: savedProvince,
- savedCity: savedCity,
- savedBrgy: savedBarangay
- });
-
- document.getElementById('revise_street').value = "{{ $appointment->patient_street }}";
-
- const origServices = @json($currentServiceIds);
- document.querySelectorAll('.service-checkbox').forEach(cb => {
- cb.checked = origServices.includes(parseInt(cb.value));
- });
-
- const origPrice = {{ ($appointment->payment_amount && floatval($appointment->payment_amount) > 0) ? $appointment->payment_amount : $appointment->totalPrice() }};
- document.getElementById('payment_amount').value = parseFloat(origPrice).toFixed(2);
-
- const reasonSelect = document.getElementById('revise_reason_select');
- reasonSelect.value = '';
-
- const textareaWrapper = document.getElementById('revise_custom_reason_wrapper');
- const textareaEl = document.getElementById('revise_custom_reason');
-
- textareaWrapper.classList.add('d-none');
- textareaEl.removeAttribute('required');
- textareaEl.removeAttribute('name');
- reasonSelect.setAttribute('name', 'reason');
- textareaEl.value = '';
-
- document.querySelectorAll('#revise_details_form .is-invalid').forEach(el => el.classList.remove('is-invalid'));
- document.querySelectorAll('#revise_details_form .invalid-feedback').forEach(el => {
- el.innerText = '';
- el.classList.add('d-none');
- el.classList.remove('d-block');
- });
-}
-
-function setFieldError(input, errDivId, message) {
- if (!input) return;
- input.classList.add('is-invalid');
- const errDiv = document.getElementById(errDivId);
- if (errDiv) {
- errDiv.innerText = message;
- errDiv.classList.add('d-block');
- errDiv.classList.remove('d-none');
- }
-}
-
-function clearFieldError(input) {
- if (!input) return;
- input.classList.remove('is-invalid');
- let errDiv = document.getElementById('err_' + input.id) || document.getElementById('err_' + input.name);
- if (errDiv) {
- errDiv.innerText = '';
- errDiv.classList.add('d-none');
- errDiv.classList.remove('d-block');
- }
-}
-
-function toggleMiddleName(chk) {
- const input = document.getElementById('patient_middle_name');
- if (chk.checked) {
- input.value = 'N/A';
- input.readOnly = true;
- } else {
- input.value = '';
- input.readOnly = false;
- }
- clearFieldError(input);
-}
-
-function syncRevisePhone() {
- const displayInput = document.getElementById('revise_phone_display');
- const hiddenInput = document.getElementById('revise_in_phone');
- if (displayInput && hiddenInput) {
- hiddenInput.value = displayInput.value ? '09' + displayInput.value : '';
- }
- clearFieldError(displayInput);
-}
-
-function resortReviseServices() {
- const container = document.getElementById('services_container');
- if (!container) return;
- const items = Array.from(container.querySelectorAll('.revise-service-item'));
- items.sort((a, b) => {
- const aChecked = a.querySelector('input[type="checkbox"]').checked ? 1 : 0;
- const bChecked = b.querySelector('input[type="checkbox"]').checked ? 1 : 0;
- if (aChecked !== bChecked) return bChecked - aChecked;
- return a.querySelector('label').innerText.trim().localeCompare(b.querySelector('label').innerText.trim());
- });
- items.forEach(item => container.appendChild(item));
-}
-
-function filterServices() {
- const query = document.getElementById('revise_service_search').value.toLowerCase();
- document.querySelectorAll('.revise-service-item').forEach(item => {
- const labelText = item.querySelector('label').innerText.toLowerCase();
- item.classList.toggle('d-none', !labelText.includes(query));
- });
-}
-
-function validateNameString(val, fieldName) {
- if (!val || val === 'N/A') return null;
- const charRegex = /^[a-zA-Z\u00f1\u00d1\u00e1\u00c1\u00e9\u00c9\u00ed\u00cd\u00f3\u00d3\u00fa\u00da\u00fc\u00dc \s.\'-]+$/;
- const startRegex = /^[a-zA-Z\u00f1\u00d1\u00e1\u00c1\u00e9\u00c9\u00ed\u00cd\u00f3\u00d3\u00fa\u00da\u00fc\u00dc ]/;
- const consecutiveRegex = /[.\'-]{2,}/;
- const letterRegex = /[a-zA-Z\u00f1\u00d1\u00e1\u00c1\u00e9\u00c9\u00ed\u00cd\u00f3\u00d3\u00fa\u00da\u00fc\u00dc]/;
- if (!charRegex.test(val)) return `${fieldName} may only contain letters, spaces, periods, hyphens, and apostrophes.`;
- if (!startRegex.test(val)) return `${fieldName} must start with a letter.`;
- if (!letterRegex.test(val)) return `${fieldName} must contain at least one letter.`;
- if (consecutiveRegex.test(val)) return `${fieldName} cannot contain consecutive punctuation marks.`;
- if (val.length > 60) return `${fieldName} cannot exceed 60 characters.`;
- return null;
-}
-
-function validateBirthdateInput() {
- const bdayInput = document.getElementById('revise_bday');
- if (!bdayInput) return true;
- clearFieldError(bdayInput);
- if (!bdayInput.value) {
- setFieldError(bdayInput, 'err_patient_birthdate', 'Birthdate is required.');
- return false;
- }
- const dob = new Date(bdayInput.value);
- const today = new Date();
- let age = today.getFullYear() - dob.getFullYear();
- const m = today.getMonth() - dob.getMonth();
- if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
- if (age < 0) {
- setFieldError(bdayInput, 'err_patient_birthdate', 'Birthdate cannot be in the future.');
- return false;
- } else if (isDependentRecord) {
- if (age >= 18) {
- setFieldError(bdayInput, 'err_patient_birthdate', 'Administrative Policy: Dependents must be minors (under 18 years of age).');
- return false;
- }
- } else {
- if (age < 18) {
- setFieldError(bdayInput, 'err_patient_birthdate', 'Administrative Policy: You must be at least 18 years old to book a personal appointment.');
- return false;
- }
- }
- return true;
-}
-
-function validateEditDetailsForm(e) {
- let isValid = true;
- let firstInvalidInput = null;
-
- document.querySelectorAll('#revise_details_form .is-invalid').forEach(el => el.classList.remove('is-invalid'));
- document.querySelectorAll('#revise_details_form .invalid-feedback').forEach(el => {
- el.innerText = '';
- el.classList.add('d-none');
- el.classList.remove('d-block');
- });
-
- function markInvalid(input, errId, msg) {
- setFieldError(input, errId, msg);
- isValid = false;
- if (!firstInvalidInput) firstInvalidInput = input;
- }
-
- // 1. Patient Name Validation
- const fNameInput = document.getElementById('patient_first_name');
- const fNameErr = validateNameString(fNameInput.value.trim(), 'First Name');
- if (!fNameInput.value.trim()) markInvalid(fNameInput, 'err_patient_first_name', 'First Name is required.');
- else if (fNameErr) markInvalid(fNameInput, 'err_patient_first_name', fNameErr);
-
- const mNameInput = document.getElementById('patient_middle_name');
- const mNameErr = validateNameString(mNameInput.value.trim(), 'Middle Name');
- if (mNameErr) markInvalid(mNameInput, 'err_patient_middle_name', mNameErr);
-
- const lNameInput = document.getElementById('patient_last_name');
- const lNameErr = validateNameString(lNameInput.value.trim(), 'Last Name');
- if (!lNameInput.value.trim()) markInvalid(lNameInput, 'err_patient_last_name', 'Last Name is required.');
- else if (lNameErr) markInvalid(lNameInput, 'err_patient_last_name', lNameErr);
-
- const suffixInput = document.getElementById('revise_suffix');
- if (suffixInput.value.trim()) {
- const suffixRegex = /^[a-zA-Z0-9\s.]+$/;
- if (!suffixRegex.test(suffixInput.value.trim())) markInvalid(suffixInput, 'err_patient_suffix', 'Suffix may only contain letters, numbers, spaces, and periods.');
- else if (suffixInput.value.trim().length > 10) markInvalid(suffixInput, 'err_patient_suffix', 'Suffix cannot exceed 10 characters.');
- }
-
- // 2. Sex Validation
- const sexSel = document.getElementById('patient_sex');
- if (!sexSel.value) markInvalid(sexSel, 'err_patient_sex', 'Please select a gender.');
-
- // 3. Birthdate Validation
- const bdayInput = document.getElementById('revise_bday');
- if (!validateBirthdateInput()) {
- if (!firstInvalidInput) firstInvalidInput = bdayInput;
- isValid = false;
- }
-
- // 4. Contact Phone Validation
- const phoneInput = document.getElementById('revise_in_phone');
- const displayPhoneInput = document.getElementById('revise_phone_display');
- const phoneRegex = /^09\d{9}$/;
- if (!displayPhoneInput.value.trim()) {
- markInvalid(displayPhoneInput, 'err_patient_phone', 'Contact phone number is required.');
- } else if (!phoneRegex.test(phoneInput.value.trim())) {
- markInvalid(displayPhoneInput, 'err_patient_phone', 'Phone number must start with 09 and contain exactly 11 digits.');
- }
-
- // 5. Address Validation
- const provSel = document.getElementById('revise_province');
- const citySel = document.getElementById('revise_city');
- const brgySel = document.getElementById('revise_barangay');
- const streetInput = document.getElementById('revise_street');
-
- if (!provSel.value) markInvalid(provSel, 'err_patient_province', 'Province selection is required.');
- if (!citySel.value) markInvalid(citySel, 'err_patient_city', 'City/Municipality selection is required.');
- if (!brgySel.value) markInvalid(brgySel, 'err_patient_barangay', 'Barangay selection is required.');
- if (!streetInput.value.trim()) markInvalid(streetInput, 'err_patient_street', 'Street address is required.');
-
- // 6. Test Services Selection
- const selectedTests = document.querySelectorAll('.service-checkbox:checked');
- if (selectedTests.length === 0) {
- const container = document.getElementById('services_container');
- markInvalid(container, 'err_service_ids', 'Please select at least one laboratory test.');
- }
-
- // 7. Confirmed Price Validation
- const payAmountInput = document.getElementById('payment_amount');
- if (!payAmountInput.value.trim() || parseFloat(payAmountInput.value) < 0) {
- markInvalid(payAmountInput, 'err_payment_amount', 'Confirmed price must be a valid positive number.');
- }
-
- // 8. Administrative Justification Validation
- const reasonSelect = document.getElementById('revise_reason_select');
- const customReasonInput = document.getElementById('revise_custom_reason');
-
- if (!reasonSelect.value) {
- markInvalid(reasonSelect, 'err_reason', 'Administrative justification is required for the audit log.');
- } else if (reasonSelect.value === 'Others' && customReasonInput.value.trim().length < 5) {
- markInvalid(customReasonInput, 'err_reason', 'Custom justification must be at least 5 characters long.');
- }
-
- if (!isValid) {
- e.preventDefault();
- e.stopPropagation();
- if (firstInvalidInput) {
- firstInvalidInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
- firstInvalidInput.focus();
- }
- return false;
- }
-
- return true;
-}
 </script>
 @endpush
+@endsection

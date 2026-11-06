@@ -21,6 +21,11 @@
 
     // Dynamically reveal preview on page load if scan exists
     $showPreview = $isReadonly || $hasScan;
+
+    // Requested Examinations Breakdown
+    $requestedExaminations = $appointment->packages->pluck('name')->map(fn($n) => "[PKG] {$n}")
+        ->concat($appointment->services->pluck('name'))
+        ->implode(', ');
 @endphp
 
 <div class="container text-start animate-page pt-4 px-3 px-sm-4" id="drug-workstation-root">
@@ -98,7 +103,15 @@
                         </div>
                         <div class="text-main fw-bold small mb-1 text-break">{{ strtoupper($appointment->patient_name) }}</div>
                         <div class="text-secondary smaller mb-1">{{ $appointment->patient_age }} YRS / {{ strtoupper($appointment->patient_sex) }}</div>
-                        <div class="text-muted smaller text-break" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
+                        <div class="text-muted smaller text-break mb-2" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
+
+                        {{-- Requested Examinations Summary --}}
+                        <div class="pt-2 border-top border-secondary border-opacity-10">
+                            <small class="text-secondary d-block smaller fw-bold uppercase">Requested Examinations</small>
+                            <span class="small fw-semibold text-accent text-break" style="font-size: 0.75rem;">
+                                {{ $requestedExaminations ?: 'None registered' }}
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -161,7 +174,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <form action="{{ route('workstation.verify', [$appointment->id, 'drug']) }}" method="POST" class="modal-content shadow-lg p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
             @csrf
-            <h5 class="text-neon fw-bold mb-1 uppercase">Clinical Verification</h5>
+            <h5 class="text-accent fw-bold mb-1 uppercase">Clinical Verification</h5>
             <p class="text-secondary small mb-4">Enter your name to verify that the uploaded drug test scan matches the patient record.</p>
             <div class="mb-4">
                 <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Verifier Full Name</label>
@@ -169,7 +182,7 @@
             </div>
             <div class="d-flex flex-column flex-sm-row gap-2">
                 <button type="button" class="btn btn-outline-secondary flex-grow-1 py-2.5" data-bs-dismiss="modal">CANCEL</button>
-                <button type="submit" class="btn btn-neon flex-grow-1 py-2.5 fw-bold uppercase">Confirm & Approve</button>
+                <button type="submit" class="btn btn-accent flex-grow-1 py-2.5 fw-bold uppercase">Confirm & Approve</button>
             </div>
         </form>
     </div>
@@ -403,7 +416,6 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 @endpush
 
-@push('styles')
 <style>
 #drug-workstation-root .form-control,
 #drug-workstation-root .form-select,
@@ -449,4 +461,3 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 }
 </style>
-@endpush

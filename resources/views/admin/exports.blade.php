@@ -276,9 +276,7 @@
             margin-top: 2px;
         }
 
-        /* =========================================================================
-           Strict Overflow-Proof Table Design
-           ========================================================================= */
+        /* Strict Overflow-Proof Table Design */
         table.formal-report-table {
             width: 100% !important;
             max-width: 100% !important;
@@ -299,8 +297,9 @@
             padding: 6px 6px;
             border: 1px solid #1c232d;
             vertical-align: middle;
-            word-break: break-word;
-            overflow-wrap: anywhere;
+            word-break: break-word !important;
+            overflow-wrap: anywhere !important;
+            white-space: normal !important;
         }
 
         table.formal-report-table tbody td {
@@ -319,10 +318,10 @@
             background-color: #fcfdfd;
         }
 
-        /* Badges */
+        /* Compact & Contained Badges */
         .formal-badge {
             display: inline-block;
-            padding: 2.5px 6px;
+            padding: 2.5px 7px;
             font-size: 6.2pt;
             font-weight: 800;
             text-transform: uppercase;
@@ -336,7 +335,7 @@
             overflow-wrap: anywhere !important;
             text-align: center;
             line-height: 1.25;
-            max-width: 100% !important;
+            max-width: 135px;
             box-sizing: border-box;
         }
 
@@ -364,7 +363,12 @@
             color: #b91c1c;
         }
 
-        /* Explicit Action Event Wrap Alignment */
+        .formal-badge-package {
+            background-color: #e0f2fe;
+            border-color: #7dd3fc;
+            color: #0369a1;
+        }
+
         .action-event-cell {
             word-break: break-word !important;
             overflow-wrap: anywhere !important;
@@ -382,7 +386,6 @@
             box-sizing: border-box !important;
         }
 
-        /* Formatted Audit Log Reason Box */
         .log-reason-content {
             font-size: 7pt;
             line-height: 1.35;
@@ -402,7 +405,7 @@
         }
 
         .formal-signature-box {
-            width: 210px;
+            width: 220px;
             text-align: center;
         }
 
@@ -418,6 +421,12 @@
             color: #0f172a;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+        }
+
+        .sort-indicator {
+            font-size: 6.5pt;
+            color: #19d38c;
+            margin-left: 2px;
         }
     </style>
 </head>
@@ -470,21 +479,27 @@
         <div class="report-header-divider"></div>
 
         @php
-            $adminName = Auth::check() ? Auth::user()->name : 'SYSTEM ADMINISTRATOR';
-            $adminRole = Auth::check() ? strtoupper(Auth::user()->role) : 'ADMINISTRATOR';
+            // Pull customized signatory and occupation confirmed via modal
+            $signatoryName = request('signatory_name', $signatoryName ?? (Auth::check() ? Auth::user()->name : 'SYSTEM ADMINISTRATOR'));
+            $signatoryRole = request('signatory_role', $signatoryRole ?? (Auth::check() ? (Auth::user()->occupation ?: (Auth::user()->isAdmin() ? 'Laboratory Administrator' : strtoupper(Auth::user()->role))) : 'ADMINISTRATOR'));
+
+            $sortBy = request('sort_by', $sortBy ?? 'date');
+            $order = strtolower(request('order', $order ?? 'desc'));
+            $arrowChar = ($order === 'asc') ? '▲' : '▼';
+
             $reportTitles = [
                 'transactions' => 'Official Financial & Transactions Audit Report',
                 'appointments' => 'Master Clinical Appointments & Schedule Log',
-                'services'     => 'Clinical Test Utilization & Catalog Summary',
+                'services'     => 'Clinical Test & Package Catalog Summary',
                 'accounts'     => 'System User Accounts & Personnel Directory',
                 'logs'         => 'System Security Audit & Operational Activity Logs',
             ];
             $currentTitle = $reportTitles[$type] ?? 'Clinical Records Export';
 
-            // Multi-Filter Scope Builder (Encapsulates All Active Filters)
+            // Multi-Filter Scope Builder
             $scopeItems = [];
 
-            // 1. Period Filter
+            // Period Filter
             $period = request()->query($type . '_period', request()->query('tx_period', request()->query('app_period', request()->query('log_period', 'cumulative'))));
             if ($period === 'daily') {
                 $dateVal = request()->query('tx_date', request()->query('app_date', request()->query('log_date', date('Y-m-d'))));
@@ -499,7 +514,7 @@
                 $scopeItems[] = ['label' => 'Period', 'val' => 'CUMULATIVE (ALL TIME)'];
             }
 
-            // 2. Tab-Specific Filters
+            // Tab-Specific Filters
             if ($type === 'transactions') {
                 $txStatus = request()->query('tx_status', 'all');
                 $txAppStatus = request()->query('tx_app_status', 'all');
@@ -511,9 +526,16 @@
                 if ($appType !== 'all') $scopeItems[] = ['label' => 'Booking Type', 'val' => strtoupper($appType)];
                 if ($appStatus !== 'all') $scopeItems[] = ['label' => 'Status', 'val' => strtoupper($appStatus)];
             } elseif ($type === 'services') {
-                $svcCat = request()->query('svc_category', 'all');
+                $svcKindVal = request()->query('svc_kind', $svcKind ?? 'all');
+                if ($svcKindVal === 'individual') {
+                    $scopeItems[] = ['label' => 'Classification', 'val' => 'INDIVIDUAL TESTS ONLY'];
+                } elseif ($svcKindVal === 'package') {
+                    $scopeItems[] = ['label' => 'Classification', 'val' => 'PACKAGES ONLY'];
+                } else {
+                    $scopeItems[] = ['label' => 'Classification', 'val' => 'ALL (INDIVIDUAL & PACKAGES)'];
+                }
+
                 $svcStat = request()->query('svc_status', 'all');
-                if ($svcCat !== 'all') $scopeItems[] = ['label' => 'Category', 'val' => strtoupper($svcCat)];
                 if ($svcStat !== 'all') $scopeItems[] = ['label' => 'Catalog State', 'val' => strtoupper($svcStat)];
             } elseif ($type === 'accounts') {
                 $accRole = request()->query('acc_role', 'all');
@@ -525,20 +547,17 @@
                 if ($logCat !== 'all') $scopeItems[] = ['label' => 'Action Event', 'val' => strtoupper($logCat)];
             }
 
-            // 3. Custom Selected Rows Indicator
+            // Custom Selected Rows Indicator
             if (request()->filled('selected_ids')) {
                 $selectedCount = count(array_filter(explode(',', request()->query('selected_ids'))));
                 $scopeItems[] = ['label' => 'Selection', 'val' => 'FILTERED (' . $selectedCount . ' ROWS)'];
             }
 
-            // 4. Keyword Search Filter
-            $search = request()->query('search', request()->query('tx_search', request()->query('app_search', request()->query('log_search'))));
-            if ($search) {
-                $scopeItems[] = ['label' => 'Search Query', 'val' => '"' . $search . '"'];
-            }
+            // Column Sorting Indicator Pill
+            $scopeItems[] = ['label' => 'Sorted By', 'val' => strtoupper($sortBy) . ' (' . strtoupper($order) . ')'];
         @endphp
 
-        {{-- 2. Report Document Meta Block with Comprehensive Scope Badges --}}
+        {{-- 2. Report Document Meta Block --}}
         <div class="doc-meta-card">
             <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start gap-2 doc-meta-flex">
                 <div>
@@ -607,14 +626,14 @@
             </div>
             <div class="col-6 col-sm-3 metric-col-4">
                 <div class="metric-mini-card">
-                    <div class="val text-warning">{{ $appointments->where('status', 'pending')->count() }}</div>
-                    <div class="lbl">Pending Review</div>
+                    <div class="val text-warning">{{ $appointments->whereIn('status', ['pending', 'needs_review'])->count() }}</div>
+                    <div class="lbl">Awaiting Review</div>
                 </div>
             </div>
             <div class="col-6 col-sm-3 metric-col-4">
                 <div class="metric-mini-card">
                     <div class="val text-info">{{ $appointments->whereIn('status', ['approved', 'tested', 'encoded'])->count() }}</div>
-                    <div class="lbl">In Progress</div>
+                    <div class="lbl">In Processing</div>
                 </div>
             </div>
         </div>
@@ -641,7 +660,7 @@
         </div>
         @endif
 
-        {{-- 4. Dynamic Tables with Guaranteed Overflow Protection --}}
+        {{-- 4. Dynamic Tables with Bi-directional Sort Indicators --}}
 
         {{-- TAB 1: TRANSACTIONS --}}
         @if($type === 'transactions')
@@ -649,13 +668,23 @@
             <table class="formal-report-table">
                 <thead>
                     <tr>
-                        <th style="width: 13%;">Date</th>
-                        <th style="width: 9%;">Ref #</th>
-                        <th style="width: 23%;">Patient Name</th>
-                        <th style="width: 23%;">Services</th>
+                        <th style="width: 13%;">
+                            Date {!! $sortBy === 'date' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
+                        <th style="width: 9%;">
+                            Ref # {!! $sortBy === 'id' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
+                        <th style="width: 23%;">
+                            Patient Name {!! $sortBy === 'patient' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
+                        <th style="width: 23%;">Services & Packages</th>
                         <th style="width: 10%;">Method</th>
-                        <th style="width: 10%;">Payment</th>
-                        <th class="text-end" style="width: 12%;">Amount</th>
+                        <th class="text-center" style="width: 10%;">
+                            Payment {!! $sortBy === 'payment_status' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
+                        <th class="text-end" style="width: 12%;">
+                            Amount {!! $sortBy === 'amount' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -663,14 +692,19 @@
                     @php
                         $amt = $tx->payment_amount ?: $tx->totalPrice();
                         $isPaid = ($tx->payment_status === 'paid');
+                        $isVoided = $tx->isVoided();
+                        $appStatus = $isVoided ? 'voided' : $tx->status;
+                        $items = $tx->packages->pluck('name')->map(fn($n) => "[PKG] {$n}")
+                            ->concat($tx->services->pluck('name'))
+                            ->implode(', ');
                     @endphp
                     <tr>
                         <td>{{ $tx->appointment_date ? $tx->appointment_date->format('M d, Y') : $tx->created_at->format('M d, Y') }}</td>
                         <td class="font-monospace fw-bold text-dark">#{{ $tx->id }}</td>
                         <td class="fw-bold uppercase">{{ $tx->patient_name }}</td>
-                        <td class="small">{{ $tx->services->pluck('name')->implode(', ') }}</td>
+                        <td class="small">{{ $items }}</td>
                         <td>{{ $tx->payment_method }}</td>
-                        <td>
+                        <td class="text-center">
                             <span class="formal-badge {{ $isPaid ? 'formal-badge-paid' : ($tx->payment_status === 'refunded' ? 'formal-badge-pending' : 'formal-badge-expired') }}">
                                 {{ strtoupper($tx->payment_status) }}
                             </span>
@@ -697,21 +731,32 @@
             <table class="formal-report-table">
                 <thead>
                     <tr>
-                        <th style="width: 14%;">Schedule</th>
-                        <th style="width: 9%;">Ref #</th>
-                        <th style="width: 23%;">Patient Name</th>
-                        <th style="width: 11%;">Type</th>
-                        <th style="width: 21%;">Services</th>
-                        <th style="width: 11%;">Status</th>
+                        <th style="width: 14%;">
+                            Schedule {!! $sortBy === 'date' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
+                        <th style="width: 9%;">
+                            Ref # {!! $sortBy === 'id' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
+                        <th style="width: 23%;">
+                            Patient Name {!! $sortBy === 'patient' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
+                        <th class="text-center" style="width: 11%;">Type</th>
+                        <th style="width: 21%;">Services & Packages</th>
+                        <th class="text-center" style="width: 11%;">
+                            Status {!! $sortBy === 'status' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
                         <th class="text-end" style="width: 11%;">Total Bill</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($appointments as $app)
                     @php
-                        $isExpired = $app->isExpired();
-                        $finalStatus = $isExpired ? 'expired' : $app->status;
+                        $isVoided = $app->isVoided();
+                        $finalStatus = $isVoided ? 'voided' : $app->status;
                         $typeLabel = $app->batch_id ? 'BULK' : ($app->dependent_id ? 'DEPENDENT' : 'PERSONAL');
+                        $items = $app->packages->pluck('name')->map(fn($n) => "[PKG] {$n}")
+                            ->concat($app->services->pluck('name'))
+                            ->implode(', ');
                     @endphp
                     <tr>
                         <td>
@@ -723,11 +768,11 @@
                             <div class="fw-bold uppercase">{{ $app->patient_name }}</div>
                             <small class="text-muted">{{ $app->patient_age }} YRS / {{ strtoupper($app->patient_sex) }}</small>
                         </td>
-                        <td><span class="formal-badge">{{ $typeLabel }}</span></td>
-                        <td class="small">{{ $app->services->pluck('name')->implode(', ') }}</td>
-                        <td>
-                            <span class="formal-badge {{ $finalStatus === 'released' ? 'formal-badge-released' : ($finalStatus === 'pending' ? 'formal-badge-pending' : 'formal-badge-expired') }}">
-                                {{ strtoupper($finalStatus) }}
+                        <td class="text-center"><span class="formal-badge">{{ $typeLabel }}</span></td>
+                        <td class="small">{{ $items }}</td>
+                        <td class="text-center">
+                            <span class="formal-badge {{ $finalStatus === 'released' ? 'formal-badge-released' : ($finalStatus === 'pending' || $finalStatus === 'needs_review' ? 'formal-badge-pending' : 'formal-badge-expired') }}">
+                                {{ $finalStatus === 'voided' ? 'VOIDED' : strtoupper(str_replace('_', ' ', $finalStatus)) }}
                             </span>
                         </td>
                         <td class="text-end fw-bold" style="white-space: nowrap;">₱{{ number_format($app->payment_amount ?: $app->totalPrice(), 2) }}</td>
@@ -742,41 +787,87 @@
         </div>
         @endif
 
-        {{-- TAB 3: SERVICES --}}
+        {{-- TAB 3: SERVICES & PACKAGES --}}
         @if($type === 'services')
+        @php
+            $svcKind = request('svc_kind', $svcKind ?? 'all');
+            $displayPackages = ($svcKind !== 'individual');
+            $displayServices = ($svcKind !== 'package');
+        @endphp
         <div class="canvas-table-wrapper">
             <table class="formal-report-table">
                 <thead>
                     <tr>
                         <th style="width: 8%;">ID</th>
-                        <th style="width: 28%;">Examination Name</th>
-                        <th style="width: 16%;">Category</th>
-                        <th style="width: 14%;">Price</th>
+                        <th style="width: 28%;">
+                            Test / Package Name {!! $sortBy === 'name' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
+                        <th class="text-center" style="width: 16%;">Classification</th>
+                        <th style="width: 14%;">
+                            Price (PHP) {!! $sortBy === 'price' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
                         <th style="width: 12%;">Duration</th>
-                        <th style="width: 12%;">Bookings</th>
+                        <th class="text-center" style="width: 12%;">
+                            Bookings {!! $sortBy === 'bookings' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
                         <th class="text-end" style="width: 10%;">Status</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($services as $svc)
-                    <tr>
-                        <td class="font-monospace fw-bold">#{{ $svc->id }}</td>
-                        <td class="fw-bold uppercase">{{ $svc->name }}</td>
-                        <td><span class="formal-badge">{{ strtoupper($svc->category) }}</span></td>
-                        <td class="fw-bold" style="white-space: nowrap;">₱{{ number_format($svc->price, 2) }}</td>
-                        <td>{{ $svc->estimated_time }} mins</td>
-                        <td class="fw-bold">{{ $svc->appointments_count }}</td>
-                        <td class="text-end">
-                            <span class="formal-badge {{ $svc->is_available ? 'formal-badge-released' : 'formal-badge-expired' }}">
-                                {{ $svc->is_available ? 'ACTIVE' : 'DISABLED' }}
-                            </span>
-                        </td>
-                    </tr>
-                    @empty
-                    <tr>
-                        <td colspan="7" class="text-center py-4 text-muted italic">No services listed.</td>
-                    </tr>
-                    @endforelse
+                    {{-- Diagnostic Packages --}}
+                    @if($displayPackages && isset($packages) && $packages->isNotEmpty())
+                        @foreach($packages as $pkg)
+                        <tr>
+                            <td class="font-monospace fw-bold">P-{{ $pkg->id }}</td>
+                            <td class="fw-bold uppercase">
+                                {{ $pkg->name }}
+                                <small class="text-muted d-block" style="font-size: 6.5pt;">Includes: {{ $pkg->services->pluck('name')->implode(', ') }}</small>
+                            </td>
+                            <td class="text-center"><span class="formal-badge formal-badge-package">PACKAGE</span></td>
+                            <td class="fw-bold" style="white-space: nowrap;">₱{{ number_format($pkg->price, 2) }}</td>
+                            <td>{{ $pkg->estimated_time ?: 15 }} mins</td>
+                            <td class="text-center fw-bold">{{ $pkg->appointments_count ?? 0 }}</td>
+                            <td class="text-end">
+                                @if($pkg->trashed())
+                                    <span class="formal-badge formal-badge-expired">ARCHIVED</span>
+                                @elseif($pkg->is_available)
+                                    <span class="formal-badge formal-badge-released">ACTIVE</span>
+                                @else
+                                    <span class="formal-badge formal-badge-pending">DISABLED</span>
+                                @endif
+                            </td>
+                        </tr>
+                        @endforeach
+                    @endif
+
+                    {{-- Individual Services --}}
+                    @if($displayServices)
+                        @forelse($services as $svc)
+                        <tr>
+                            <td class="font-monospace fw-bold">#{{ $svc->id }}</td>
+                            <td class="fw-bold uppercase">{{ $svc->name }}</td>
+                            <td class="text-center"><span class="formal-badge">INDIVIDUAL</span></td>
+                            <td class="fw-bold" style="white-space: nowrap;">₱{{ number_format($svc->price, 2) }}</td>
+                            <td>{{ $svc->estimated_time }} mins</td>
+                            <td class="text-center fw-bold">{{ $svc->appointments_count }}</td>
+                            <td class="text-end">
+                                @if($svc->trashed())
+                                    <span class="formal-badge formal-badge-expired">ARCHIVED</span>
+                                @elseif($svc->is_available)
+                                    <span class="formal-badge formal-badge-released">ACTIVE</span>
+                                @else
+                                    <span class="formal-badge formal-badge-pending">DISABLED</span>
+                                @endif
+                            </td>
+                        </tr>
+                        @empty
+                            @if(!$displayPackages || (isset($packages) && $packages->isEmpty()))
+                            <tr>
+                                <td colspan="7" class="text-center py-4 text-muted italic">No services listed matching selected criteria.</td>
+                            </tr>
+                            @endif
+                        @endforelse
+                    @endif
                 </tbody>
             </table>
         </div>
@@ -788,12 +879,18 @@
             <table class="formal-report-table">
                 <thead>
                     <tr>
-                        <th style="width: 9%;">User ID</th>
-                        <th style="width: 24%;">Full Name</th>
-                        <th style="width: 26%;">Email Address</th>
-                        <th style="width: 16%;">Phone Number</th>
-                        <th style="width: 13%;">Access Role</th>
-                        <th class="text-end" style="width: 12%;">Account Status</th>
+                        <th style="width: 9%;">
+                            User ID {!! $sortBy === 'id' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
+                        <th style="width: 22%;">
+                            Full Name {!! $sortBy === 'name' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
+                        <th style="width: 27%;">Email Address</th>
+                        <th style="width: 15%;">Phone Number</th>
+                        <th class="text-center" style="width: 15%;">
+                            Role / Occupation {!! $sortBy === 'role' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
+                        <th class="text-center" style="width: 12%;">Status</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -801,10 +898,14 @@
                     <tr>
                         <td class="font-monospace fw-bold">#{{ $acc->id }}</td>
                         <td class="fw-bold uppercase">{{ $acc->name }}</td>
-                        <td>{{ $acc->email }}</td>
-                        <td>{{ $acc->phone }}</td>
-                        <td><span class="formal-badge">{{ strtoupper($acc->role) }}</span></td>
-                        <td class="text-end">
+                        <td style="word-break: break-all !important;">{{ $acc->email }}</td>
+                        <td style="white-space: nowrap !important;">{{ $acc->phone }}</td>
+                        <td class="text-center">
+                            <span class="formal-badge" style="max-width: 130px; display: inline-block;">
+                                {{ strtoupper($acc->occupation ?: $acc->role) }}
+                            </span>
+                        </td>
+                        <td class="text-center">
                             <span class="formal-badge {{ $acc->trashed() ? 'formal-badge-expired' : 'formal-badge-paid' }}">
                                 {{ $acc->trashed() ? 'DEACTIVATED' : 'ACTIVE' }}
                             </span>
@@ -820,35 +921,39 @@
         </div>
         @endif
 
-        {{-- TAB 5: SYSTEM AUDIT LOGS (With Balanced 18% Width & Strict Word-Break Wrapping) --}}
+        {{-- TAB 5: SYSTEM AUDIT LOGS --}}
         @if($type === 'logs')
         <div class="canvas-table-wrapper">
             <table class="formal-report-table">
                 <thead>
                     <tr>
-                        <th style="width: 12%;">Timestamp</th>
-                        <th style="width: 14%;">Performer</th>
-                        <th style="width: 18%;">Event Action</th>
-                        <th style="width: 14%;">Target Patient</th>
-                        <th style="width: 42%;">Justification & Audit Notes</th>
+                        <th style="width: 12%;">
+                            Timestamp {!! $sortBy === 'created_at' || $sortBy === 'date' ? "<span class='sort-indicator'>{$arrowChar}</span>" : '' !!}
+                        </th>
+                        <th style="width: 16%;">Performer</th>
+                        <th class="text-center" style="width: 16%;">Event Action</th>
+                        <th style="width: 16%;">Target Patient</th>
+                        <th style="width: 40%;">Justification & Audit Notes</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($logs as $log)
                     <tr>
-                        <td style="white-space: nowrap;">{{ $log->created_at ? $log->created_at->format('M d, Y') : 'N/A' }}<br><small class="text-muted">{{ $log->created_at ? $log->created_at->format('h:i A') : '' }}</small></td>
-                        <td>
-                            <div class="fw-bold uppercase">{{ $log->user->name ?? 'System/Deleted' }}</div>
-                            <small class="text-muted">({{ strtoupper($log->user->role ?? 'SYSTEM') }})</small>
+                        <td style="white-space: nowrap;">
+                            {{ $log->created_at ? $log->created_at->format('M d, Y') : 'N/A' }}<br>
+                            <small class="text-muted">{{ $log->created_at ? $log->created_at->format('h:i A') : '' }}</small>
                         </td>
-                        <td class="action-event-cell">
+                        <td>
+                            <div class="fw-bold uppercase">{{ $log->user?->name ?? 'System/Deleted' }}</div>
+                            <small class="text-muted">({{ strtoupper($log->user?->occupation ?: ($log->user?->role ?? 'SYSTEM')) }})</small>
+                        </td>
+                        <td class="action-event-cell text-center">
                             <span class="formal-badge action-event-badge">
                                 {{ $log->action }}
                             </span>
                         </td>
                         <td class="fw-bold uppercase">{{ $log->patient_name }}</td>
                         <td>
-                            {{-- Prevents long stack traces, exceptions, and Windows file paths from overflowing --}}
                             <div class="log-reason-content">
                                 {{ $log->reason }}
                             </div>
@@ -872,16 +977,16 @@
                         <strong>CERTIFICATION & LEGAL DISCLAIMER:</strong> This official document contains privileged clinical and financial data generated by Medscreen Diagnostic Laboratory under Republic Act No. 10173 (Philippine Data Privacy Act of 2012). Any unauthorized reproduction is strictly prohibited.
                     </p>
                     <div class="text-muted font-monospace" style="font-size: 7pt;">
-                        Security Audit Verification Hash: {{ hash('sha256', $type . now()->timestamp . $adminName) }}
+                        Security Audit Verification Hash: {{ hash('sha256', $type . now()->timestamp . $signatoryName) }}
                     </div>
                 </div>
                 <div class="col-12 col-sm-5 text-start text-sm-end sign-col-right">
                     <div class="formal-signature-box ms-sm-auto">
                         <div class="formal-sign-line">
-                            <div class="admin-name-signature">{{ $adminName }}</div>
+                            <div class="admin-name-signature">{{ strtoupper($signatoryName) }}</div>
                         </div>
                         <div class="fw-bold text-dark text-uppercase" style="font-size: 8pt; letter-spacing: 0.5px;">
-                            {{ $adminRole === 'ADMIN' ? 'System Administrator' : $adminRole }}
+                            {{ strtoupper($signatoryRole) }}
                         </div>
                         <div class="text-muted" style="font-size: 7pt;">
                             Authorized Clinical Signatory

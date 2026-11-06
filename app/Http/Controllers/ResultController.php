@@ -12,10 +12,12 @@ use App\Models\{
     LaboratoryHistoryRecord,
     LaboratoryHistoryScan,
     User,
+    Organization,
     AppointmentResult,
     CustomWorkstationResult,
     WorkstationAudit,
     Service,
+    Package,
     AppointmentDrugTest
 };
 use App\Http\Controllers\Workstation\CustomWorksheetController;
@@ -29,6 +31,7 @@ class ResultController extends Controller
 {
     /**
      * THE HUB: Displays the progress tracker for all required forms.
+     * Evaluates all unique diagnostic procedures across individual tests and booked packages.
      */
     public function hub(Appointment $appointment)
     {
@@ -44,13 +47,21 @@ class ResultController extends Controller
             }
         }
 
-        $serviceNames = $appointment->services->pluck('name')->map(fn($n) => strtoupper($n))->toArray();
+        // Pull all unique procedures across directly selected services and bundled package services
+        $allServices = $appointment->allServices();
+        $serviceNames = $allServices->pluck('name')->map(fn($n) => strtoupper($n))->toArray();
+
         $autoReportTypes = [];
         foreach ($serviceNames as $name) {
-            if (str_contains($name, 'DRUG TEST')) $autoReportTypes[] = 'drug';
-            elseif (str_contains($name, 'XRAY') || str_contains($name, 'X-RAY')) $autoReportTypes[] = 'radio';
-            elseif (str_contains($name, 'MEDICAL CERTIFICATE')) $autoReportTypes[] = 'med_cert';
-            else $autoReportTypes[] = 'lab';
+            if (str_contains($name, 'DRUG TEST')) {
+                $autoReportTypes[] = 'drug';
+            } elseif (str_contains($name, 'XRAY') || str_contains($name, 'X-RAY')) {
+                $autoReportTypes[] = 'radio';
+            } elseif (str_contains($name, 'MEDICAL CERTIFICATE')) {
+                $autoReportTypes[] = 'med_cert';
+            } else {
+                $autoReportTypes[] = 'lab';
+            }
         }
         $autoReportTypes = array_unique($autoReportTypes);
 
@@ -63,19 +74,21 @@ class ResultController extends Controller
             $autoReportTypes = $res->included_reports;
         }
 
-        // Fetch all active diagnostic services for the Demographics/Services revision
+        // Fetch all active diagnostic services and packages for Demographics/Services revision
         $services = Service::where('is_available', true)->orderBy('name')->get();
+        $packages = Package::with('services')->where('is_available', true)->orderBy('name')->get();
 
         return view('appointments.encode', [
             'appointment' => $appointment,
             'autoReportTypes' => $autoReportTypes,
-            'services' => $services
+            'services' => $services,
+            'packages' => $packages
         ]);
     }
 
     /**
-     * EDIT DETAILS PAGE: Dedicated full-page view to revise patient identity, PSGC address, and medical services.
-     * Accessible by Staff, Lab Tech, and Admin at pre-release stages (including approved).
+     * EDIT DETAILS PAGE: Dedicated full-page view to revise patient identity, PSGC address, 
+     * individual services, and packages.
      */
     public function editDemographics(Appointment $appointment)
     {
@@ -86,8 +99,9 @@ class ResultController extends Controller
         }
 
         $services = Service::where('is_available', true)->orderBy('name')->get();
+        $packages = Package::with('services')->where('is_available', true)->orderBy('name')->get();
 
-        return view('appointments.edit-details', compact('appointment', 'services'));
+        return view('appointments.edit-details', compact('appointment', 'services', 'packages'));
     }
 
     /**
@@ -97,6 +111,7 @@ class ResultController extends Controller
     {
         if (Gate::denies('isStaff')) abort(403);
         $request->validate(['sig_name' => 'required|string|max:255']);
+
         $res = $appointment->result;
         $prefix = ($type == 'med_cert' ? 'med' : $type);
 
@@ -105,7 +120,6 @@ class ResultController extends Controller
             "{$prefix}_v2_by_name" => $request->sig_name,
         ];
 
-        // Whitelisted _v2_at and _v2_by timestamp updates
         if ($type === 'lab') {
             $updateData['lab_v2_at'] = now();
             $updateData['lab_v2_by'] = auth()->id();
@@ -115,6 +129,7 @@ class ResultController extends Controller
         }
 
         $res->update($updateData);
+
         ActivityLog::record('VERIFIED', "Clinical sign-off for $type", $appointment->patient_name, $appointment->id);
         event(new QueueUpdated());
 
@@ -128,6 +143,7 @@ class ResultController extends Controller
     public function return(Request $request, Appointment $appointment)
     {
         $request->validate(['reason' => 'required|min:5']);
+
         $type = $request->query('type', 'lab');
         $prefix = ($type == 'med_cert' ? 'med' : $type);
 
@@ -147,7 +163,6 @@ class ResultController extends Controller
 
         $appointment->result->update($updateData);
 
-        // Dynamically unlock the overall patient folder if returned after final release has completed
         if ($appointment->status === 'released') {
             $appointment->update(['status' => 'encoded']);
         }
@@ -165,6 +180,7 @@ class ResultController extends Controller
     public function destroyOriginalWorkstation(Request $request, Appointment $appointment, $type)
     {
         if (Gate::denies('isStaff')) abort(403);
+
         $request->validate([
             'reason' => 'required|string|min:5'
         ]);
@@ -179,7 +195,6 @@ class ResultController extends Controller
             unset($reports[$key]);
             $res->included_reports = array_values($reports);
 
-            // Clean up corresponding data columns, files, and state details
             $prefix = ($type == 'med_cert' ? 'med' : $type);
             $res->{"{$prefix}_status"} = 'pending';
             $res->{"{$prefix}_v1_by_name"} = null;
@@ -209,9 +224,8 @@ class ResultController extends Controller
                 $res->med_cert_data = null;
                 $res->medCert()->delete();
             }
-            $res->save();
 
-            // Clear any related audit trails
+            $res->save();
             $res->audits()->where('workstation_type', $type)->delete();
 
             ActivityLog::record(
@@ -222,7 +236,6 @@ class ResultController extends Controller
             );
 
             event(new QueueUpdated());
-
             return back()->with('success', 'Workstation removed from folder successfully.');
         }
 
@@ -235,6 +248,7 @@ class ResultController extends Controller
     public function addWorkstation(Request $request, Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
+
         $request->validate([
             'workstation_type' => 'required|string|in:lab,radio,drug,med_cert,custom',
             'custom_name' => 'required_if:workstation_type,custom|nullable|string|max:255',
@@ -270,7 +284,6 @@ class ResultController extends Controller
             );
 
             event(new QueueUpdated());
-
             return back()->with('success', "Worksheet '{$customRes->name}' added successfully.");
         } else {
             $reports = $res->included_reports ?? [];
@@ -292,22 +305,20 @@ class ResultController extends Controller
             );
 
             event(new QueueUpdated());
-
             return back()->with('success', 'Workstation added successfully.');
         }
     }
 
     /**
-     * REVISE DEMOGRAPHICS: Edits schedule and demographics details from the hub or dedicated edit page.
-     * Preserves current appointment status (such as approved) while updating identity, address, and tests.
+     * REVISE DEMOGRAPHICS: Edits schedule, demographics, services, and packages from the hub.
      */
     public function reviseDemographics(Request $request, Appointment $appointment)
     {
         if (Gate::denies('isStaff')) abort(403);
 
         if ($appointment->status === 'released') {
-            if ($request->expectsJson()) {
-                return response()->json(['message' => 'Released appointments cannot be updated.'], 403);
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['message' => 'Released appointments are locked and cannot be modified.'], 403);
             }
             return redirect()->back()->with('error', 'Released appointments are locked and cannot be modified.');
         }
@@ -324,17 +335,75 @@ class ResultController extends Controller
             'patient_barangay' => 'required|string|max:255',
             'patient_city' => 'required|string|max:255',
             'patient_province' => 'required|string|max:255',
-            'service_ids' => 'required|array|min:1',
+            'service_ids' => 'nullable|array',
+            'service_ids.*' => 'exists:services,id',
+            'package_ids' => 'nullable|array',
+            'package_ids.*' => 'exists:packages,id',
             'payment_amount' => 'required|numeric|min:0',
             'reason' => 'required|string|min:5',
         ]);
+
+        if (empty($request->service_ids) && empty($request->package_ids)) {
+            $msg = 'At least one individual service or package must be selected.';
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['message' => $msg, 'errors' => ['service_ids' => [$msg]]], 422);
+            }
+            return back()->withErrors(['service_ids' => $msg])->withInput();
+        }
+
+        $selectedPackages = $request->filled('package_ids')
+            ? Package::with('services')->whereIn('id', $request->package_ids)->get()
+            : collect();
+
+        // Conflict check: service covered by selected package
+        if ($request->filled('service_ids') && $selectedPackages->isNotEmpty()) {
+            $overlappingServices = [];
+            foreach ($selectedPackages as $pkg) {
+                foreach ($pkg->services as $svc) {
+                    if (in_array($svc->id, $request->service_ids)) {
+                        $overlappingServices[] = "{$svc->name} (included in package {$pkg->name})";
+                    }
+                }
+            }
+
+            if (!empty($overlappingServices)) {
+                $failMsg = "Double selection conflict: " . implode(', ', $overlappingServices) . ". Individual services already covered by selected packages cannot be selected concurrently.";
+                if ($request->expectsJson() || $request->ajax()) {
+                    return response()->json(['message' => $failMsg, 'errors' => ['service_ids' => [$failMsg]]], 422);
+                }
+                return back()->withErrors(['service_ids' => $failMsg])->withInput();
+            }
+        }
+
+        // Conflict check: packages sharing identical services
+        if ($selectedPackages->count() > 1) {
+            $seenServiceIds = [];
+            $conflictingPackages = [];
+            foreach ($selectedPackages as $pkg) {
+                foreach ($pkg->services as $svc) {
+                    if (isset($seenServiceIds[$svc->id])) {
+                        $prevPkgName = $seenServiceIds[$svc->id];
+                        $conflictingPackages[] = "Package '{$pkg->name}' conflicts with '{$prevPkgName}' (both share '{$svc->name}')";
+                    } else {
+                        $seenServiceIds[$svc->id] = $pkg->name;
+                    }
+                }
+            }
+
+            if (!empty($conflictingPackages)) {
+                $failMsg = "Conflicting packages detected: " . implode('; ', $conflictingPackages) . ". Packages sharing identical individual services cannot be booked together.";
+                if ($request->expectsJson() || $request->ajax()) {
+                    return response()->json(['message' => $failMsg, 'errors' => ['package_ids' => [$failMsg]]], 422);
+                }
+                return back()->withErrors(['package_ids' => $failMsg])->withInput();
+            }
+        }
 
         $fName = strtoupper(trim($request->patient_first_name));
         $mName = ($request->patient_middle_name && strtoupper($request->patient_middle_name) !== 'N/A') 
             ? strtoupper(trim($request->patient_middle_name)) : 'N/A';
         $lName = strtoupper(trim($request->patient_last_name));
         $suffix = $request->filled('patient_suffix') ? strtoupper(trim($request->patient_suffix)) : '';
-
         $displayName = ($mName !== 'N/A') ? "{$fName} {$mName} {$lName}" : "{$fName} {$lName}";
         if (!empty($suffix)) {
             $displayName .= " {$suffix}";
@@ -356,7 +425,8 @@ class ResultController extends Controller
             'payment_amount' => $request->payment_amount,
         ]);
 
-        $appointment->services()->sync($request->service_ids);
+        $appointment->services()->sync($request->service_ids ?? []);
+        $appointment->packages()->sync($request->package_ids ?? []);
 
         ActivityLog::record(
             'DEMOGRAPHICS REVISED',
@@ -371,27 +441,31 @@ class ResultController extends Controller
         $customId = $request->input('custom_id');
 
         if ($from === 'radio' || $from === 'radiology') {
-            return redirect()->route('workstation.radiology', $appointment->id)
-                ->with('success', 'Patient details and services revised successfully.');
+            $redirectUrl = route('workstation.radiology', $appointment->id);
         } elseif ($from === 'lab') {
-            return redirect()->route('workstation.lab', $appointment->id)
-                ->with('success', 'Patient details and services revised successfully.');
+            $redirectUrl = route('workstation.lab', $appointment->id);
         } elseif ($from === 'med_cert' || $from === 'medical') {
-            return redirect()->route('workstation.med_cert', $appointment->id)
-                ->with('success', 'Patient details and services revised successfully.');
+            $redirectUrl = route('workstation.med_cert', $appointment->id);
         } elseif ($from === 'drug') {
-            return redirect()->route('workstation.drug', $appointment->id)
-                ->with('success', 'Patient details and services revised successfully.');
+            $redirectUrl = route('workstation.drug', $appointment->id);
         } elseif ($from === 'custom' && $customId) {
-            return redirect()->route('workstation.custom', [$appointment->id, $customId])
-                ->with('success', 'Patient details and services revised successfully.');
+            $redirectUrl = route('workstation.custom', [$appointment->id, $customId]);
         } elseif ($from === 'hub') {
-            return redirect()->route('appointments.encode', $appointment->id)
-                ->with('success', 'Patient details and services revised successfully.');
+            $redirectUrl = route('appointments.encode', $appointment->id);
+        } else {
+            $redirectUrl = route('appointments.index', ['view' => 'queue', 'id' => $appointment->id]);
         }
 
-        return redirect()->route('appointments.index', ['view' => 'queue', 'id' => $appointment->id])
-            ->with('success', 'Patient details and services revised successfully.');
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Patient demographics and tests updated successfully.',
+                'appointment' => $appointment->fresh(['services', 'packages.services', 'user', 'dependent']),
+                'redirect' => $redirectUrl,
+            ], 200);
+        }
+
+        return redirect($redirectUrl)->with('success', 'Patient details and services revised successfully.');
     }
 
     /**
@@ -426,29 +500,45 @@ class ResultController extends Controller
     }
 
     /**
-     * ACCESS: Enforces privacy shield and converts raw images to password-secured PDFs.
+     * ACCESS: Enforces privacy rules and converts raw images to password-secured PDFs.
+     * 
+     * PRIVACY RULE ENFORCEMENT:
+     * - Standard/Normal Bulk: The batch creator/maker CANNOT view or download the results of members.
+     * - Recognized Organization: The authorized representative CAN view and download released results.
      */
     public function access(Appointment $appointment, $type, $mode)
     {
         $user = Auth::user();
-
-        $isOwner = ($user->id === $appointment->user_id)
-            || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email))
-            || ($appointment->dependent_id && $user->dependents()->where('id', $appointment->dependent_id)->exists());
-
         $isStaff = $user->isEmployee();
 
-        // Privacy Shield for Batch Coordinators: ONLY restricts viewing unreleased individual raw worksheets of other people.
-        if ($appointment->status !== 'released' && $appointment->batch_id && $user->id === $appointment->user_id && strtolower($appointment->patient_email ?? '') !== strtolower($user->email)) {
-            abort(403, 'Privacy Shield: Batch coordinators are restricted from viewing individual patient worksheets prior to clinical release.');
+        $isPatientSelf = ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email));
+        $isDependentOwner = ($appointment->dependent_id && $user->dependents()->where('id', $appointment->dependent_id)->exists());
+        $isDirectBookingUser = ($user->id === $appointment->user_id && empty($appointment->batch_id));
+
+        // Batch / Bulk Coordinator Check
+        $isBatchCoordinator = ($user->id === $appointment->user_id && !empty($appointment->batch_id));
+        $isRecognizedOrgBatch = !empty($appointment->organization_id);
+
+        if ($isBatchCoordinator && !$isPatientSelf) {
+            // Normal Bulk: The maker of the bulk appointment CANNOT see the results of the members
+            if (!$isRecognizedOrgBatch) {
+                abort(403, 'Privacy Protection: Coordinators of standard bulk bookings cannot view or download individual patient clinical results.');
+            }
+
+            // Recognized Organization Bulk: The representative CAN view results, but strictly AFTER clinical release
+            if ($appointment->status !== 'released') {
+                abort(403, 'Privacy Shield: Organization representatives cannot view individual clinical results prior to medical release.');
+            }
         }
+
+        $isOwner = $isPatientSelf || $isDependentOwner || $isDirectBookingUser || ($isBatchCoordinator && $isRecognizedOrgBatch);
 
         if (!$isOwner && !$isStaff) {
             abort(403, 'Unauthorized access: You do not have permission to view or download this clinical result.');
         }
 
         // Staff members who are NOT the patient owner must pass the Reason-Gate
-        if ($isStaff && !$isOwner) {
+        if ($isStaff && !$isPatientSelf && !$isDependentOwner && !$isDirectBookingUser) {
             if (!session()->has("access_granted_{$appointment->id}_{$type}")) {
                 return redirect()->route('appointments.index')->with('error', 'Clinical authorization required.');
             }
@@ -506,6 +596,7 @@ class ResultController extends Controller
                 $mimeType = 'image/' . $ext;
                 if ($ext === 'jpg' || $ext === 'jfif') $mimeType = 'image/jpeg';
                 $base64Image = 'data:' . $mimeType . ';base64,' . $imageData;
+
                 $dimensions = @getimagesizefromstring($fileContents);
                 $imgWidth = $dimensions[0] ?? null;
                 $imgHeight = $dimensions[1] ?? null;
@@ -556,16 +647,28 @@ class ResultController extends Controller
     }
 
     /**
-     * FORWARD TO EMAIL: Triggers compiler to bundle and mail password-protected PDFs to patient.
+     * FORWARD TO EMAIL: Triggers compiler to bundle and mail password-protected PDFs.
      */
     public function forwardToEmail(Request $request, Appointment $appointment)
     {
         $user = auth()->user();
-        $isOwner = ($user->id === $appointment->user_id)
-            || ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email))
-            || ($appointment->dependent_id && $user->dependents()->where('id', $appointment->dependent_id)->exists());
+        $isStaff = $user->isEmployee();
 
-        if (!$isOwner && !$user->isEmployee()) {
+        $isPatientSelf = ($appointment->patient_email && strtolower($user->email) === strtolower($appointment->patient_email));
+        $isDependentOwner = ($appointment->dependent_id && $user->dependents()->where('id', $appointment->dependent_id)->exists());
+        $isDirectBookingUser = ($user->id === $appointment->user_id && empty($appointment->batch_id));
+
+        $isBatchCoordinator = ($user->id === $appointment->user_id && !empty($appointment->batch_id));
+        $isRecognizedOrgBatch = !empty($appointment->organization_id);
+
+        // Standard bulk coordinators cannot forward or access individual members' results
+        if ($isBatchCoordinator && !$isPatientSelf && !$isRecognizedOrgBatch) {
+            abort(403, 'Privacy Protection: Coordinators of standard bulk bookings cannot access or forward individual patient clinical results.');
+        }
+
+        $isOwner = $isPatientSelf || $isDependentOwner || $isDirectBookingUser || ($isBatchCoordinator && $isRecognizedOrgBatch);
+
+        if (!$isOwner && !$isStaff) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -626,13 +729,13 @@ class ResultController extends Controller
         $email = $appointment->patient_email ?: ($appointment->user?->email);
         if (!$email) return;
 
-        // NOTE: Only assign single individual bookings to existing users. Bulk appointments MUST maintain their maker's user_id.
+        // Only assign single individual bookings to existing users. Bulk appointments MUST maintain their maker's user_id.
         $existingUser = User::where('email', $email)->first();
         if ($existingUser && $appointment->user_id !== $existingUser->id && empty($appointment->batch_id)) {
             $appointment->update(['user_id' => $existingUser->id]);
         }
 
-        // 1. Resolve Birthdate cleanly (fallback chain: appointment -> dependent -> user)
+        // 1. Resolve Birthdate cleanly
         $rawBirthdate = $appointment->patient_birthdate 
             ?? $appointment->dependent?->birthdate 
             ?? $appointment->user?->birthdate;
@@ -678,7 +781,6 @@ class ResultController extends Controller
         }
 
         $password = "{$m}{$d}{$y}{$initials}";
-
         Log::info("PDF Decryption Password generated for Appointment #{$appointment->id} ({$rawFullName}): {$password}");
 
         $promoUrl = route('register', [
@@ -721,7 +823,6 @@ class ResultController extends Controller
                     'reportPages' => $reportPages,
                     'xrayPages' => $xrayPages
                 ]);
-
                 $pdf->setEncryption($password);
                 $attachments[] = [
                     'data' => $pdf->output(),
@@ -734,6 +835,7 @@ class ResultController extends Controller
             $column = $fileMap[$type] ?? null;
             $filePath = $res->$column;
             $isImage = false;
+
             if ($column && $filePath) {
                 $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
                 $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'jfif']);
@@ -745,6 +847,7 @@ class ResultController extends Controller
                 $mimeType = 'image/' . $ext;
                 if ($ext === 'jpg' || $ext === 'jfif') $mimeType = 'image/jpeg';
                 $base64Image = 'data:' . $mimeType . ';base64,' . $imageData;
+
                 $dimensions = @getimagesizefromstring($fileContents);
                 $imgWidth = $dimensions[0] ?? null;
                 $imgHeight = $dimensions[1] ?? null;
@@ -771,7 +874,7 @@ class ResultController extends Controller
             ];
         }
 
-        // Dynamically capture, convert, and attach verified custom worksheets securely
+        // Verified custom worksheets
         $customs = $res->customWorkstationResults()->where('status', 'verified')->get();
         foreach ($customs as $custom) {
             $filePath = $custom->scan_path;
@@ -783,6 +886,7 @@ class ResultController extends Controller
                     $mimeType = 'image/' . $ext;
                     if ($ext === 'jpg' || $ext === 'jfif') $mimeType = 'image/jpeg';
                     $base64Image = 'data:' . $mimeType . ';base64,' . $imageData;
+
                     $dimensions = @getimagesizefromstring($fileContents);
                     $imgWidth = $dimensions[0] ?? null;
                     $imgHeight = $dimensions[1] ?? null;
@@ -815,34 +919,32 @@ class ResultController extends Controller
             $message->to($email)
                 ->subject('Your Medical Results are Ready - Medscreen')
                 ->html("
-                <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
-                    <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
-                        <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
-                    </div>
-                    <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
-                        <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$patientFirstName},</h3>
-                        <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Your secure, password-protected clinical results have been successfully released. Please find the encrypted PDF documents attached to this email.</p>
-                        
-                        <div style='background-color: #f8fafc; border-left: 4px solid #19D38C; padding: 20px; margin: 30px 0; border-radius: 6px;'>
-                            <strong style='color: #1c232d; display: block; margin-bottom: 8px; font-size: 16px;'>PDF Decryption Password:</strong>
-                            <span style='font-size: 14px; color: #4a5568; line-height: 1.5;'>
-                                Your files are secured using your personal password pattern:<br>
-                                <strong style='color: #15b376; font-size: 15px;'>MMDDYYYY + Capitalized Initials</strong><br>
-                                <span style='color: #718096; font-size: 12px; display: block; margin-top: 6px;'>Example: For birthdate October 24, 2005 & initials JDC, the password is <strong>10242005JDC</strong></span>
-                            </span>
+                    <div style='background-color: #ffffff; font-family: sans-serif; margin: 0; padding: 0; width: 100%; color: #1c232d;'>
+                        <div style='background-color: #1C232D; padding: 30px; text-align: center; border-bottom: 4px solid #19D38C;'>
+                            <span style='color: #ffffff; font-weight: 800; font-size: 26px; letter-spacing: 1px;'>MED<span style='color: #19D38C;'>SCREEN</span></span>
                         </div>
-
-                        " . (($hasAccount || $isForward) ? "" : "
-                        <div style='border: 1.5px dashed #19D38C; background-color: rgba(25, 211, 140, 0.03); padding: 25px; text-align: center; border-radius: 8px; margin: 30px 0;'>
-                            <h4 style='margin-top: 0; color: #1c232d; font-size: 18px;'>Activate Your Permanent Portal</h4>
-                            <p style='font-size: 14px; color: #4a5568; margin-bottom: 20px; line-height: 1.5;'>A temporary profile has been registered for you. Click below to secure your credentials and access your lifetime clinical history logs.</p>
-                            <a href='{$promoUrl}' style='display: inline-block; background-color: #19D38C; color: #1C232D; font-weight: bold; text-decoration: none; padding: 12px 30px; border-radius: 6px;'>ACTIVATE PROFILE</a>
+                        <div style='padding: 40px 20px; max-width: 800px; margin: 0 auto;'>
+                            <h3 style='margin-top: 0; color: #1c232d; font-size: 20px;'>Dear {$patientFirstName},</h3>
+                            <p style='line-height: 1.6; color: #4a5568; font-size: 15px;'>Your secure, password-protected clinical results have been successfully released. Please find the encrypted PDF documents attached to this email.</p>
+                            
+                            <div style='background-color: #f8fafc; border-left: 4px solid #19D38C; padding: 20px; margin: 30px 0; border-radius: 6px;'>
+                                <strong style='color: #1c232d; display: block; margin-bottom: 8px; font-size: 16px;'>PDF Decryption Password:</strong>
+                                <span style='font-size: 14px; color: #4a5568; line-height: 1.5;'>
+                                    Your files are secured using your personal password pattern:<br>
+                                    <strong style='color: #15b376; font-size: 15px;'>MMDDYYYY + Capitalized Initials</strong><br>
+                                    <span style='color: #718096; font-size: 12px; display: block; margin-top: 6px;'>Example: For birthdate October 24, 2005 & initials JDC, the password is <strong>10242005JDC</strong></span>
+                                </span>
+                            </div>
+                            " . (($hasAccount || $isForward) ? "" : "
+                            <div style='border: 1.5px dashed #19D38C; background-color: rgba(25, 211, 140, 0.03); padding: 25px; text-align: center; border-radius: 8px; margin: 30px 0;'>
+                                <h4 style='margin-top: 0; color: #1c232d; font-size: 18px;'>Activate Your Permanent Portal</h4>
+                                <p style='font-size: 14px; color: #4a5568; margin-bottom: 20px; line-height: 1.5;'>A temporary profile has been registered for you. Click below to secure your credentials and access your lifetime clinical history logs.</p>
+                                <a href='{$promoUrl}' style='display: inline-block; background-color: #19D38C; color: #1C232D; font-weight: bold; text-decoration: none; padding: 12px 30px; border-radius: 6px;'>ACTIVATE PROFILE</a>
+                            </div>
+                            ") . "
+                            <p style='margin-top: 30px; line-height: 1.6; color: #4a5568; font-size: 15px;'>Best regards,<br><strong>Medscreen Diagnostic Laboratory</strong></p>
                         </div>
-                        ") . "
-
-                        <p style='margin-top: 30px; line-height: 1.6; color: #4a5568; font-size: 15px;'>Best regards,<br><strong>Medscreen Diagnostic Laboratory</strong></p>
                     </div>
-                </div>
                 ");
 
             foreach ($attachments as $file) {
@@ -853,13 +955,13 @@ class ResultController extends Controller
         if (!$isForward && $appointment->results_released_at) {
             $patientUser = $appointment->user;
             if ($patientUser) {
-                $patientUser->notify(new \App\Notifications\AppointmentNotification([
+                $patientUser->notify(new AppointmentNotification([
                     'title' => 'Clinical Record Corrected',
                     'message' => "Your clinical results for Appointment #{$appointment->id} have been updated/corrected by the laboratory staff. Please review your updated files.",
                     'url' => route('patient.history'),
                     'type' => 'success'
                 ]));
-                event(new \App\Events\NotificationSent($patientUser->id, 'Clinical Record Corrected', "Your clinical results for Appointment #{$appointment->id} have been updated."));
+                event(new NotificationSent($patientUser->id, 'Clinical Record Corrected', "Your clinical results for Appointment #{$appointment->id} have been updated."));
             }
         }
 
@@ -981,7 +1083,7 @@ class ResultController extends Controller
      */
     public function verifyPublic(Appointment $appointment)
     {
-        $appointment->load(['result', 'services']);
+        $appointment->load(['result', 'services', 'packages.services']);
         return view('verify-result', compact('appointment'));
     }
 

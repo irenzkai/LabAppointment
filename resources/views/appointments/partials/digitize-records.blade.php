@@ -505,7 +505,7 @@ function addProcedureBadgeByName(testName) {
 
     const badgeId = 'badge_' + Math.random().toString(36).substr(2, 9);
     const badgeHtml = `
-        <span class="badge border uppercase px-2.5 py-1.5 rounded d-inline-flex align-items-center gap-1.5" id="${badgeId}" style="background-color: rgba(25, 211, 140, 0.08); font-size: 0.75rem; border-color: var(--brand-accent) !important; color: var(--brand-accent) !important;">
+        <span class="badge border uppercase px-2.5 py-1.5 rounded d-inline-flex align-items-center gap-1" id="${badgeId}" style="background-color: rgba(25, 211, 140, 0.08); font-size: 0.75rem; border-color: var(--brand-accent) !important; color: var(--brand-accent) !important;">
             <span style="color: var(--brand-accent) !important; font-weight: 700;">${testName.toUpperCase()}</span>
             <input type="hidden" name="tests_requested[]" value="${testName}">
             <i class="bi bi-x cursor-pointer ms-1 text-danger" style="font-weight: 800; font-size: 1rem;" onclick="removeProcedureBadge('${badgeId}', '${testName}')"></i>

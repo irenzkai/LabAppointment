@@ -1,22 +1,10 @@
+<!-- resources/views/appointments/partials/list-card.blade.php -->
 @php
-// Determine badge color mappings based on clinical and expiration status
 $groupCount = $groupCount ?? 1;
-$statusPriority = [
-    'expired' => 1,
-    'returned' => 2,
-    'retest' => 3,
-    'canceled' => 4,
-    'pending' => 5,
-    'approved' => 6,
-    'tested' => 7,
-    'encoded' => 8,
-    'released' => 9,
-];
-
 $isStaff = !empty($is_staff) && auth()->check() && auth()->user()->isEmployee();
 $isHistoryView = !empty($isHistory);
 
-// A card is only rendered as a consolidated bulk batch if it has a batch_id, we are NOT in History view,
+// A card is rendered as a consolidated bulk batch if it has a batch_id, not in History view,
 // and the user is either Staff or the Creator/Maker of that bulk batch.
 $isBulkCard = ($app->batch_id && !$isHistoryView && ($isStaff || (auth()->check() && auth()->id() === $app->user_id)));
 
@@ -29,37 +17,65 @@ if ($isBulkCard) {
     }
     $batchApps = $batchAppsQuery->get();
     $groupCount = $batchApps->count();
-    $lowestPriority = 999;
-    $lowestStatus = $app->status;
 
-    foreach ($batchApps as $subApp) {
-        $effStatus = $subApp->isExpired() ? 'expired' : $subApp->status;
-        $priority = $statusPriority[$effStatus] ?? 99;
-        if ($priority < $lowestPriority) {
-            $lowestPriority = $priority;
-            $lowestStatus = $effStatus;
+    // Filter out voided and canceled for active milestone triage
+    $activeApps = $batchApps->reject(fn($a) => $a->isVoided() || $a->status === 'canceled');
+
+    // Active milestone priority (lowest active bottleneck first, strictly non-voided/non-canceled)
+    $activePriority = [
+        'returned'     => 1,
+        'needs_review' => 2,
+        'retest'       => 3,
+        'pending'      => 4,
+        'approved'     => 5,
+        'tested'       => 6,
+        'encoded'      => 7,
+        'released'     => 8,
+    ];
+
+    if ($activeApps->isNotEmpty()) {
+        $lowestPriority = 999;
+        $lowestStatus = 'released';
+
+        foreach ($activeApps as $subApp) {
+            $priority = $activePriority[$subApp->status] ?? 99;
+            if ($priority < $lowestPriority) {
+                $lowestPriority = $priority;
+                $lowestStatus = $subApp->status;
+            }
         }
+        $finalStatus = $lowestStatus;
+        $isVoided = false;
+    } else {
+        // All appointments in batch are either voided or canceled
+        $allCanceled = $batchApps->every(fn($a) => $a->status === 'canceled');
+        $finalStatus = $allCanceled ? 'canceled' : 'voided';
+        $isVoided = ($finalStatus === 'voided');
     }
-    $isExpired = ($lowestStatus === 'expired');
-    $finalStatus = $lowestStatus;
 } else {
-    $isExpired = $app->isExpired();
-    $finalStatus = $isExpired ? 'expired' : $app->status;
+    $isVoided = $app->isVoided();
+    $finalStatus = $isVoided ? 'voided' : $app->status;
 }
 
 $statusColor = match($finalStatus) {
-    'expired' => 'danger',
-    'pending' => 'warning',
-    'approved' => 'info',
-    'tested' => 'info',
-    'encoded' => 'info',
-    'released' => 'accent',
-    'returned' => 'danger',
-    'retest' => 'danger',
-    'canceled' => 'danger',
-    default => 'secondary'
+    'voided', 'expired' => 'danger',
+    'pending'           => 'warning',
+    'needs_review'      => 'warning',
+    'approved'          => 'info',
+    'tested'            => 'info',
+    'encoded'           => 'info',
+    'released'          => 'accent',
+    'returned'          => 'danger',
+    'retest'            => 'danger',
+    'canceled'          => 'danger',
+    default             => 'secondary'
 };
-$statusLabel = strtoupper($finalStatus);
+
+$statusLabel = match($finalStatus) {
+    'voided', 'expired' => 'VOIDED',
+    'needs_review'      => 'REVIEW NEEDED',
+    default             => strtoupper(str_replace('_', ' ', $finalStatus))
+};
 
 // Determine the latest card edit timestamp in the queue list (ONLY if edited after clinical release)
 $latestCardEditTimestamp = null;
@@ -97,12 +113,18 @@ $formattedTime = $app->time_slot ? date('h:i A', strtotime($app->time_slot)) : '
      @if($app->batch_id) data-batch-id="{{ $app->batch_id }}" @endif
      onclick="showAppointmentDetails('{{ $app->id }}')">
 
-    {{-- Card Header: Patient Name & Status Badge --}}
-    <div class="d-flex justify-content-between align-items-center mb-2">
+    {{-- Card Header: Patient / Organization Name & Clean Synchronized Status Badge --}}
+    <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
         <div class="fw-bold text-main fs-6 text-truncate" style="max-width: 180px;">
             {{ ($isBulkCard && $groupCount > 1) ? ($app->organization_name ?: $app->patient_name) : $app->patient_name }}
         </div>
-        <span class="badge border border-{{ $statusColor }} text-{{ $statusColor }} uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">
+        <span class="badge border border-{{ $statusColor }} text-{{ $statusColor == 'accent' ? 'success' : $statusColor }} uppercase text-nowrap" 
+              style="font-size: 0.65rem; letter-spacing: 0.5px; background-color: rgba(25, 211, 140, 0.08);"
+              @if($isVoided)
+                  data-bs-toggle="tooltip" 
+                  data-bs-placement="top" 
+                  title="Appointment voided due to patient not arriving on scheduled time without prior notice."
+              @endif>
             {{ $statusLabel }}
         </span>
     </div>
@@ -112,22 +134,46 @@ $formattedTime = $app->time_slot ? date('h:i A', strtotime($app->time_slot)) : '
         <div>
             <div><i class="bi bi-calendar2 me-1"></i> {{ $formattedDate }}</div>
             <div class="text-accent mt-0.5"><i class="bi bi-clock me-1"></i> {{ $formattedTime }}</div>
+            
             @if($latestCardEditTimestamp)
                 <div class="text-warning fw-bold mt-0.5" style="font-size: 0.7rem;">
                     <i class="bi bi-pencil-square me-1"></i>Edited: {{ $latestCardEditTimestamp->format('M d, Y | h:i A') }}
                 </div>
             @endif
-            @if($finalStatus == 'retest')
-                <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;">
-                    <i class="bi bi-exclamation-triangle-fill me-1"></i>Retest Required
-                </div>
-            @endif
-            @if($finalStatus == 'canceled')
-                <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;">
-                    <i class="bi bi-x-circle-fill me-1"></i>Appointment Canceled
-                </div>
+
+            @if(!$isBulkCard)
+                @if($finalStatus == 'needs_review')
+                    <div class="text-warning fw-bold mt-1" style="font-size: 0.72rem;">
+                        <i class="bi bi-pencil-square me-1"></i>Action: Review Adjustments
+                    </div>
+                @endif
+
+                @if($finalStatus == 'retest')
+                    <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>Retest Required
+                    </div>
+                @endif
+
+                @if($finalStatus == 'returned')
+                    <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;">
+                        <i class="bi bi-arrow-return-left me-1"></i>Corrections Needed
+                    </div>
+                @endif
+
+                @if($finalStatus == 'canceled')
+                    <div class="text-danger fw-bold mt-1" style="font-size: 0.72rem;">
+                        <i class="bi bi-x-circle-fill me-1"></i>Appointment Canceled
+                    </div>
+                @endif
+
+                @if($isVoided)
+                    <div class="text-muted fst-italic mt-1" style="font-size: 0.72rem;" title="Voided due to no-show without prior notice">
+                        <i class="bi bi-info-circle me-1"></i>Voided (No-Show)
+                    </div>
+                @endif
             @endif
         </div>
+
         <div class="text-end">
             @if($isBulkCard)
                 <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-1 rounded">

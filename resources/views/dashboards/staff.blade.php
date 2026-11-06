@@ -9,15 +9,15 @@
             <p class="text-secondary small mb-0">Overview of clinical operations, appointment workflows, and patient management.</p>
         </div>
         <div class="flex-shrink-0 queue-btn-box">
-            <a href="{{ route('appointments.index', ['view' => 'queue']) }}" class="btn btn-accent fw-bold btn-sm py-2 px-3.5 uppercase shadow-sm text-decoration-none d-inline-flex align-items-center gap-1.5" style="border-radius: 8px; white-space: nowrap; font-size: 0.78rem;">
+            <a href="{{ route('appointments.index', ['view' => 'queue']) }}" class="btn btn-accent fw-bold btn-sm py-2 px-3.5 uppercase shadow-sm text-decoration-none d-inline-flex align-items-center gap-1" style="border-radius: 8px; white-space: nowrap; font-size: 0.78rem;">
                 <i class="bi bi-list-check fs-6"></i>
                 <span>Open Master Queue</span>
             </a>
         </div>
     </div>
 
-    {{-- Management Quick Access Cards (Includes User List for Lab History) --}}
-    <div class="row g-3 mb-4 row-cols-2 row-cols-md-3 row-cols-xl-5">
+    {{-- Management Quick Access Cards (7-Card Responsive Grid) --}}
+    <div class="row g-3 mb-4 row-cols-2 row-cols-md-3 row-cols-xl-4">
         <div class="col">
             <a href="{{ route('services.manage') }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
                 <div class="d-flex align-items-center gap-2 gap-sm-3">
@@ -33,7 +33,7 @@
                 <div class="d-flex align-items-center gap-2 gap-sm-3">
                     <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-kanban"></i></div>
                     <div class="min-w-0">
-                        <div class="fw-bold text-main small uppercase text-truncate">Appointment List</div>
+                        <div class="fw-bold text-main small uppercase text-truncate">Master Queue</div>
                     </div>
                 </div>
             </a>
@@ -44,6 +44,16 @@
                     <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-people"></i></div>
                     <div class="min-w-0">
                         <div class="fw-bold text-main small uppercase text-truncate">User List</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col">
+            <a href="{{ route('organization.index') }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
+                <div class="d-flex align-items-center gap-2 gap-sm-3">
+                    <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-buildings"></i></div>
+                    <div class="min-w-0">
+                        <div class="fw-bold text-main small uppercase text-truncate">Organization Hub</div>
                     </div>
                 </div>
             </a>
@@ -64,6 +74,16 @@
                     <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-clock-history"></i></div>
                     <div class="min-w-0">
                         <div class="fw-bold text-main small uppercase text-truncate">Schedule Editor</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col">
+            <a href="{{ route('admin.reports') }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
+                <div class="d-flex align-items-center gap-2 gap-sm-3">
+                    <div class="text-accent fs-3 flex-shrink-0"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                    <div class="min-w-0">
+                        <div class="fw-bold text-main small uppercase text-truncate">Reports & Exports</div>
                     </div>
                 </div>
             </a>
@@ -95,7 +115,7 @@
         </div>
     </div>
 
-    {{-- Status Breakdown Metrics (Includes Expired Status) --}}
+    {{-- Status Breakdown Metrics (Includes Voided Status) --}}
     <div class="card p-3 p-sm-4 border-secondary bg-card shadow-sm mb-4">
         <h6 class="text-accent fw-bold uppercase small mb-3"><i class="bi bi-pie-chart-fill me-1.5"></i> Appointment Status Overview</h6>
         <div class="row g-2 text-center">
@@ -149,7 +169,7 @@
             </div>
             <div class="col-6 col-sm-3 col-md-2">
                 <div class="p-2 p-sm-2.5 rounded border border-danger border-opacity-25 bg-danger bg-opacity-10 h-100">
-                    <small class="text-danger d-block fw-bold fs-x-small uppercase text-truncate">Expired</small>
+                    <small class="text-danger d-block fw-bold fs-x-small uppercase text-truncate">Voided</small>
                     <span class="fs-6 fs-sm-5 fw-bold text-danger">{{ $statusCounts['expired'] }}</span>
                 </div>
             </div>
@@ -273,6 +293,16 @@
         justify-content: center !important;
     }
 }
+
+/* Quick Access Cards Hover Feedback */
+.hover-card {
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.hover-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--brand-accent) !important;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08) !important;
+}
 </style>
 
 @push('scripts')
@@ -352,12 +382,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderTrendChart('monthly');
 
-    // 2. Status Doughnut Chart
+    // 2. Status Doughnut Chart (With Voided Nomenclature)
     const statusCtx = document.getElementById('statusDoughnutChart').getContext('2d');
     new Chart(statusCtx, {
         type: 'doughnut',
         data: {
-            labels: ['Pending', 'Approved', 'Tested', 'Encoded', 'Released', 'Returned', 'Retest', 'Canceled', 'Expired'],
+            labels: ['Pending', 'Approved', 'Tested', 'Encoded', 'Released', 'Returned', 'Retest', 'Canceled', 'Voided'],
             datasets: [{
                 data: [
                     {{ $statusCounts['pending'] }},

@@ -47,12 +47,21 @@
                                 APPOINTMENTS
                             </a>
                         </li>
+
+                        {{-- Patient Side: Conditional Organization Hub (Only for Approved Recognized Orgs) --}}
+                        @if(Auth::user()->isRecognizedOrg())
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('organization.*') ? 'active' : '' }}" href="{{ route('organization.index') }}">
+                                    ORGANIZATION HUB
+                                </a>
+                            </li>
+                        @endif
                     @endif
 
                     {{-- Admin Dropdown --}}
                     @if(Auth::user()->isAdmin())
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle {{ request()->routeIs('admin.*') || request()->routeIs('services.manage') ? 'active' : '' }}" href="#" id="adminMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <a class="nav-link dropdown-toggle {{ request()->routeIs('admin.*') || request()->routeIs('services.manage') || request()->routeIs('organization.*') ? 'active' : '' }}" href="#" id="adminMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 ADMIN PANEL
                             </a>
                             <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary mt-2" aria-labelledby="adminMenuDropdown">
@@ -70,6 +79,11 @@
                                 <li>
                                     <a class="dropdown-item small py-2 {{ request()->routeIs('appointments.index') && request('view') === 'queue' ? 'active' : '' }}" href="{{ route('appointments.index', ['view' => 'queue']) }}">
                                         <i class="bi bi-kanban me-2 text-accent"></i>Master Queue
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('organization.*') ? 'active' : '' }}" href="{{ route('organization.index') }}">
+                                        <i class="bi bi-buildings me-2 text-accent"></i>Organization Hub
                                     </a>
                                 </li>
                                 <li>
@@ -102,7 +116,7 @@
                     @elseif(Auth::user()->isEmployee())
                         {{-- Staff Dropdown --}}
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle {{ request()->routeIs('staff.panel') || request()->routeIs('services.manage') || request()->routeIs('admin.payment-providers.*') || request()->routeIs('admin.appointment-settings') || request()->routeIs('admin.users.*') ? 'active' : '' }}" href="#" id="staffMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <a class="nav-link dropdown-toggle {{ request()->routeIs('staff.panel') || request()->routeIs('services.manage') || request()->routeIs('admin.payment-providers.*') || request()->routeIs('admin.appointment-settings') || request()->routeIs('admin.users.*') || request()->routeIs('admin.reports') || request()->routeIs('organization.*') ? 'active' : '' }}" href="#" id="staffMenuDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 STAFF PANEL
                             </a>
                             <ul class="dropdown-menu dropdown-menu-dark shadow-lg border-secondary mt-2" aria-labelledby="staffMenuDropdown">
@@ -123,6 +137,11 @@
                                     </a>
                                 </li>
                                 <li>
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('organization.*') ? 'active' : '' }}" href="{{ route('organization.index') }}">
+                                        <i class="bi bi-buildings me-2 text-accent"></i>Organization Hub
+                                    </a>
+                                </li>
+                                <li>
                                     <a class="dropdown-item small py-2 {{ request()->routeIs('services.manage') ? 'active' : '' }}" href="{{ route('services.manage') }}">
                                         <i class="bi bi-list-stars me-2 text-accent"></i>Services List
                                     </a>
@@ -135,6 +154,11 @@
                                 <li>
                                     <a class="dropdown-item small py-2 {{ request()->routeIs('admin.appointment-settings') ? 'active' : '' }}" href="{{ route('admin.appointment-settings') }}">
                                         <i class="bi bi-clock-history me-2 text-accent"></i>Schedule Editor
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item small py-2 {{ request()->routeIs('admin.reports') ? 'active' : '' }}" href="{{ route('admin.reports') }}">
+                                        <i class="bi bi-file-earmark-bar-graph me-2 text-accent"></i>Reports & Exports
                                     </a>
                                 </li>
                             </ul>
@@ -287,6 +311,16 @@
                                     <i class="bi bi-calendar-check me-2"></i> My Appointments
                                 </a>
                             </li>
+
+                            {{-- Patient Side Recognized Org Link in Profile Menu --}}
+                            @if(Auth::user()->isRecognizedOrg())
+                                <li>
+                                    <a class="dropdown-item small py-2 text-accent fw-bold {{ request()->routeIs('organization.*') ? 'active' : '' }}" href="{{ route('organization.index') }}">
+                                        <i class="bi bi-buildings me-2"></i> Organization Hub
+                                    </a>
+                                </li>
+                            @endif
+
                             <li>
                                 <a class="dropdown-item small py-2" href="{{ route('patient.history') }}">
                                     <i class="bi bi-clock-history me-2"></i> Medical History
@@ -505,6 +539,17 @@
                             <span>My Appointments</span>
                         </a>
                     </li>
+
+                    {{-- Patient Recognized Organization Link in Mobile Menu --}}
+                    @if(Auth::user()->isRecognizedOrg())
+                        <li>
+                            <a href="{{ route('organization.index') }}" class="mobile-nav-link {{ request()->routeIs('organization.*') ? 'active' : '' }}">
+                                <i class="bi bi-buildings"></i>
+                                <span>Organization Hub</span>
+                            </a>
+                        </li>
+                    @endif
+
                     <li>
                         <a href="{{ route('patient.history') }}" class="mobile-nav-link {{ request()->routeIs('patient.history') ? 'active' : '' }}">
                             <i class="bi bi-clock-history"></i>
@@ -539,6 +584,12 @@
                             <a href="{{ route('appointments.index', ['view' => 'queue']) }}" class="mobile-nav-link {{ request('view') === 'queue' || (request()->routeIs('appointments.index') && !request('view')) ? 'active' : '' }}">
                                 <i class="bi bi-kanban"></i>
                                 <span>Master Queue</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('organization.index') }}" class="mobile-nav-link {{ request()->routeIs('organization.*') ? 'active' : '' }}">
+                                <i class="bi bi-buildings"></i>
+                                <span>Organization Hub</span>
                             </a>
                         </li>
                         <li>
@@ -595,6 +646,12 @@
                             </a>
                         </li>
                         <li>
+                            <a href="{{ route('organization.index') }}" class="mobile-nav-link {{ request()->routeIs('organization.*') ? 'active' : '' }}">
+                                <i class="bi bi-buildings"></i>
+                                <span>Organization Hub</span>
+                            </a>
+                        </li>
+                        <li>
                             <a href="{{ route('services.manage') }}" class="mobile-nav-link {{ request()->routeIs('services.manage') ? 'active' : '' }}">
                                 <i class="bi bi-list-stars"></i>
                                 <span>Services List</span>
@@ -610,6 +667,12 @@
                             <a href="{{ route('admin.appointment-settings') }}" class="mobile-nav-link {{ request()->routeIs('admin.appointment-settings') ? 'active' : '' }}">
                                 <i class="bi bi-clock-history"></i>
                                 <span>Schedule Editor</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ route('admin.reports') }}" class="mobile-nav-link {{ request()->routeIs('admin.reports') ? 'active' : '' }}">
+                                <i class="bi bi-file-earmark-bar-graph"></i>
+                                <span>Reports & Exports</span>
                             </a>
                         </li>
                     @endif

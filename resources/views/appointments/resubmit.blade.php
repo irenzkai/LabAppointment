@@ -1,15 +1,33 @@
+<!-- resources/views/appointments/resubmit.blade.php -->
 @extends('layouts.app')
-
 @section('title', 'Resubmit Appointment #' . $appointment->id)
-
 @section('content')
 @php
     $isBulk = !is_null($appointment->batch_id);
     $isDependent = $appointment->dependent_id !== null;
     $isBulkCashless = $isBulk && ($appointment->payment_method === 'Cashless');
-    $maxBday = $isDependent ? now()->format('Y-m-d') : now()->subYears(18)->format('Y-m-d');
-    $minBday = $isDependent ? now()->subYears(18)->addDay()->format('Y-m-d') : '';
-    $selectedServiceIds = old('service_ids', $appointment->services->pluck('id')->toArray());
+    $isVoidedRecord = $isExpired || $appointment->isVoided();
+    $patientSex = strtolower($appointment->patient_sex ?? 'both');
+
+    // Evaluate staff suggestions if present
+    $suggested = $appointment->suggested_changes ?? [];
+    $hasSuggestions = !empty($suggested);
+    $useSuggestions = request()->has('use_suggestions') 
+        ? request()->boolean('use_suggestions') 
+        : $hasSuggestions;
+
+    if ($useSuggestions && $hasSuggestions) {
+        $selectedDate = old('appointment_date', $suggested['appointment_date'] ?? ($appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : ''));
+        $selectedTime = old('time_slot', $suggested['time_slot'] ?? $appointment->time_slot);
+        $selectedServiceIds = old('service_ids', $suggested['service_ids'] ?? $appointment->services->pluck('id')->toArray());
+        $selectedPackageIds = old('package_ids', $suggested['package_ids'] ?? $appointment->packages->pluck('id')->toArray());
+    } else {
+        $selectedDate = old('appointment_date', $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : '');
+        $selectedTime = old('time_slot', $appointment->time_slot);
+        $selectedServiceIds = old('service_ids', $appointment->services->pluck('id')->toArray());
+        $selectedPackageIds = old('package_ids', $appointment->packages->pluck('id')->toArray());
+    }
+
     $selectedPaymentMethod = old('payment_method', $appointment->payment_method ?? 'Cash');
 @endphp
 
@@ -22,9 +40,9 @@
             </h2>
             <p class="text-secondary mb-0 small">
                 @if($isBulk)
-                    Update patient details or preferred schedule for corporate batch <strong>{{ $appointment->organization_name }} (Batch #{{ $appointment->batch_id }})</strong>.
+                    Update preferred schedule or tests for corporate batch <strong>{{ $appointment->organization_name }} (Batch #{{ $appointment->batch_id }})</strong>.
                 @else
-                    Update your patient details, selected services, or visit schedule to resubmit for clinical review.
+                    Review patient details, adjust tests or health packages, and pick a visit schedule to resubmit for clinical review.
                 @endif
             </p>
         </div>
@@ -37,6 +55,37 @@
             </a>
         </div>
     </div>
+
+    {{-- SUGGESTIONS CONTEXT BANNER --}}
+    @if($hasSuggestions)
+        @if($useSuggestions)
+            <div class="alert alert-clinical border-accent bg-accent bg-opacity-10 p-3 rounded-3 mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2 shadow-sm">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-magic text-accent fs-4"></i>
+                    <div>
+                        <strong class="text-main d-block small uppercase" style="letter-spacing: 0.5px;">Staff Suggestions Applied</strong>
+                        <span class="text-muted smaller">The schedule and test recommendations proposed by clinical staff have been loaded into this form. You may adjust them before resubmitting.</span>
+                    </div>
+                </div>
+                <a href="{{ route('appointments.resubmit', [$appointment->id, 'use_suggestions' => 0]) }}" class="btn btn-sm btn-outline-secondary py-1 px-3 fw-bold text-nowrap" style="font-size: 0.72rem;">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Use Original Details Instead
+                </a>
+            </div>
+        @else
+            <div class="alert alert-clinical border-secondary bg-secondary bg-opacity-10 p-3 rounded-3 mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2 shadow-sm">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-info-circle text-secondary fs-4"></i>
+                    <div>
+                        <strong class="text-main d-block small uppercase" style="letter-spacing: 0.5px;">Using Original Booking Details</strong>
+                        <span class="text-muted smaller">You are currently editing your original booking parameters. Staff suggestions are not applied.</span>
+                    </div>
+                </div>
+                <a href="{{ route('appointments.resubmit', [$appointment->id, 'use_suggestions' => 1]) }}" class="btn btn-sm btn-outline-accent py-1 px-3 fw-bold text-nowrap" style="font-size: 0.72rem;">
+                    <i class="bi bi-magic me-1"></i>Apply Staff Suggestions
+                </a>
+            </div>
+        @endif
+    @endif
 
     {{-- STATUS CONTEXT ALERTS --}}
     @if($appointment->status === 'returned' && $appointment->return_reason)
@@ -69,19 +118,19 @@
                 </div>
             @endif
             <p class="mb-0 small text-main mt-1">
-                Submitting this form will update your information and place your record back into the active processing queue.
+                Submitting this form will update your visit schedule and place your record back into the active processing queue.
                 @if(!$isBulk && $appointment->payment_status === 'paid')
                     <br><strong class="text-warning">Payment Rollover:</strong> Your previously confirmed payment will be automatically rolled over to cover this resubmission. No new payment receipt is required.
                 @endif
             </p>
         </div>
-    @elseif($isExpired)
-        <div class="alert alert-clinical border-warning p-4 rounded-3 mb-4 shadow-sm">
+    @elseif($isVoidedRecord)
+        <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 text-danger p-4 rounded-3 mb-4 shadow-sm">
             <div class="d-flex align-items-center mb-2">
-                <i class="bi bi-clock-history fs-3 me-3 text-warning"></i>
+                <i class="bi bi-clock-history fs-3 me-3 text-danger"></i>
                 <div>
-                    <h5 class="fw-bold uppercase mb-0 text-warning">Rescheduling Expired Appointment</h5>
-                    <small class="text-secondary">This appointment passed its 24-hour unprogressed schedule window.</small>
+                    <h5 class="fw-bold uppercase mb-0 text-danger">Rescheduling Voided Appointment</h5>
+                    <small class="text-danger-50">Appointment updated to VOIDED due to patient not arriving on scheduled time without prior notice.</small>
                 </div>
             </div>
             <p class="mb-0 small text-main mt-1">
@@ -101,278 +150,262 @@
         <input type="hidden" name="reset_batch_payment" id="reset_batch_payment" value="0">
 
         <div class="row g-4 align-items-stretch">
-            {{-- LEFT COLUMN: PATIENT IDENTITY & ADDRESS --}}
+            {{-- LEFT COLUMN: PATIENT IDENTITY (READONLY VERIFIED RECORD) & REFERRAL --}}
             <div class="col-lg-6 d-flex flex-column gap-4">
-                {{-- 1. Patient Identity Card --}}
-                <div class="card p-4 border-secondary bg-card shadow-sm h-100">
-                    <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
-                        <i class="bi bi-person-bounding-box me-2"></i>1. Patient Identity & Demographics
-                    </h5>
+                {{-- 1. Patient Identity Card (Readonly) --}}
+                <div class="card p-4 border-secondary bg-card shadow-sm h-100" style="border-color: var(--border-color) !important;">
+                    <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom border-secondary border-opacity-10">
+                        <h5 class="text-accent fw-bold uppercase mb-0 small">
+                            <i class="bi bi-person-bounding-box me-2"></i>1. Verified Patient Record
+                        </h5>
+                        @if($isDependent)
+                            <a href="{{ route('profile.edit') }}#tab-dependents" target="_blank" class="small text-accent fw-bold text-decoration-none" style="font-size: 0.72rem;">
+                                <i class="bi bi-pencil-square me-1"></i>Edit Dependent Details
+                            </a>
+                        @elseif(!$isBulk)
+                            <a href="{{ route('profile.edit') }}" target="_blank" class="small text-accent fw-bold text-decoration-none" style="font-size: 0.72rem;">
+                                <i class="bi bi-pencil-square me-1"></i>Edit Profile Settings
+                            </a>
+                        @endif
+                    </div>
 
                     <div class="row g-3">
-                        {{-- First Name --}}
-                        <div class="col-md-4">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">First Name</label>
-                            <input type="text" name="patient_first_name" id="patient_first_name" class="form-control uppercase" value="{{ old('patient_first_name', $appointment->patient_first_name) }}" required>
-                            <div class="invalid-feedback d-none" id="err_patient_first_name"></div>
-                            @error('patient_first_name')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
+                        {{-- Patient Name --}}
+                        <div class="col-md-6 border-bottom border-secondary border-opacity-10 pb-2">
+                            <label class="small text-secondary fw-bold mb-1 uppercase fs-x-small">Patient Name</label>
+                            <div class="fw-bold text-main fs-6 text-truncate">{{ strtoupper($appointment->patient_name) }}</div>
                         </div>
 
-                        {{-- Middle Name --}}
-                        <div class="col-md-4">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <label class="small text-secondary fw-bold mb-0 uppercase">Middle Name</label>
-                                <div class="form-check form-switch mb-0">
-                                    <input class="form-check-input" type="checkbox" id="no_middle_name_toggle" onclick="toggleMiddleName(this)" {{ old('patient_middle_name', $appointment->patient_middle_name) === 'N/A' ? 'checked' : '' }}>
-                                    <label class="smaller text-muted" for="no_middle_name_toggle">None</label>
+                        {{-- Age & Biological Classification --}}
+                        <div class="col-md-6 border-bottom border-secondary border-opacity-10 pb-2">
+                            <label class="small text-secondary fw-bold mb-1 uppercase fs-x-small">Age & Classification</label>
+                            <div class="fw-bold text-main fs-6">
+                                {{ $appointment->patient_age !== 'N/A' ? $appointment->patient_age . ' YRS OLD' : 'AGE UNKNOWN' }}
+                                <span class="text-muted mx-1">&bull;</span>
+                                {{ strtoupper($appointment->patient_sex) }}
+                            </div>
+                        </div>
+
+                        {{-- Contact Phone --}}
+                        <div class="col-md-6 border-bottom border-secondary border-opacity-10 pb-2">
+                            <label class="small text-secondary fw-bold mb-1 uppercase fs-x-small">Contact Number</label>
+                            <div class="fw-bold text-main fs-6">
+                                <i class="bi bi-telephone text-accent me-1"></i>{{ $appointment->patient_phone }}
+                            </div>
+                        </div>
+
+                        {{-- Digital Results Email --}}
+                        <div class="col-md-6 border-bottom border-secondary border-opacity-10 pb-2">
+                            <label class="small text-secondary fw-bold mb-1 uppercase fs-x-small">Account Email</label>
+                            <div class="fw-bold text-main fs-6 text-truncate">
+                                <i class="bi bi-envelope text-accent me-1"></i>{{ $appointment->patient_email ?: ($appointment->user?->email ?? 'N/A') }}
+                            </div>
+                        </div>
+
+                        {{-- Registered Residential Address --}}
+                        <div class="col-12 pt-1">
+                            <label class="small text-secondary fw-bold mb-1 uppercase fs-x-small">Registered Clinical Address</label>
+                            <div class="fw-bold text-main small">
+                                <i class="bi bi-geo-alt text-accent me-1"></i>{{ strtoupper($appointment->patient_address) }}
+                            </div>
+                        </div>
+
+                        @if($isBulk)
+                            <div class="col-12 pt-2 border-top border-secondary border-opacity-10">
+                                <span class="badge bg-secondary bg-opacity-15 text-main border border-secondary border-opacity-25 px-2.5 py-1 small rounded uppercase fw-bold">
+                                    <i class="bi bi-buildings me-1 text-accent"></i>BATCH #{{ $appointment->batch_id }} &bull; {{ $appointment->organization_name }}
+                                </span>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+
+                {{-- 2. Doctor's Referral Note Card (Omitted for Bulk) --}}
+                @if(!$isBulk)
+                    <div class="card p-4 border-secondary bg-card shadow-sm" style="border-color: var(--border-color) !important;">
+                        <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
+                            <i class="bi bi-file-earmark-medical me-2"></i>2. Doctor's Referral / Note (Optional)
+                        </h5>
+
+                        @if($appointment->referral_note)
+                            <div id="existing_referral_box" class="p-3 border rounded border-secondary border-opacity-25 bg-secondary bg-opacity-10 mb-3 d-flex justify-content-between align-items-center">
+                                <span class="small text-main">
+                                    <i class="bi bi-paperclip text-accent me-2"></i>Existing Referral Note on File
+                                </span>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-sm btn-outline-accent" onclick="openFilePreview('{{ Storage::url($appointment->referral_note) }}', 'Doctor\'s Referral Note')">View File</button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeExistingReferral()">Remove</button>
                                 </div>
                             </div>
-                            <input type="text" name="patient_middle_name" id="patient_middle_name" class="form-control uppercase" value="{{ old('patient_middle_name', $appointment->patient_middle_name === 'N/A' ? '' : $appointment->patient_middle_name) }}" {{ old('patient_middle_name', $appointment->patient_middle_name) === 'N/A' ? 'readonly' : '' }}>
-                            <div class="invalid-feedback d-none" id="err_patient_middle_name"></div>
-                            @error('patient_middle_name')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
-                        </div>
+                        @endif
 
-                        {{-- Last Name --}}
-                        <div class="col-md-4">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">Last Name</label>
-                            <input type="text" name="patient_last_name" id="patient_last_name" class="form-control uppercase" value="{{ old('patient_last_name', $appointment->patient_last_name) }}" required>
-                            <div class="invalid-feedback d-none" id="err_patient_last_name"></div>
-                            @error('patient_last_name')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
-                        </div>
-
-                        {{-- Suffix --}}
-                        <div class="col-md-3">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">Suffix (Opt.)</label>
-                            <input type="text" name="patient_suffix" id="patient_suffix" list="suffix_options" class="form-control uppercase" value="{{ old('patient_suffix', $appointment->patient_suffix) }}" placeholder="e.g. JR" maxlength="10">
-                            <datalist id="suffix_options">
-                                <option value="JR"><option value="SR"><option value="II"><option value="III"><option value="IV"><option value="V">
-                            </datalist>
-                            <div class="invalid-feedback d-none" id="err_patient_suffix"></div>
-                            @error('patient_suffix')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
-                        </div>
-
-                        {{-- Sex --}}
-                        <div class="col-md-3">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">Sex</label>
-                            <select name="patient_sex" id="patient_sex" class="form-select" required>
-                                <option value="Male" {{ old('patient_sex', $appointment->patient_sex) === 'Male' ? 'selected' : '' }}>Male</option>
-                                <option value="Female" {{ old('patient_sex', $appointment->patient_sex) === 'Female' ? 'selected' : '' }}>Female</option>
-                            </select>
-                            <div class="invalid-feedback d-none" id="err_patient_sex"></div>
-                            @error('patient_sex')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
-                        </div>
-
-                        {{-- Birthdate --}}
-                        <div class="col-md-6">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">Birthdate</label>
-                            <input type="date" name="patient_birthdate" id="patient_birthdate" class="form-control" 
-                                value="{{ old('patient_birthdate', $appointment->patient_birthdate ? $appointment->patient_birthdate->format('Y-m-d') : '') }}" 
-                                @if($minBday) min="{{ $minBday }}" @endif 
-                                max="{{ $maxBday }}" 
-                                onchange="validateBirthdateInput()" required>
-                            <div class="invalid-feedback d-none" id="err_patient_birthdate"></div>
-                            @error('patient_birthdate')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
-                            <small class="text-muted smaller mt-1 d-block">
-                                {{ $isDependent ? 'Dependents must be minors under 18 years of age.' : 'Patients must be at least 18 years of age.' }}
-                            </small>
-                        </div>
-
-                        {{-- Phone Number --}}
-                        <div class="col-12">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">Contact Phone Number</label>
-                            <div class="input-group">
-                                <span class="input-group-text border-secondary bg-secondary bg-opacity-25 text-main fw-bold">09</span>
-                                @php
-                                    $rawPhone = old('patient_phone', $appointment->patient_phone);
-                                    $displayPhone = str_starts_with($rawPhone, '09') ? substr($rawPhone, 2) : $rawPhone;
-                                @endphp
-                                <input type="text" id="phone_display" class="form-control" placeholder="171234567" maxlength="9" value="{{ $displayPhone }}" oninput="this.value = this.value.replace(/[^0-9]/g, ''); syncPhone();" required>
+                        <div id="referral_preview_container" class="d-none mb-3 p-3 border rounded border-secondary border-opacity-25 bg-secondary bg-opacity-10 d-flex justify-content-between align-items-center">
+                            <span class="small text-accent fw-bold" id="referral_file_label">
+                                <i class="bi bi-file-earmark-check-fill me-2"></i>Selected File
+                            </span>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-accent" id="btn_view_referral">View File</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeUploadedReferral()">Remove</button>
                             </div>
-                            <input type="hidden" name="patient_phone" id="patient_phone" value="{{ $rawPhone }}">
-                            <div class="invalid-feedback d-none" id="err_patient_phone"></div>
-                            @error('patient_phone')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
                         </div>
-                    </div>
-                </div>
 
-                {{-- 2. Residential Address Card --}}
-                <div class="card p-4 border-secondary bg-card shadow-sm h-100">
-                    <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
-                        <i class="bi bi-geo-alt-fill me-2"></i>2. Residential Address
-                    </h5>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">Province</label>
-                            <select id="addr_province" name="patient_province" class="form-select @error('patient_province') is-invalid @enderror" required>
-                                <option value="">Loading Provinces...</option>
-                            </select>
-                            <div class="invalid-feedback d-none" id="err_patient_province"></div>
-                            @error('patient_province')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
-                        </div>
-                        <div class="col-md-6">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">City / Municipality</label>
-                            <select id="addr_city" name="patient_city" class="form-select @error('patient_city') is-invalid @enderror" disabled required>
-                                <option value="">Select Province First</option>
-                            </select>
-                            <div class="invalid-feedback d-none" id="err_patient_city"></div>
-                            @error('patient_city')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
-                        </div>
-                        <div class="col-md-6">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">Barangay</label>
-                            <select id="addr_brgy" name="patient_barangay" class="form-select @error('patient_barangay') is-invalid @enderror" disabled required>
-                                <option value="">Select City First</option>
-                            </select>
-                            <div class="invalid-feedback d-none" id="err_patient_barangay"></div>
-                            @error('patient_barangay')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
-                        </div>
-                        <div class="col-md-6">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">Street / House No.</label>
-                            <input type="text" name="patient_street" id="patient_street" class="form-control uppercase @error('patient_street') is-invalid @enderror" value="{{ old('patient_street', $appointment->patient_street) }}" required>
-                            <div class="invalid-feedback d-none" id="err_patient_street"></div>
-                            @error('patient_street')
-                                <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
-                            @enderror
+                        <div id="referral_upload_wrapper" class="{{ $appointment->referral_note ? 'd-none' : '' }}">
+                            <input type="file" name="referral_note" id="referral_note" class="form-control py-3 shadow-none" accept="image/*, application/pdf" onchange="handleReferralUpload(this)">
+                            <small class="text-muted d-block mt-1">Accepted formats: PDF or image files (Max: 10MB).</small>
+                            <div class="invalid-feedback d-none" id="err_referral_note"></div>
                         </div>
                     </div>
-                </div>
-
-                {{-- 3. Doctor's Referral Note Card (Omitted for Bulk) --}}
-                @if(!$isBulk)
-                <div class="card p-4 border-secondary bg-card shadow-sm">
-                    <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
-                        <i class="bi bi-file-earmark-medical me-2"></i>3. Doctor's Referral / Note (Optional)
-                    </h5>
-                    @if($appointment->referral_note)
-                    <div id="existing_referral_box" class="p-3 border rounded border-secondary border-opacity-25 bg-secondary bg-opacity-10 mb-3 d-flex justify-content-between align-items-center">
-                        <span class="small text-main">
-                            <i class="bi bi-paperclip text-accent me-2"></i>Existing Referral Note on File
-                        </span>
-                        <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-sm btn-outline-accent" onclick="openFilePreview('{{ Storage::url($appointment->referral_note) }}', 'Doctor\'s Referral Note')">View File</button>
-                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeExistingReferral()">Remove</button>
-                        </div>
-                    </div>
-                    @endif
-                    <div id="referral_preview_container" class="d-none mb-3 p-3 border rounded border-secondary border-opacity-25 bg-secondary bg-opacity-10 d-flex justify-content-between align-items-center">
-                        <span class="small text-accent fw-bold" id="referral_file_label">
-                            <i class="bi bi-file-earmark-check-fill me-2"></i>Selected File
-                        </span>
-                        <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-sm btn-outline-accent" id="btn_view_referral">View File</button>
-                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeUploadedReferral()">Remove</button>
-                        </div>
-                    </div>
-                    <div id="referral_upload_wrapper" class="{{ $appointment->referral_note ? 'd-none' : '' }}">
-                        <input type="file" name="referral_note" id="referral_note" class="form-control" accept="image/*, application/pdf" onchange="handleReferralUpload(this)">
-                        <small class="text-muted d-block mt-1">Accepted formats: PDF or image files (Max: 10MB).</small>
-                        <div class="invalid-feedback d-none" id="err_referral_note"></div>
-                    </div>
-                </div>
                 @endif
             </div>
 
             {{-- RIGHT COLUMN: SERVICES, SCHEDULE & PAYMENT --}}
             <div class="col-lg-6 d-flex flex-column gap-4">
-                {{-- Test Selection Card --}}
-                <div class="card p-4 border-secondary bg-card shadow-sm h-100">
+                {{-- 3. Diagnostic Tests & Packages Selection Card --}}
+                <div class="card p-4 border-secondary bg-card shadow-sm h-100" style="border-color: var(--border-color) !important;">
                     <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3" style="border-color: var(--border-color) !important;">
                         <h5 class="text-accent fw-bold uppercase mb-0 small">
-                            <i class="bi bi-flask me-2"></i>{{ $isBulk ? '3' : '4' }}. Select Medical Services
+                            <i class="bi bi-flask me-2"></i>3. Select Tests & Packages
                         </h5>
                         @if($isBulkCashless)
-                        <span class="badge bg-secondary bg-opacity-25 text-main small" id="tests_lock_status_badge">
-                            <i class="bi bi-lock-fill text-warning me-1"></i>Locked
-                        </span>
+                            <span class="badge bg-secondary bg-opacity-25 text-main small" id="tests_lock_status_badge">
+                                <i class="bi bi-lock-fill text-warning me-1"></i>Locked
+                            </span>
                         @endif
                     </div>
 
                     {{-- Lock warning and unlock button for cashless bulk bookings --}}
                     @if($isBulkCashless)
-                    <div class="alert alert-clinical border-warning p-2.5 rounded-3 mb-3 d-flex align-items-center justify-content-between gap-2" id="bulk_tests_lock_banner">
-                        <div class="d-flex align-items-center gap-2">
-                            <i class="bi bi-lock-fill text-warning fs-5"></i>
-                            <div class="smaller text-main">
-                                <strong>Tests Locked:</strong> Part of Cashless Batch #{{ $appointment->batch_id }}. Tests are locked to preserve the confirmed batch billing.
+                        <div class="alert alert-clinical border-warning p-2.5 rounded-3 mb-3 d-flex align-items-center justify-content-between gap-2" id="bulk_tests_lock_banner">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-lock-fill text-warning fs-5"></i>
+                                <div class="smaller text-main">
+                                    <strong>Tests Locked:</strong> Part of Cashless Batch #{{ $appointment->batch_id }}. Modifying tests will alter batch billing.
+                                </div>
                             </div>
+                            <button type="button" class="btn btn-sm btn-outline-warning fw-bold text-nowrap" id="btn_unlock_tests" data-bs-toggle="modal" data-bs-target="#confirmUnlockTestsModal">
+                                <i class="bi bi-unlock-fill me-1"></i>Change Tests
+                            </button>
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-warning fw-bold text-nowrap" id="btn_unlock_tests" data-bs-toggle="modal" data-bs-target="#confirmUnlockTestsModal">
-                            <i class="bi bi-unlock-fill me-1"></i>Change Tests
-                        </button>
-                    </div>
-
-                    <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 text-danger p-2.5 rounded-3 mb-3 d-none" id="bulk_tests_unlocked_banner">
-                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                        <span class="smaller fw-bold">Notice: Tests Unlocked. Modifying services will reset the whole Batch #{{ $appointment->batch_id }} payment status to UNPAID.</span>
-                    </div>
+                        <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 text-danger p-2.5 rounded-3 mb-3 d-none" id="bulk_tests_unlocked_banner">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                            <span class="smaller fw-bold">Notice: Tests Unlocked. Modifying services will reset the entire Batch #{{ $appointment->batch_id }} payment status to UNPAID.</span>
+                        </div>
                     @endif
 
+                    {{-- Search Filter --}}
                     <div class="mb-3">
-                        <input type="text" id="service_search" class="form-control form-control-sm" placeholder="Search tests..." onkeyup="filterServices()">
+                        <input type="text" id="resubmit_catalog_search" class="form-control form-control-sm" placeholder="Search tests or packages..." onkeyup="filterResubmitCatalog()">
                     </div>
 
-                    {{-- Services list wrapper --}}
+                    {{-- Sub-Tabs: Packages vs Individual Tests --}}
+                    <ul class="nav nav-pills mb-2 gap-2 border-bottom border-secondary border-opacity-10 pb-2 flex-wrap" role="tablist">
+                        <li class="nav-item">
+                            <button class="nav-link active fw-bold px-3 py-1 uppercase btn-sm" data-bs-toggle="pill" data-bs-target="#resubmit-pane-packages" type="button" role="tab" style="font-size: 0.72rem;">
+                                <i class="bi bi-box-seam me-1"></i> Packages ({{ $packages->count() }})
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link fw-bold px-3 py-1 uppercase btn-sm" data-bs-toggle="pill" data-bs-target="#resubmit-pane-services" type="button" role="tab" style="font-size: 0.72rem;">
+                                <i class="bi bi-flask me-1"></i> Individual Tests ({{ $services->count() }})
+                            </button>
+                        </li>
+                    </ul>
+
                     <div class="position-relative">
-                        <div class="p-3 border rounded border-secondary border-opacity-25 overflow-auto custom-scroll mb-2" id="services_container" style="max-height: 220px; {{ $isBulkCashless ? 'pointer-events: none;' : '' }}">
-                            @foreach($services as $s)
-                            <div class="form-check p-2.5 rounded mb-1.5 service-item" data-name="{{ strtoupper($s->name) }}">
-                                <input class="form-check-input service-checkbox me-2" type="checkbox" name="service_ids[]" value="{{ $s->id }}" id="svc_{{ $s->id }}" data-price="{{ $s->price }}" {{ in_array($s->id, $selectedServiceIds) ? 'checked' : '' }} onchange="onServiceCheckChange()">
-                                <label class="form-check-label text-main small cursor-pointer w-100 align-items-center" for="svc_{{ $s->id }}">
-                                    <span>{{ strtoupper($s->name) }}</span>
-                                    <span class="text-accent fw-bold">₱{{ number_format($s->price, 2) }}</span>
-                                </label>
+                        <div class="tab-content mb-3" id="resubmitCatalogTabsContent" style="{{ $isBulkCashless ? 'pointer-events: none;' : '' }}">
+                            {{-- Pane 1: Health Packages --}}
+                            <div class="tab-pane fade show active" id="resubmit-pane-packages" role="tabpanel">
+                                <div class="p-2 border rounded custom-scroll" id="packages_container" style="max-height: 220px; overflow-y: auto; background-color: var(--bg-main) !important; border: 1.5px solid var(--border-color) !important;">
+                                    @php $resubmitPkgCount = 0; @endphp
+                                    @forelse($packages as $pkg)
+                                        @php $pkgGender = strtolower($pkg->gender_restriction ?? 'both'); @endphp
+                                        @if($pkgGender !== 'both' && $pkgGender !== $patientSex)
+                                            @continue
+                                        @endif
+                                        @php $resubmitPkgCount++; @endphp
+                                        <div class="form-check p-2 mb-1.5 border rounded bg-card d-flex align-items-center justify-content-between gap-2 resubmit-catalog-item package-item-wrapper" id="resubmit_pkg_wrap_{{ $pkg->id }}" data-name="{{ strtoupper($pkg->name) }}" data-gender="{{ $pkgGender }}" style="transition: all 0.2s ease;">
+                                            <div class="d-flex align-items-center gap-2 flex-grow-1 text-truncate">
+                                                <input class="form-check-input ms-0 me-1 pkg-checkbox" type="checkbox" name="package_ids[]" value="{{ $pkg->id }}" id="resubmit_pkg_{{ $pkg->id }}" data-price="{{ $pkg->price }}" data-services="{{ json_encode($pkg->services->pluck('id')->toArray()) }}" {{ in_array($pkg->id, $selectedPackageIds) ? 'checked' : '' }} onchange="onResubmitCatalogChange()">
+                                                <label class="form-check-label text-main small cursor-pointer text-truncate fw-bold mb-0" for="resubmit_pkg_{{ $pkg->id }}">
+                                                    {{ strtoupper($pkg->name) }}
+                                                </label>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="badge bg-danger bg-opacity-15 text-white border border-danger border-opacity-30 pkg-conflict-badge d-none smaller" style="font-size: 0.6rem;">Conflicting</span>
+                                                <span class="text-accent smaller fw-bold text-nowrap">₱{{ number_format($pkg->price, 2) }}</span>
+                                            </div>
+                                        </div>
+                                    @empty
+                                        <div class="text-muted smaller text-center py-3">No diagnostic packages available.</div>
+                                    @endforelse
+                                    @if($resubmitPkgCount === 0)
+                                        <div class="text-muted smaller text-center py-3">No diagnostic packages available for this demographic profile.</div>
+                                    @endif
+                                </div>
                             </div>
-                            @endforeach
+
+                            {{-- Pane 2: Individual Tests --}}
+                            <div class="tab-pane fade" id="resubmit-pane-services" role="tabpanel">
+                                <div class="p-2 border rounded custom-scroll" id="services_container" style="max-height: 220px; overflow-y: auto; background-color: var(--bg-main) !important; border: 1.5px solid var(--border-color) !important;">
+                                    @php $resubmitSvcCount = 0; @endphp
+                                    @forelse($services as $s)
+                                        @php $sGender = strtolower($s->gender_restriction ?? 'both'); @endphp
+                                        @if($sGender !== 'both' && $sGender !== $patientSex)
+                                            @continue
+                                        @endif
+                                        @php $resubmitSvcCount++; @endphp
+                                        <div class="form-check p-2 mb-1.5 border rounded bg-card d-flex align-items-center justify-content-between gap-2 resubmit-catalog-item service-item-wrapper" id="resubmit_svc_wrap_{{ $s->id }}" data-name="{{ strtoupper($s->name) }}" data-gender="{{ $sGender }}" style="transition: all 0.2s ease;">
+                                            <div class="d-flex align-items-center gap-2 flex-grow-1 text-truncate">
+                                                <input class="form-check-input ms-0 me-1 service-checkbox" type="checkbox" name="service_ids[]" value="{{ $s->id }}" id="resubmit_svc_{{ $s->id }}" data-price="{{ $s->price }}" {{ in_array($s->id, $selectedServiceIds) ? 'checked' : '' }} onchange="onResubmitCatalogChange()">
+                                                <label class="form-check-label text-main small cursor-pointer text-truncate mb-0" for="resubmit_svc_{{ $s->id }}">
+                                                    {{ strtoupper($s->name) }}
+                                                </label>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="badge bg-warning bg-opacity-15 text-secondary border border-warning border-opacity-30 pkg-covered-badge d-none smaller" style="font-size: 0.6rem;">In Package</span>
+                                                <span class="text-muted smaller fw-bold text-nowrap">₱{{ number_format($s->price, 2) }}</span>
+                                            </div>
+                                        </div>
+                                    @empty
+                                        <div class="text-muted smaller text-center py-3">No individual services available.</div>
+                                    @endforelse
+                                    @if($resubmitSvcCount === 0)
+                                        <div class="text-muted smaller text-center py-3">No individual tests available for this demographic profile.</div>
+                                    @endif
+                                </div>
+                            </div>
                         </div>
 
                         {{-- Visual overlay for locked state --}}
                         @if($isBulkCashless)
-                        <div id="services_lock_overlay" class="position-absolute top-0 start-0 w-100 h-100 rounded d-flex align-items-center justify-content-center" style="background-color: rgba(28, 35, 45, 0.35); backdrop-filter: blur(1px); z-index: 5;">
-                            <span class="badge bg-dark border border-warning text-white px-3 py-2 shadow"><i class="bi bi-lock-fill text-warning me-1"></i> Locked to Batch Settlement</span>
-                        </div>
+                            <div id="services_lock_overlay" class="position-absolute top-0 start-0 w-100 h-100 rounded d-flex align-items-center justify-content-center" style="background-color: rgba(28, 35, 45, 0.35); backdrop-filter: blur(1px); z-index: 5;">
+                                <span class="badge bg-dark border border-warning text-white px-3 py-2 shadow"><i class="bi bi-lock-fill text-warning me-1"></i> Locked to Batch Settlement</span>
+                            </div>
                         @endif
                     </div>
 
                     <div class="invalid-feedback d-none mb-3 text-danger fw-bold" id="err_service_ids"></div>
+
                     <div class="d-flex justify-content-between align-items-center p-3 rounded bg-secondary bg-opacity-10 border border-secondary border-opacity-25">
                         <span class="fw-bold uppercase small text-secondary">Total Estimated Bill:</span>
                         <span class="text-accent fs-5 fw-bold" id="total_bill_display">₱0.00</span>
                     </div>
                 </div>
 
-                {{-- Schedule Visit Card --}}
-                <div class="card p-4 border-secondary bg-card shadow-sm h-100">
+                {{-- 4. Preferred Visit Schedule Card --}}
+                <div class="card p-4 border-secondary bg-card shadow-sm h-100" style="border-color: var(--border-color) !important;">
                     <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
-                        <i class="bi bi-calendar3 me-2"></i>{{ $isBulk ? '4' : '5' }}. Preferred Schedule
+                        <i class="bi bi-calendar3 me-2"></i>4. Preferred Visit Schedule
                     </h5>
                     <div class="row g-3 mb-1">
                         <div class="col-md-6">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Visit Date</label>
-                            <input type="date" name="appointment_date" id="appointment_date" class="form-control" value="{{ old('appointment_date', $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : '') }}" min="{{ date('Y-m-d') }}" onchange="fetchTimeSlots(this.value)" required>
+                            <input type="date" name="appointment_date" id="appointment_date" class="form-control py-3 shadow-none fw-bold" value="{{ $selectedDate }}" min="{{ date('Y-m-d') }}" onchange="fetchTimeSlots(this.value)" required>
                             <div class="invalid-feedback d-none" id="err_appointment_date"></div>
                         </div>
                         <div class="col-md-6">
                             <label class="small text-secondary fw-bold mb-1 uppercase">Time Slot</label>
-                            <select name="time_slot" id="time_slot" class="form-select" required>
+                            <select name="time_slot" id="time_slot" class="form-select py-3 shadow-none fw-bold" required>
                                 <option value=""></option>
                             </select>
                             <div class="invalid-feedback d-none" id="err_time_slot"></div>
@@ -380,108 +413,108 @@
                     </div>
                 </div>
 
-                {{-- Payment Method & Receipt Card (Omitted for Bulk) --}}
+                {{-- 5. Payment Settlement (Omitted for Bulk) --}}
                 @if(!$isBulk)
-                <div class="card p-4 border-secondary bg-card shadow-sm h-100">
-                    <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
-                        <i class="bi bi-credit-card me-2"></i>6. Payment Settlement
-                    </h5>
-                    <div class="row g-3 mb-3">
-                        <div class="col-6">
-                            <input type="radio" class="btn-check" name="payment_method" id="pay_cash" value="Cash" {{ $selectedPaymentMethod === 'Cash' ? 'checked' : '' }} onchange="handlePaymentMethodChange(this)">
-                            <label class="btn btn-outline-secondary w-100 py-3 text-center" for="pay_cash">
-                                <i class="bi bi-cash-stack fs-3 d-block mb-1"></i>
-                                <span class="fw-bold small uppercase">Cash on Site</span>
-                            </label>
-                        </div>
-                        <div class="col-6">
-                            <input type="radio" class="btn-check" name="payment_method" id="pay_cashless" value="Cashless" {{ $selectedPaymentMethod === 'Cashless' ? 'checked' : '' }} onchange="handlePaymentMethodChange(this)">
-                            <label class="btn btn-outline-secondary w-100 py-3 text-center" for="pay_cashless">
-                                <i class="bi bi-qr-code-scan fs-3 d-block mb-1"></i>
-                                <span class="fw-bold small uppercase">Online / E-Wallet</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    {{-- Cashless Upload Section --}}
-                    <div id="provider_selection_container" class="{{ $selectedPaymentMethod === 'Cashless' ? '' : 'd-none' }}">
-                        @if($paymentProviders->count() > 0)
-                        <div class="mb-4">
-                            <label class="small text-secondary fw-bold mb-2 uppercase d-block">Choose E-Wallet Provider</label>
-                            <div class="row g-2">
-                                @foreach($paymentProviders as $provider)
-                                <div class="col-6">
-                                    <input type="radio" class="btn-check provider-radio" name="payment_provider_id" id="provider_{{ $provider->id }}" value="{{ $provider->id }}" data-qr="{{ Storage::url($provider->qr_code) }}" data-name="{{ $provider->name }}" onchange="handleProviderChange(this)">
-                                    <label class="btn btn-outline-secondary w-100 p-3 text-center h-100 d-flex flex-column align-items-center justify-content-center" for="provider_{{ $provider->id }}">
-                                        @if($provider->logo)
-                                            <img src="{{ Storage::url($provider->logo) }}" alt="{{ $provider->name }}" class="mb-2" style="height: 28px; object-fit: contain;">
-                                        @else
-                                            <i class="bi bi-wallet2 fs-3 mb-2 text-secondary"></i>
-                                        @endif
-                                        <span class="small fw-bold uppercase text-main">{{ $provider->name }}</span>
-                                    </label>
-                                </div>
-                                @endforeach
+                    <div class="card p-4 border-secondary bg-card shadow-sm h-100" style="border-color: var(--border-color) !important;">
+                        <h5 class="text-accent fw-bold uppercase mb-3 small border-bottom pb-2" style="border-color: var(--border-color) !important;">
+                            <i class="bi bi-credit-card me-2"></i>5. Payment Settlement
+                        </h5>
+                        <div class="row g-3 mb-3">
+                            <div class="col-6">
+                                <input type="radio" class="btn-check" name="payment_method" id="pay_cash" value="Cash" {{ $selectedPaymentMethod === 'Cash' ? 'checked' : '' }} onchange="handlePaymentMethodChange(this)">
+                                <label class="btn btn-outline-secondary w-100 py-3 text-center" for="pay_cash">
+                                    <i class="bi bi-cash-stack fs-3 d-block mb-1"></i>
+                                    <span class="fw-bold small uppercase">Cash on Site</span>
+                                </label>
+                            </div>
+                            <div class="col-6">
+                                <input type="radio" class="btn-check" name="payment_method" id="pay_cashless" value="Cashless" {{ $selectedPaymentMethod === 'Cashless' ? 'checked' : '' }} onchange="handlePaymentMethodChange(this)">
+                                <label class="btn btn-outline-secondary w-100 py-3 text-center" for="pay_cashless">
+                                    <i class="bi bi-qr-code-scan fs-3 d-block mb-1"></i>
+                                    <span class="fw-bold small uppercase">Online / E-Wallet</span>
+                                </label>
                             </div>
                         </div>
 
-                        {{-- QR Code Display Box --}}
-                        <div id="qr_section" class="mb-4 d-none">
-                            <div class="p-3 border border-secondary border-opacity-25 rounded-3 text-center" style="background-color: rgba(108, 117, 125, 0.05);">
-                                <small class="text-main fw-bold mb-2 d-block uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">
-                                    Scan to Pay (<span id="selected_provider_name" class="text-accent"></span>)
-                                </small>
-                                <div class="d-flex justify-content-center">
-                                    <div class="bg-white p-2 rounded shadow-sm border" style="cursor: zoom-in;" onclick="openFilePreview(document.getElementById('selected_provider_qr').src, document.getElementById('selected_provider_name').innerText + ' QR Code')">
-                                        <img src="" id="selected_provider_qr" alt="Scan QR" style="width: 140px; height: 140px; object-fit: contain;">
+                        {{-- Cashless Upload Section --}}
+                        <div id="provider_selection_container" class="{{ $selectedPaymentMethod === 'Cashless' ? '' : 'd-none' }}">
+                            @if($paymentProviders->count() > 0)
+                                <div class="mb-4">
+                                    <label class="small text-secondary fw-bold mb-2 uppercase d-block">Choose E-Wallet Provider</label>
+                                    <div class="row g-2">
+                                        @foreach($paymentProviders as $provider)
+                                            <div class="col-6">
+                                                <input type="radio" class="btn-check provider-radio" name="payment_provider_id" id="provider_{{ $provider->id }}" value="{{ $provider->id }}" data-qr="{{ Storage::url($provider->qr_code) }}" data-name="{{ $provider->name }}" onchange="handleProviderChange(this)">
+                                                <label class="btn btn-outline-secondary w-100 p-3 text-center h-100 d-flex flex-column align-items-center justify-content-center" for="provider_{{ $provider->id }}">
+                                                    @if($provider->logo)
+                                                        <img src="{{ Storage::url($provider->logo) }}" alt="{{ $provider->name }}" class="mb-2" style="height: 28px; object-fit: contain;">
+                                                    @else
+                                                        <i class="bi bi-wallet2 fs-3 mb-2 text-secondary"></i>
+                                                    @endif
+                                                    <span class="small fw-bold uppercase text-main">{{ $provider->name }}</span>
+                                                </label>
+                                            </div>
+                                        @endforeach
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                        @endif
 
-                        {{-- Existing Receipt Container --}}
-                        @if($appointment->payment_receipt && $appointment->status !== 'canceled')
-                        <div id="existing_receipt_box" class="p-3 border rounded border-secondary border-opacity-25 bg-secondary bg-opacity-10 mb-3 d-flex justify-content-between align-items-center">
-                            <span class="small text-main">
-                                <i class="bi bi-receipt text-accent me-2"></i>Proof of Payment on File
-                            </span>
-                            <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-sm btn-outline-accent" onclick="openFilePreview('{{ Storage::url($appointment->payment_receipt) }}', 'Proof of Payment Receipt')">View Receipt</button>
-                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeExistingReceipt()">Remove</button>
-                            </div>
-                        </div>
-                        @endif
+                                {{-- QR Code Display Box --}}
+                                <div id="qr_section" class="mb-4 d-none">
+                                    <div class="p-3 border border-secondary border-opacity-25 rounded-3 text-center" style="background-color: rgba(108, 117, 125, 0.05);">
+                                        <small class="text-main fw-bold mb-2 d-block uppercase" style="font-size: 0.7rem; letter-spacing: 0.5px;">
+                                            Scan to Pay (<span id="selected_provider_name" class="text-accent"></span>)
+                                        </small>
+                                        <div class="d-flex justify-content-center">
+                                            <div class="bg-white p-2 rounded shadow-sm border" style="cursor: zoom-in;" onclick="openFilePreview(document.getElementById('selected_provider_qr').src, document.getElementById('selected_provider_name').innerText + ' QR Code')">
+                                                <img src="" id="selected_provider_qr" alt="Scan QR" style="width: 140px; height: 140px; object-fit: contain;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
 
-                        <div id="receipt_preview_container" class="d-none mb-3 p-3 border rounded border-secondary border-opacity-25 bg-secondary bg-opacity-10 d-flex justify-content-between align-items-center">
-                            <span class="small text-accent fw-bold" id="receipt_file_label">
-                                <i class="bi bi-file-earmark-check-fill me-2"></i>Selected Receipt File
-                            </span>
-                            <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-sm btn-outline-accent" id="btn_view_receipt">View Receipt</button>
-                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeUploadedReceipt()">Remove</button>
-                            </div>
-                        </div>
+                            {{-- Existing Receipt Container --}}
+                            @if($appointment->payment_receipt && $appointment->status !== 'canceled')
+                                <div id="existing_receipt_box" class="p-3 border rounded border-secondary border-opacity-25 bg-secondary bg-opacity-10 mb-3 d-flex justify-content-between align-items-center">
+                                    <span class="small text-main">
+                                        <i class="bi bi-receipt text-accent me-2"></i>Proof of Payment on File
+                                    </span>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-accent" onclick="openFilePreview('{{ Storage::url($appointment->payment_receipt) }}', 'Proof of Payment Receipt')">View Receipt</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeExistingReceipt()">Remove</button>
+                                    </div>
+                                </div>
+                            @endif
 
-                        {{-- Receipt File Upload Input --}}
-                        <div id="receipt_upload_wrapper" class="{{ ($appointment->payment_receipt && $appointment->status !== 'canceled' && empty(old('remove_receipt'))) ? 'd-none' : '' }}">
-                            <label class="small text-secondary fw-bold mb-1 uppercase">Upload Proof of Payment</label>
-                            <input type="file" name="payment_receipt" id="payment_receipt" class="form-control" accept="image/*, application/pdf" onchange="handleReceiptUpload(this)">
-                            <div class="invalid-feedback d-none" id="err_payment_receipt"></div>
+                            <div id="receipt_preview_container" class="d-none mb-3 p-3 border rounded border-secondary border-opacity-25 bg-secondary bg-opacity-10 d-flex justify-content-between align-items-center">
+                                <span class="small text-accent fw-bold" id="receipt_file_label">
+                                    <i class="bi bi-file-earmark-check-fill me-2"></i>Selected Receipt File
+                                </span>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-sm btn-outline-accent" id="btn_view_receipt">View Receipt</button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeUploadedReceipt()">Remove</button>
+                                </div>
+                            </div>
+
+                            {{-- Receipt File Upload Input --}}
+                            <div id="receipt_upload_wrapper" class="{{ ($appointment->payment_receipt && $appointment->status !== 'canceled' && empty(old('remove_receipt'))) ? 'd-none' : '' }}">
+                                <label class="small text-secondary fw-bold mb-1 uppercase">Upload Proof of Payment</label>
+                                <input type="file" name="payment_receipt" id="payment_receipt" class="form-control py-3 shadow-none" accept="image/*, application/pdf" onchange="handleReceiptUpload(this)">
+                                <div class="invalid-feedback d-none" id="err_payment_receipt"></div>
+                            </div>
                         </div>
                     </div>
-                </div>
                 @else
-                {{-- Informational Notice for Bulk Appointment Batch Billing --}}
-                <div class="card p-3 border-accent bg-card shadow-sm" style="border-left: 4px solid var(--brand-accent) !important;">
-                    <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-shield-check text-accent fs-4" style="color: var(--brand-accent) !important;"></i>
-                        <div>
-                            <div class="fw-bold text-main small uppercase">Batch Billing Policy</div>
-                            <small class="text-secondary">Payment and settlement are managed collectively at the organization batch level (Batch #{{ $appointment->batch_id }}). Individual receipt uploads are handled directly via the Batch Workspace.</small>
+                    {{-- Informational Notice for Bulk Appointment Batch Billing --}}
+                    <div class="card p-3 border-accent bg-card shadow-sm" style="border-left: 4px solid var(--brand-accent) !important;">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-shield-check text-accent fs-4" style="color: var(--brand-accent) !important;"></i>
+                            <div>
+                                <div class="fw-bold text-main small uppercase">Batch Billing Policy</div>
+                                <small class="text-secondary">Payment and settlement are managed collectively at the organization batch level (Batch #{{ $appointment->batch_id }}). Individual receipt uploads are handled directly via the Batch Workspace.</small>
+                            </div>
                         </div>
                     </div>
-                </div>
                 @endif
             </div>
         </div>
@@ -500,32 +533,32 @@
 
 {{-- Confirmation Modal for Unlocking Tests on Cashless Bulk Appointment --}}
 @if($isBulkCashless)
-<div class="modal fade" id="confirmUnlockTestsModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
-        <div class="modal-content shadow-lg border-warning" style="background-color: var(--bg-card); border: 1.5px solid #ffc107; color: var(--text-main);">
-            <div class="modal-header py-3 border-bottom border-warning border-opacity-25">
-                <h5 class="modal-title text-warning fw-bold uppercase small m-0 d-flex align-items-center gap-2">
-                    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
-                    <span>Modify Tests & Reset Batch Payment?</span>
-                </h5>
-                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-4 text-start">
-                <p class="small mb-2" style="color: var(--text-main) !important;">
-                    Modifying the clinical tests for <strong>{{ $appointment->patient_name }}</strong> will alter the total cost of <strong>Batch #{{ $appointment->batch_id }}</strong>.
-                </p>
-                <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 text-danger p-2.5 rounded-3 mb-0 smaller">
-                    <i class="bi bi-exclamation-octagon-fill me-1"></i>
-                    <strong>Warning:</strong> Proceeding will <strong>reset the entire batch payment status to UNPAID</strong>. The batch submitter will be required to upload a new payment receipt for the revised batch total.
+    <div class="modal fade" id="confirmUnlockTestsModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+            <div class="modal-content shadow-lg border-warning" style="background-color: var(--bg-card); border: 1.5px solid #ffc107; color: var(--text-main);">
+                <div class="modal-header py-3 border-bottom border-warning border-opacity-25">
+                    <h5 class="modal-title text-warning fw-bold uppercase small m-0 d-flex align-items-center gap-2">
+                        <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                        <span>Modify Tests & Reset Batch Payment?</span>
+                    </h5>
+                    <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-            </div>
-            <div class="modal-footer p-3 border-top d-flex gap-2" style="border-color: var(--border-color) !important;">
-                <button type="button" class="btn-custom btn-outline-secondary flex-grow-1 py-2 fw-bold uppercase" data-bs-dismiss="modal">Keep Locked</button>
-                <button type="button" class="btn-custom btn-danger-custom flex-grow-1 py-2 fw-bold uppercase" onclick="unlockBulkTests()">Yes, Unlock Tests</button>
+                <div class="modal-body p-4 text-start">
+                    <p class="small mb-2" style="color: var(--text-main) !important;">
+                        Modifying the clinical tests for <strong>{{ $appointment->patient_name }}</strong> will alter the total cost of <strong>Batch #{{ $appointment->batch_id }}</strong>.
+                    </p>
+                    <div class="alert alert-clinical border-danger bg-danger bg-opacity-10 text-danger p-2.5 rounded-3 mb-0 smaller">
+                        <i class="bi bi-exclamation-octagon-fill me-1"></i>
+                        <strong>Warning:</strong> Proceeding will <strong>reset the entire batch payment status to UNPAID</strong>. The batch submitter will be required to upload a new payment receipt for the revised batch total.
+                    </div>
+                </div>
+                <div class="modal-footer p-3 border-top d-flex gap-2" style="border-color: var(--border-color) !important;">
+                    <button type="button" class="btn-custom btn-outline-secondary flex-grow-1 py-2 fw-bold uppercase" data-bs-dismiss="modal">Keep Locked</button>
+                    <button type="button" class="btn-custom btn-danger-custom flex-grow-1 py-2 fw-bold uppercase" onclick="unlockBulkTests()">Yes, Unlock Tests</button>
+                </div>
             </div>
         </div>
     </div>
-</div>
 @endif
 
 {{-- Includes the Unified Lightbox Partial --}}
@@ -576,16 +609,17 @@
 
 @push('scripts')
 <script>
-const savedProvince = "{{ $appointment->patient_province }}";
-const savedCity = "{{ $appointment->patient_city }}";
-const savedBarangay = "{{ $appointment->patient_barangay }}";
-const savedTimeSlot = @json(old('time_slot', $appointment->time_slot));
+const savedTimeSlot = @json($selectedTime);
 const appId = @json($appointment->id);
 const isBulk = @json($isBulk);
 const isBulkCashless = @json($isBulkCashless);
-const isDependentRecord = @json($appointment->dependent_id !== null);
 const isPaidRollover = @json($appointment->payment_status === 'paid');
 const isCanceledRecord = @json($appointment->status === 'canceled');
+const packagesMap = @json($packages->keyBy('id'));
+const servicesMap = @json($services->keyBy('id'));
+const origPackageIds = @json($selectedPackageIds);
+const origServiceIds = @json($selectedServiceIds);
+
 let lastMethod = @json($selectedPaymentMethod);
 let lastProviderId = null;
 
@@ -595,21 +629,7 @@ window.receiptLocalData = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     try { loadDraftData(); } catch(e) {}
-    try { onServiceCheckChange(); } catch(e) {}
-
-    // Initialize Unified Address Cascade for all appointment types (Single & Bulk)
-    if (typeof window.initUnifiedAddressCascade === 'function') {
-        await window.initUnifiedAddressCascade({
-            provEl: document.getElementById('addr_province'),
-            cityEl: document.getElementById('addr_city'),
-            brgyEl: document.getElementById('addr_brgy'),
-            streetEl: document.getElementById('patient_street'),
-            savedProv: savedProvince,
-            savedCity: savedCity,
-            savedBrgy: savedBarangay,
-            onCompiled: saveDraftData
-        });
-    }
+    try { onResubmitCatalogChange(); } catch(e) {}
 
     if (!isBulk) {
         try { initPaymentState(); } catch(e) {}
@@ -632,11 +652,154 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* BULK CASHLESS TESTS UNLOCK ENGINE */
+/* BIDIRECTIONAL ANTI-DOUBLE SELECTION & ANTI-CONFLICTING PACKAGES ENGINE     */
+/* -------------------------------------------------------------------------- */
+function recalculateResubmitDependencies() {
+    // 1. Gather all service IDs covered by checked packages
+    const coveredServiceIds = new Set();
+    const activePackages = Array.from(document.querySelectorAll('.pkg-checkbox:checked'));
+
+    activePackages.forEach(pkgCb => {
+        const pkgId = pkgCb.value;
+        const pkg = packagesMap[pkgId];
+        if (pkg && pkg.services) {
+            pkg.services.forEach(svc => coveredServiceIds.add(svc.id.toString()));
+        } else if (pkgCb.dataset.services) {
+            try {
+                const sArr = JSON.parse(pkgCb.dataset.services);
+                sArr.forEach(id => coveredServiceIds.add(id.toString()));
+            } catch(e) {}
+        }
+    });
+
+    // 2. Gather all individually checked services
+    const checkedIndividualServices = new Set();
+    document.querySelectorAll('.service-checkbox:checked').forEach(svcCb => {
+        checkedIndividualServices.add(svcCb.value.toString());
+    });
+
+    // 3. Package Conflict Check (Package-to-Package and Service-to-Package)
+    document.querySelectorAll('.pkg-checkbox').forEach(pkgCb => {
+        const pkgId = pkgCb.value;
+        const pkg = packagesMap[pkgId];
+        let pkgServiceIds = [];
+        if (pkg && pkg.services) {
+            pkgServiceIds = pkg.services.map(s => s.id.toString());
+        } else if (pkgCb.dataset.services) {
+            try {
+                pkgServiceIds = JSON.parse(pkgCb.dataset.services).map(String);
+            } catch(e) {}
+        }
+
+        const itemWrapper = document.getElementById('resubmit_pkg_wrap_' + pkgId) || pkgCb.closest('.resubmit-catalog-item');
+        const conflictBadge = itemWrapper ? itemWrapper.querySelector('.pkg-conflict-badge') : null;
+
+        if (pkgCb.checked) {
+            pkgCb.disabled = false;
+            if (itemWrapper) {
+                itemWrapper.classList.remove('opacity-50');
+                itemWrapper.style.pointerEvents = 'auto';
+                itemWrapper.style.cursor = 'default';
+                itemWrapper.removeAttribute('title');
+            }
+            if (conflictBadge) conflictBadge.classList.add('d-none');
+            return;
+        }
+
+        const conflictsWithPackage = pkgServiceIds.some(id => coveredServiceIds.has(id));
+        const conflictsWithIndividual = pkgServiceIds.some(id => checkedIndividualServices.has(id));
+        const isConflicting = conflictsWithPackage || conflictsWithIndividual;
+
+        if (isConflicting) {
+            pkgCb.disabled = true;
+            if (itemWrapper) {
+                itemWrapper.classList.add('opacity-50');
+                itemWrapper.style.pointerEvents = 'none'; // BARS USER AT UI
+                itemWrapper.style.cursor = 'not-allowed';
+                if (conflictsWithPackage) {
+                    itemWrapper.setAttribute('title', 'Conflicting package: shares tests with an already selected package.');
+                } else {
+                    itemWrapper.setAttribute('title', 'Conflicting package: includes an individual test that is already selected.');
+                }
+            }
+            if (conflictBadge) conflictBadge.classList.remove('d-none');
+        } else {
+            pkgCb.disabled = false;
+            if (itemWrapper) {
+                itemWrapper.classList.remove('opacity-50');
+                itemWrapper.style.pointerEvents = 'auto';
+                itemWrapper.style.cursor = 'default';
+                itemWrapper.removeAttribute('title');
+            }
+            if (conflictBadge) conflictBadge.classList.add('d-none');
+        }
+    });
+
+    // 4. Individual Tests Conflict Check (Package-to-Service)
+    document.querySelectorAll('.service-checkbox').forEach(svcCb => {
+        const isCovered = coveredServiceIds.has(svcCb.value.toString());
+        const itemWrapper = document.getElementById('resubmit_svc_wrap_' + svcCb.value) || svcCb.closest('.service-item-wrapper');
+        const badge = itemWrapper ? itemWrapper.querySelector('.pkg-covered-badge') : null;
+
+        if (isCovered) {
+            svcCb.checked = false;
+            svcCb.disabled = true;
+            if (itemWrapper) {
+                itemWrapper.classList.add('opacity-50');
+                itemWrapper.style.pointerEvents = 'none'; // BARS USER AT UI
+                itemWrapper.style.cursor = 'not-allowed';
+                itemWrapper.setAttribute('title', 'Already included in a selected package.');
+            }
+            if (badge) badge.classList.remove('d-none');
+        } else {
+            svcCb.disabled = false;
+            if (itemWrapper) {
+                itemWrapper.classList.remove('opacity-50');
+                itemWrapper.style.pointerEvents = 'auto';
+                itemWrapper.style.cursor = 'default';
+                itemWrapper.removeAttribute('title');
+            }
+            if (badge) badge.classList.add('d-none');
+        }
+    });
+}
+
+function onResubmitCatalogChange() {
+    recalculateResubmitDependencies();
+    updateTotal();
+    clearFieldError(document.getElementById('services_container'));
+    clearFieldError(document.getElementById('packages_container'));
+}
+
+function updateTotal() {
+    let total = 0;
+    document.querySelectorAll('.pkg-checkbox:checked').forEach(cb => {
+        total += parseFloat(cb.dataset.price || 0);
+    });
+    document.querySelectorAll('.service-checkbox:checked').forEach(cb => {
+        total += parseFloat(cb.dataset.price || 0);
+    });
+
+    const totalDisplay = document.getElementById('total_bill_display');
+    if (totalDisplay) {
+        totalDisplay.innerText = '₱' + total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+}
+
+function filterResubmitCatalog() {
+    const query = document.getElementById('resubmit_catalog_search').value.toUpperCase().trim();
+    document.querySelectorAll('.resubmit-catalog-item').forEach(item => {
+        const name = (item.dataset.name || '').toUpperCase();
+        item.style.display = (query === '' || name.includes(query)) ? '' : 'none';
+    });
+}
+
+/* -------------------------------------------------------------------------- */
+/* BULK CASHLESS TESTS UNLOCK ENGINE                                          */
 /* -------------------------------------------------------------------------- */
 window.unlockBulkTests = function() {
     const overlay = document.getElementById('services_lock_overlay');
-    const container = document.getElementById('services_container');
+    const container = document.getElementById('resubmitCatalogTabsContent');
     const lockBanner = document.getElementById('bulk_tests_lock_banner');
     const unlockedBanner = document.getElementById('bulk_tests_unlocked_banner');
     const badge = document.getElementById('tests_lock_status_badge');
@@ -647,13 +810,13 @@ window.unlockBulkTests = function() {
     if (lockBanner) lockBanner.classList.add('d-none');
     if (unlockedBanner) unlockedBanner.classList.remove('d-none');
     if (resetInput) resetInput.value = '1';
+
     if (badge) {
         badge.innerHTML = '<i class="bi bi-unlock-fill text-danger me-1"></i>Unlocked (Will Reset Batch)';
         badge.classList.remove('text-main');
         badge.classList.add('text-danger');
     }
 
-    // Dismiss the modal cleanly
     const modalEl = document.getElementById('confirmUnlockTestsModal');
     if (modalEl && typeof bootstrap !== 'undefined') {
         const modalInstance = bootstrap.Modal.getInstance(modalEl);
@@ -662,13 +825,15 @@ window.unlockBulkTests = function() {
 };
 
 /* -------------------------------------------------------------------------- */
-/* REAL-TIME DRAFT AUTOSAVE & RECOVERY ENGINE */
+/* REAL-TIME DRAFT AUTOSAVE & RECOVERY ENGINE                                 */
 /* -------------------------------------------------------------------------- */
 function saveDraftData() {
     const form = document.getElementById('resubmitForm');
     if (!form) return;
+
     const draft = {};
     const inputs = form.querySelectorAll('input:not([type="password"]):not([type="file"]), select, textarea');
+
     inputs.forEach(input => {
         if (input.name) {
             if (input.type === 'checkbox') {
@@ -685,6 +850,7 @@ function saveDraftData() {
             }
         }
     });
+
     localStorage.setItem(`resubmit_draft_${appId}`, JSON.stringify(draft));
 }
 
@@ -695,15 +861,12 @@ function loadDraftData() {
         const draft = JSON.parse(raw);
 
         for (const [key, value] of Object.entries(draft)) {
-            if (['patient_province', 'patient_city', 'patient_barangay'].includes(key)) {
-                continue;
-            }
             const escKey = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(key) : key;
             if (Array.isArray(value)) {
                 value.forEach(val => {
                     const escVal = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(val) : val;
                     try {
-                        const cb = document.querySelector(`input[name="${escKey}"][value="${escVal}"]`) || document.getElementById(`svc_${val}`);
+                        const cb = document.querySelector(`input[name="${escKey}"][value="${escVal}"]`);
                         if (cb) cb.checked = true;
                     } catch(e) {}
                 });
@@ -734,6 +897,8 @@ function loadDraftData() {
                 } catch(e) {}
             }
         }
+        recalculateResubmitDependencies();
+        updateTotal();
     } catch (e) {
         console.warn("Draft restore failed:", e);
     }
@@ -744,44 +909,14 @@ function clearDraftData() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* INSTANT IN-PAGE "RESET EDITS" CONTROLLER */
+/* INSTANT IN-PAGE "RESET EDITS" CONTROLLER                                   */
 /* -------------------------------------------------------------------------- */
 async function resetResubmitForm() {
     clearDraftData();
 
-    document.getElementById('patient_first_name').value = "{{ $appointment->patient_first_name }}";
-    document.getElementById('patient_middle_name').value = "{{ $appointment->patient_middle_name === 'N/A' ? '' : $appointment->patient_middle_name }}";
-    document.getElementById('no_middle_name_toggle').checked = "{{ $appointment->patient_middle_name }}" === "N/A";
-    document.getElementById('patient_middle_name').readOnly = "{{ $appointment->patient_middle_name }}" === "N/A";
-    document.getElementById('patient_last_name').value = "{{ $appointment->patient_last_name }}";
-    document.getElementById('patient_suffix').value = "{{ $appointment->patient_suffix }}";
-    document.getElementById('patient_sex').value = "{{ $appointment->patient_sex }}";
-    document.getElementById('patient_birthdate').value = "{{ $appointment->patient_birthdate ? $appointment->patient_birthdate->format('Y-m-d') : '' }}";
-
-    let origPhone = "{{ $appointment->patient_phone }}".trim();
-    if (origPhone.startsWith('+639')) origPhone = '09' + origPhone.substring(4);
-    if (origPhone.startsWith('639')) origPhone = '09' + origPhone.substring(3);
-    document.getElementById('phone_display').value = origPhone.startsWith('09') ? origPhone.substring(2) : origPhone;
-    document.getElementById('patient_phone').value = origPhone;
-
-    // Reset Address Cascade for all records
-    if (typeof window.initUnifiedAddressCascade === 'function') {
-        await window.initUnifiedAddressCascade({
-            provEl: document.getElementById('addr_province'),
-            cityEl: document.getElementById('addr_city'),
-            brgyEl: document.getElementById('addr_brgy'),
-            streetEl: document.getElementById('patient_street'),
-            savedProv: savedProvince,
-            savedCity: savedCity,
-            savedBrgy: savedBarangay
-        });
-    }
-    document.getElementById('patient_street').value = "{{ $appointment->patient_street }}";
-
-    // Relock tests if cashless bulk
     if (isBulkCashless) {
         const overlay = document.getElementById('services_lock_overlay');
-        const container = document.getElementById('services_container');
+        const container = document.getElementById('resubmitCatalogTabsContent');
         const lockBanner = document.getElementById('bulk_tests_lock_banner');
         const unlockedBanner = document.getElementById('bulk_tests_unlocked_banner');
         const badge = document.getElementById('tests_lock_status_badge');
@@ -792,6 +927,7 @@ async function resetResubmitForm() {
         if (lockBanner) lockBanner.classList.remove('d-none');
         if (unlockedBanner) unlockedBanner.classList.add('d-none');
         if (resetInput) resetInput.value = '0';
+
         if (badge) {
             badge.innerHTML = '<i class="bi bi-lock-fill text-warning me-1"></i>Locked';
             badge.classList.remove('text-danger');
@@ -821,13 +957,17 @@ async function resetResubmitForm() {
         syncPaymentUI();
     }
 
-    const origServices = @json($appointment->services->pluck('id')->toArray());
-    document.querySelectorAll('.service-checkbox').forEach(cb => {
-        cb.checked = origServices.includes(parseInt(cb.value));
+    // Restore original or suggested packages & services
+    document.querySelectorAll('.pkg-checkbox').forEach(cb => {
+        cb.checked = origPackageIds.includes(parseInt(cb.value));
     });
-    onServiceCheckChange();
+    document.querySelectorAll('.service-checkbox').forEach(cb => {
+        cb.checked = origServiceIds.includes(parseInt(cb.value));
+    });
 
-    const origDate = "{{ $appointment->appointment_date ? $appointment->appointment_date->format('Y-m-d') : '' }}";
+    onResubmitCatalogChange();
+
+    const origDate = "{{ $selectedDate }}";
     document.getElementById('appointment_date').value = origDate;
     if (origDate) await fetchTimeSlots(origDate);
 
@@ -840,7 +980,7 @@ async function resetResubmitForm() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* REFERRAL FILE CONTROLLERS */
+/* REFERRAL FILE CONTROLLERS                                                  */
 /* -------------------------------------------------------------------------- */
 function handleReferralUpload(input) {
     const file = input.files[0];
@@ -889,7 +1029,7 @@ function removeExistingReferral() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* RECEIPT FILE CONTROLLERS */
+/* RECEIPT FILE CONTROLLERS                                                   */
 /* -------------------------------------------------------------------------- */
 function handleReceiptUpload(input) {
     const file = input.files[0];
@@ -944,81 +1084,19 @@ function removeExistingReceipt() {
     syncPaymentUI();
 }
 
-/* -------------------------------------------------------------------------- */
-/* GENERAL FORM HELPERS & VALIDATION ENGINE */
-/* -------------------------------------------------------------------------- */
-function toggleMiddleName(chk) {
-    const input = document.getElementById('patient_middle_name');
-    if (chk.checked) {
-        input.value = 'N/A';
-        input.readOnly = true;
-    } else {
-        input.value = '';
-        input.readOnly = false;
-    }
-    clearFieldError(input);
-}
-
-function syncPhone() {
-    const display = document.getElementById('phone_display').value;
-    const hidden = document.getElementById('patient_phone');
-    hidden.value = display ? '09' + display : '';
-    clearFieldError(document.getElementById('phone_display'));
-}
-
-function onServiceCheckChange() {
-    updateTotal();
-    resortServices();
-    clearFieldError(document.getElementById('services_container'));
-}
-
-function updateTotal() {
-    let total = 0;
-    document.querySelectorAll('.service-checkbox:checked').forEach(cb => {
-        total += parseFloat(cb.dataset.price || 0);
-        cb.closest('.service-item')?.classList.add('selected-test');
-    });
-    document.querySelectorAll('.service-checkbox:not(:checked)').forEach(cb => {
-        cb.closest('.service-item')?.classList.remove('selected-test');
-    });
-    const totalDisplay = document.getElementById('total_bill_display');
-    if (totalDisplay) {
-        totalDisplay.innerText = '₱' + total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-}
-
-function resortServices() {
-    const container = document.getElementById('services_container');
-    if (!container) return;
-    const items = Array.from(container.querySelectorAll('.service-item'));
-    items.sort((a, b) => {
-        const aChecked = a.querySelector('.service-checkbox')?.checked ? 1 : 0;
-        const bChecked = b.querySelector('.service-checkbox')?.checked ? 1 : 0;
-        if (aChecked !== bChecked) return bChecked - aChecked;
-        return (a.dataset.name || '').localeCompare(b.dataset.name || '');
-    });
-    items.forEach(item => container.appendChild(item));
-}
-
-function filterServices() {
-    const query = document.getElementById('service_search').value.toUpperCase();
-    document.querySelectorAll('.service-item').forEach(item => {
-        const name = item.dataset.name || '';
-        item.style.display = name.includes(query) ? '' : 'none';
-    });
-}
-
 function hasActiveReceipt() {
     if (isBulk) return true;
     if (isCanceledRecord) {
         const receiptInput = document.getElementById('payment_receipt');
         return receiptInput && receiptInput.files && receiptInput.files.length > 0;
     }
+
     const isRemoved = document.getElementById('remove_receipt')?.value === '1';
     const receiptInput = document.getElementById('payment_receipt');
     const hasNewFile = receiptInput && receiptInput.files && receiptInput.files.length > 0;
     const existingBox = document.getElementById('existing_receipt_box');
     const hasExistingOnServer = existingBox && !existingBox.dataset.removed;
+
     if (isRemoved) return hasNewFile;
     return hasExistingOnServer || hasNewFile;
 }
@@ -1119,7 +1197,7 @@ function updateProviderQr(radio) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* DYNAMIC TIME SLOTS FETCHER WITH INLINE ERRORS */
+/* DYNAMIC TIME SLOTS FETCHER WITH INLINE ERRORS                              */
 /* -------------------------------------------------------------------------- */
 async function fetchTimeSlots(dateStr) {
     const tsSel = document.getElementById('time_slot');
@@ -1241,52 +1319,6 @@ function clearFieldError(input) {
     }
 }
 
-function validateNameString(val, fieldName) {
-    if (!val || val === 'N/A') return null;
-    const charRegex = /^[a-zA-Z\u00f1\u00d1\u00e1\u00c1\u00e9\u00c9\u00ed\u00cd\u00f3\u00d3\u00fa\u00da\u00fc\u00dc \s.\'-]+$/;
-    const startRegex = /^[a-zA-Z\u00f1\u00d1\u00e1\u00c1\u00e9\u00c9\u00ed\u00cd\u00f3\u00d3\u00fa\u00da\u00fc\u00dc ]/;
-    const consecutiveRegex = /[.\'-]{2,}/;
-    const letterRegex = /[a-zA-Z\u00f1\u00d1\u00e1\u00c1\u00e9\u00c9\u00ed\u00cd\u00f3\u00d3\u00fa\u00da\u00fc\u00dc]/;
-
-    if (!charRegex.test(val)) return `${fieldName} may only contain letters, spaces, periods, hyphens, and apostrophes.`;
-    if (!startRegex.test(val)) return `${fieldName} must start with a letter.`;
-    if (!letterRegex.test(val)) return `${fieldName} must contain at least one letter.`;
-    if (consecutiveRegex.test(val)) return `${fieldName} cannot contain consecutive punctuation marks.`;
-    if (val.length > 60) return `${fieldName} cannot exceed 60 characters.`;
-    return null;
-}
-
-function validateBirthdateInput() {
-    const bdayInput = document.getElementById('patient_birthdate');
-    if (!bdayInput) return true;
-    clearFieldError(bdayInput);
-    if (!bdayInput.value) {
-        setFieldError(bdayInput, 'err_patient_birthdate', 'Birthdate is required.');
-        return false;
-    }
-    const dob = new Date(bdayInput.value);
-    const today = new Date();
-    let age = today.getFullYear() - dob.getFullYear();
-    const m = today.getMonth() - dob.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-
-    if (age < 0) {
-        setFieldError(bdayInput, 'err_patient_birthdate', 'Birthdate cannot be in the future.');
-        return false;
-    } else if (isDependentRecord) {
-        if (age >= 18) {
-            setFieldError(bdayInput, 'err_patient_birthdate', 'Administrative Policy: Dependents must be minors (under 18 years of age).');
-            return false;
-        }
-    } else {
-        if (age < 18) {
-            setFieldError(bdayInput, 'err_patient_birthdate', 'Administrative Policy: You must be at least 18 years old to book a personal appointment.');
-            return false;
-        }
-    }
-    return true;
-}
-
 function validateResubmitForm(e) {
     let isValid = true;
     let firstInvalidInput = null;
@@ -1304,68 +1336,44 @@ function validateResubmitForm(e) {
         if (!firstInvalidInput) firstInvalidInput = input;
     }
 
-    // 1. Patient Name Validation
-    const fNameInput = document.getElementById('patient_first_name');
-    const fNameErr = validateNameString(fNameInput.value.trim(), 'First Name');
-    if (!fNameInput.value.trim()) markInvalid(fNameInput, 'err_patient_first_name', 'First Name is required.');
-    else if (fNameErr) markInvalid(fNameInput, 'err_patient_first_name', fNameErr);
+    // 1. Diagnostic Tests & Packages Selection Validation
+    const selectedPkgs = Array.from(document.querySelectorAll('.pkg-checkbox:checked'));
+    const selectedSvcs = Array.from(document.querySelectorAll('.service-checkbox:checked'));
+    const container = document.getElementById('resubmitCatalogTabsContent');
 
-    const mNameInput = document.getElementById('patient_middle_name');
-    const mNameErr = validateNameString(mNameInput.value.trim(), 'Middle Name');
-    if (mNameErr) markInvalid(mNameInput, 'err_patient_middle_name', mNameErr);
+    if (selectedPkgs.length === 0 && selectedSvcs.length === 0) {
+        markInvalid(container, 'err_service_ids', 'Please select at least one individual test or health package.');
+    } else {
+        // Enforce no package-to-package conflicts
+        const coveredServices = new Set();
+        for (const pkgCb of selectedPkgs) {
+            const pkg = packagesMap[pkgCb.value];
+            let serviceIds = [];
+            if (pkg && pkg.services) {
+                serviceIds = pkg.services.map(s => s.id.toString());
+            } else if (pkgCb.dataset.services) {
+                try { serviceIds = JSON.parse(pkgCb.dataset.services).map(String); } catch(err) {}
+            }
 
-    const lNameInput = document.getElementById('patient_last_name');
-    const lNameErr = validateNameString(lNameInput.value.trim(), 'Last Name');
-    if (!lNameInput.value.trim()) markInvalid(lNameInput, 'err_patient_last_name', 'Last Name is required.');
-    else if (lNameErr) markInvalid(lNameInput, 'err_patient_last_name', lNameErr);
+            for (const sId of serviceIds) {
+                if (coveredServices.has(sId)) {
+                    markInvalid(container, 'err_service_ids', 'Conflicting packages detected: multiple selected packages share identical tests. Please remove one of the conflicting packages.');
+                    break;
+                }
+                coveredServices.add(sId);
+            }
+        }
 
-    const suffixInput = document.getElementById('patient_suffix');
-    if (suffixInput.value.trim()) {
-        const suffixRegex = /^[a-zA-Z\s.]+$/;
-        if (!suffixRegex.test(suffixInput.value.trim())) markInvalid(suffixInput, 'err_patient_suffix', 'Suffix may only contain letters, spaces, and periods.');
-        else if (suffixInput.value.trim().length > 10) markInvalid(suffixInput, 'err_patient_suffix', 'Suffix cannot exceed 10 characters.');
+        // Enforce no package-to-service conflicts
+        for (const svcCb of selectedSvcs) {
+            if (coveredServices.has(svcCb.value.toString())) {
+                markInvalid(container, 'err_service_ids', 'Double selection detected: An individual test is already covered in a selected package.');
+                break;
+            }
+        }
     }
 
-    // 2. Sex Validation
-    const sexSel = document.getElementById('patient_sex');
-    if (!sexSel.value) markInvalid(sexSel, 'err_patient_sex', 'Please select a gender.');
-
-    // 3. Birthdate & Age Validation
-    const bdayInput = document.getElementById('patient_birthdate');
-    if (!validateBirthdateInput()) {
-        if (!firstInvalidInput) firstInvalidInput = bdayInput;
-        isValid = false;
-    }
-
-    // 4. Contact Phone Validation
-    const phoneInput = document.getElementById('patient_phone');
-    const displayPhoneInput = document.getElementById('phone_display');
-    const phoneRegex = /^09\d{9}$/;
-    if (!displayPhoneInput.value.trim()) {
-        markInvalid(displayPhoneInput, 'err_patient_phone', 'Contact phone number is required.');
-    } else if (!phoneRegex.test(phoneInput.value.trim())) {
-        markInvalid(displayPhoneInput, 'err_patient_phone', 'Phone number must start with 09 and contain exactly 11 digits.');
-    }
-
-    // 5. Address Validation (Applicable for both Single and Bulk)
-    const provSel = document.getElementById('addr_province');
-    const citySel = document.getElementById('addr_city');
-    const brgySel = document.getElementById('addr_brgy');
-    const streetInput = document.getElementById('patient_street');
-
-    if (provSel && !provSel.value) markInvalid(provSel, 'err_patient_province', 'Province selection is required.');
-    if (citySel && !citySel.value) markInvalid(citySel, 'err_patient_city', 'City/Municipality selection is required.');
-    if (brgySel && !brgySel.value) markInvalid(brgySel, 'err_patient_barangay', 'Barangay selection is required.');
-    if (!streetInput.value.trim()) markInvalid(streetInput, 'err_patient_street', 'Street address is required.');
-
-    // 6. Test Services Selection
-    const selectedTests = document.querySelectorAll('.service-checkbox:checked');
-    if (selectedTests.length === 0) {
-        const container = document.getElementById('services_container');
-        markInvalid(container, 'err_service_ids', 'Please select at least one laboratory test.');
-    }
-
-    // 7. Schedule Validation
+    // 2. Schedule Validation
     const dateInput = document.getElementById('appointment_date');
     const slotSel = document.getElementById('time_slot');
     const now = new Date();
@@ -1381,7 +1389,7 @@ function validateResubmitForm(e) {
         markInvalid(slotSel, 'err_time_slot', 'Preferred time slot is required. Please select a valid available time slot.');
     }
 
-    // 8. Payment Receipt Validation (Bypassed if bulk OR confirmed paid rollover)
+    // 3. Payment Receipt Validation (Bypassed if bulk OR confirmed paid rollover)
     if (!isBulk) {
         const payCashless = document.getElementById('pay_cashless');
         if (payCashless && payCashless.checked && !isPaidRollover) {
@@ -1390,7 +1398,6 @@ function validateResubmitForm(e) {
                 const providerContainer = document.getElementById('provider_selection_container');
                 markInvalid(providerContainer, 'err_payment_receipt', 'Please choose an E-Wallet provider.');
             }
-
             const receiptInput = document.getElementById('payment_receipt');
             const hasExistingReceipt = !isCanceledRecord && document.getElementById('existing_receipt_box') && !document.getElementById('existing_receipt_box').classList.contains('d-none');
             const isRemoved = document.getElementById('remove_receipt').value === '1';

@@ -1,141 +1,100 @@
+<!-- resources/views/appointments/partials/wizard/self-wizard.blade.php -->
+@php
+    $userSex = strtolower(Auth::user()->sex ?? 'both');
+@endphp
+
 <!-- SELF APPOINTMENT FLOW CONTAINER -->
 <div id="self-wizard-container">
-    <!-- SELF STEP 2: PATIENT DETAILS -->
+    <!-- ========================================================================= -->
+    <!-- SELF STEP 2: PATIENT DETAILS (READONLY VERIFIED IDENTITY SNAPSHOT)        -->
+    <!-- ========================================================================= -->
     <div class="wiz-section d-none text-start animate-page" id="self-step-2">
         <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary border-opacity-10 pb-2">
             <div>
                 <h3 class="text-main fw-bold mb-1 uppercase tracking-tighter">Step 2: Patient Information</h3>
-                <p class="text-secondary small mb-0">Please verify or enter the details for your personal medical record.</p>
+                <p class="text-secondary small mb-0">Review your verified personal medical profile for this booking.</p>
             </div>
-            <button type="button" class="btn btn-sm btn-outline-accent py-2 px-3 fw-bold" onclick="resetSelfDetails()">
-                <i class="bi bi-arrow-counterclockwise me-1"></i> RESET INFO
-            </button>
+            <a href="{{ route('profile.edit') }}" target="_blank" class="btn btn-sm btn-outline-accent py-2 px-3 fw-bold d-inline-flex align-items-center gap-1" style="font-size: 0.75rem;">
+                <i class="bi bi-person-gear"></i> EDIT PROFILE
+            </a>
         </div>
 
-        <div class="row g-3">
-            {{-- First Name --}}
-            <div class="col-md-3">
-                <div class="d-flex align-items-center mb-1" style="height: 22px;">
-                    <label class="small text-secondary fw-bold mb-0 uppercase">First Name</label>
+        {{-- Readonly Demographic Information Display Card --}}
+        <div class="card p-4 border rounded-3 mb-4 bg-card" style="border-color: var(--border-color) !important;">
+            <div class="row g-3">
+                {{-- Full Name --}}
+                <div class="col-md-6 border-bottom border-secondary border-opacity-10 pb-2">
+                    <label class="small text-secondary fw-bold mb-1 uppercase fs-x-small">Patient Full Name</label>
+                    <div class="fw-bold text-main fs-6 text-truncate">{{ strtoupper(Auth::user()->name) }}</div>
                 </div>
-                <input type="text" name="patient_first_name" id="self_first_name" class="form-control py-3 shadow-none uppercase fw-bold" placeholder="First Name" value="{{ old('patient_first_name', Auth::user()->first_name) }}" oninput="validateNameInput(this, 'First Name', 'err_self_first_name', true); updateSummary();" required>
-                <div class="invalid-feedback d-none" id="err_self_first_name"></div>
-            </div>
 
-            {{-- Middle Name --}}
-            <div class="col-md-3">
-                <div class="d-flex justify-content-between align-items-center mb-1" style="height: 22px;">
-                    <label class="small text-secondary fw-bold mb-0 uppercase">Middle Name</label>
-                    <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" id="self_no_mn" onclick="toggleSelfMN(this)" {{ Auth::user()->middle_name === 'N/A' ? 'checked' : '' }} style="margin-top: 0.15rem;">
-                        <label class="smaller text-muted" style="font-size: 0.65rem; line-height: 1;" for="self_no_mn">None</label>
+                {{-- Sex & Age / Birthdate --}}
+                <div class="col-md-6 border-bottom border-secondary border-opacity-10 pb-2">
+                    <label class="small text-secondary fw-bold mb-1 uppercase fs-x-small">Age & Biological Classification</label>
+                    <div class="fw-bold text-main fs-6">
+                        {{ Auth::user()->birthdate ? \Carbon\Carbon::parse(Auth::user()->birthdate)->age . ' YRS OLD' : 'AGE UNKNOWN' }}
+                        <span class="text-muted mx-1">&bull;</span>
+                        {{ strtoupper(Auth::user()->sex) }}
+                        <small class="text-muted fw-normal ms-1">({{ Auth::user()->birthdate ? \Carbon\Carbon::parse(Auth::user()->birthdate)->format('M d, Y') : 'N/A' }})</small>
                     </div>
                 </div>
-                <input type="text" name="patient_middle_name" id="self_middle_name" class="form-control py-3 shadow-none uppercase fw-bold" placeholder="Middle Name" value="{{ old('patient_middle_name', Auth::user()->middle_name === 'N/A' ? '' : Auth::user()->middle_name) }}" {{ Auth::user()->middle_name === 'N/A' ? 'readonly' : '' }} oninput="validateNameInput(this, 'Middle Name', 'err_self_middle_name', false); updateSummary();">
-                <div class="invalid-feedback d-none" id="err_self_middle_name"></div>
-            </div>
 
-            {{-- Last Name --}}
-            <div class="col-md-3">
-                <div class="d-flex align-items-center mb-1" style="height: 22px;">
-                    <label class="small text-secondary fw-bold mb-0 uppercase">Last Name</label>
+                {{-- Contact Number --}}
+                <div class="col-md-6 border-bottom border-secondary border-opacity-10 pb-2">
+                    <label class="small text-secondary fw-bold mb-1 uppercase fs-x-small">Mobile Contact Number</label>
+                    <div class="fw-bold text-main fs-6">
+                        <i class="bi bi-telephone text-accent me-1"></i>{{ Auth::user()->phone ?: 'No phone registered' }}
+                    </div>
                 </div>
-                <input type="text" name="patient_last_name" id="self_last_name" class="form-control py-3 shadow-none uppercase fw-bold" placeholder="Last Name" value="{{ old('patient_last_name', Auth::user()->last_name) }}" oninput="validateNameInput(this, 'Last Name', 'err_self_last_name', true); updateSummary();" required>
-                <div class="invalid-feedback d-none" id="err_self_last_name"></div>
-            </div>
 
-            {{-- Suffix --}}
-            <div class="col-md-3">
-                <div class="d-flex align-items-center mb-1" style="height: 22px;">
-                    <label class="small text-secondary fw-bold mb-0 uppercase">Suffix (Opt.)</label>
+                {{-- Email Address --}}
+                <div class="col-md-6 border-bottom border-secondary border-opacity-10 pb-2">
+                    <label class="small text-secondary fw-bold mb-1 uppercase fs-x-small">Account Email</label>
+                    <div class="fw-bold text-main fs-6 text-truncate">
+                        <i class="bi bi-envelope text-accent me-1"></i>{{ Auth::user()->email }}
+                    </div>
                 </div>
-                <input type="text" name="patient_suffix" id="self_suffix" list="suffix_options" class="form-control py-3 shadow-none uppercase fw-bold" placeholder="e.g. JR" maxlength="10" value="{{ old('patient_suffix', Auth::user()->suffix) }}" oninput="this.value = this.value.replace(/[^a-zA-Z\s.]/g, ''); updateSummary(); clearInlineError(this)">
-                <div class="invalid-feedback d-none" id="err_self_suffix"></div>
-            </div>
 
-            {{-- Sex Selector --}}
-            <div class="col-md-6">
-                <label class="small text-secondary fw-bold mb-1 uppercase">Sex</label>
-                <select name="patient_sex" id="self_sex" class="form-select py-3 shadow-none" onchange="clearInlineError(this); updateSummary();" required>
-                    <option value="">Select Sex</option>
-                    <option value="Male" {{ old('patient_sex', Auth::user()->sex) === 'Male' ? 'selected' : '' }}>Male</option>
-                    <option value="Female" {{ old('patient_sex', Auth::user()->sex) === 'Female' ? 'selected' : '' }}>Female</option>
-                </select>
-                <div class="invalid-feedback d-none" id="err_self_sex"></div>
-            </div>
-
-            {{-- Birthdate Input --}}
-            <div class="col-md-6">
-                <label class="small text-secondary fw-bold mb-1 uppercase">Birthdate</label>
-                <input type="date" name="patient_birthdate" id="self_bday" class="form-control py-3 shadow-none" value="{{ old('patient_birthdate', Auth::user()->birthdate ? Auth::user()->birthdate->format('Y-m-d') : '') }}" max="{{ now()->subYears(18)->format('Y-m-d') }}" onchange="validateBirthdateInput(); updateSummary();" required>
-                <div class="invalid-feedback d-none" id="err_self_birthdate"></div>
-                <small class="text-muted smaller mt-1 d-block">Patients must be at least 18 years of age for personal account bookings.</small>
-            </div>
-
-            {{-- Contact Phone --}}
-            <div class="col-12 mt-2">
-                <label class="small text-secondary fw-bold mb-1 uppercase">Contact Number</label>
-                <div class="input-group">
-                    <span class="input-group-text border-secondary bg-secondary bg-opacity-25 text-main fw-bold">09</span>
-                    @php
-                        $selfPhoneRaw = old('patient_phone', Auth::user()->phone);
-                        $selfPhoneDisp = str_starts_with($selfPhoneRaw, '09') ? substr($selfPhoneRaw, 2) : $selfPhoneRaw;
-                    @endphp
-                    <input type="text" id="self_phone_display" class="form-control py-3 shadow-none" placeholder="171234567" maxlength="9" value="{{ $selfPhoneDisp }}" oninput="this.value = this.value.replace(/[^0-9]/g, ''); syncSelfPhone(); clearInlineError(this);" required>
-                </div>
-                <input type="hidden" name="patient_phone" id="self_phone_hidden" value="{{ $selfPhoneRaw }}" required>
-                <div class="invalid-feedback d-none" id="err_self_phone"></div>
-            </div>
-
-            {{-- Doctor's Referral File Upload --}}
-            <div class="col-12 mt-2">
-                <label class="small text-secondary fw-bold mb-1 uppercase">Doctor's Referral / Note (Optional)</label>
-                <div id="self_referral_wrapper">
-                    <input type="file" name="referral_note" id="self_referral" class="form-control py-3 shadow-none" accept="image/*, application/pdf" onchange="handleReferralUpload(this)">
-                </div>
-                <div id="self_referral_preview_container" class="d-none mt-3 p-3 rounded" style="background-color: rgba(25, 211, 140, 0.03); border: 1px solid rgba(25, 211, 140, 0.15);">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <span class="small text-accent fw-semibold" id="self_referral_file_label"><i class="bi bi-file-earmark-check-fill me-1"></i>Selected File</span>
-                        <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-sm btn-outline-accent py-1 px-3 fw-bold" onclick="viewReferralFile('self')">View</button>
-                            <button type="button" class="btn btn-sm btn-outline-danger py-1 px-3 fw-bold" onclick="removeUploadedReferral('self')">Remove</button>
-                        </div>
+                {{-- Registered Residential Address --}}
+                <div class="col-12 pt-1">
+                    <label class="small text-secondary fw-bold mb-1 uppercase fs-x-small">Registered Clinical Address</label>
+                    <div class="fw-bold text-main small">
+                        <i class="bi bi-geo-alt text-accent me-1"></i>{{ strtoupper(Auth::user()->address ?: 'No address registered on file') }}
                     </div>
                 </div>
             </div>
+        </div>
 
-            {{-- Address Section --}}
-            <div class="col-12 mt-4">
-                <h6 class="text-accent mb-3 small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3">Residential Address</h6>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="small text-secondary fw-bold mb-1 uppercase">Province</label>
-                        <select id="self_province" name="patient_province" class="form-select py-3 shadow-none" onchange="fetchCities(this.value, 'self'); clearInlineError(this)" required>
-                            <option value="">Select Province</option>
-                        </select>
-                        <div class="invalid-feedback d-none" id="err_self_province"></div>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="small text-secondary fw-bold mb-1 uppercase">City / Municipality</label>
-                        <select id="self_city" name="patient_city" class="form-select py-3 shadow-none" onchange="fetchBarangays(this.value, 'self'); clearInlineError(this)" disabled required>
-                            <option value="">Select Province First</option>
-                        </select>
-                        <div class="invalid-feedback d-none" id="err_self_city"></div>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="small text-secondary fw-bold mb-1 uppercase">Barangay</label>
-                        <select id="self_brgy" name="patient_barangay" class="form-select py-3 shadow-none" onchange="updateCompiledAddress('self'); clearInlineError(this)" disabled required>
-                            <option value="">Select City First</option>
-                        </select>
-                        <div class="invalid-feedback d-none" id="err_self_barangay"></div>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="small text-secondary fw-bold mb-1 uppercase">Street / House No.</label>
-                        <input type="text" id="self_street" name="patient_street" class="form-control py-3 shadow-none uppercase" placeholder="House/Lot/Block/Street" value="{{ old('patient_street', Auth::user()->street) }}" oninput="updateCompiledAddress('self'); clearInlineError(this)" required>
-                        <div class="invalid-feedback d-none" id="err_self_street"></div>
+        {{-- Hidden Form Fields (Preserves backend compatibility & client-side scripts) --}}
+        <input type="hidden" name="patient_first_name" id="self_first_name" value="{{ Auth::user()->first_name }}">
+        <input type="hidden" name="patient_middle_name" id="self_middle_name" value="{{ Auth::user()->middle_name ?: 'N/A' }}">
+        <input type="hidden" name="patient_last_name" id="self_last_name" value="{{ Auth::user()->last_name }}">
+        <input type="hidden" name="patient_suffix" id="self_suffix" value="{{ Auth::user()->suffix }}">
+        <input type="hidden" name="patient_sex" id="self_sex" value="{{ Auth::user()->sex }}">
+        <input type="hidden" name="patient_birthdate" id="self_bday" value="{{ Auth::user()->birthdate ? Auth::user()->birthdate->format('Y-m-d') : '' }}">
+        <input type="hidden" name="patient_phone" id="self_phone_hidden" value="{{ Auth::user()->phone }}">
+        <input type="hidden" id="self_phone_display">
+        <input type="hidden" name="patient_street" id="self_street" value="{{ Auth::user()->street }}">
+        <input type="hidden" name="patient_barangay" id="self_brgy" value="{{ Auth::user()->barangay }}">
+        <input type="hidden" name="patient_city" id="self_city" value="{{ Auth::user()->city }}">
+        <input type="hidden" name="patient_province" id="self_province" value="{{ Auth::user()->province }}">
+
+        {{-- Doctor's Referral File Upload --}}
+        <div class="col-12 mt-2">
+            <label class="small text-secondary fw-bold mb-1 uppercase">Doctor's Referral / Physician Note (Optional)</label>
+            <div id="self_referral_wrapper">
+                <input type="file" name="referral_note" id="self_referral" class="form-control py-3 shadow-none" accept="image/*, application/pdf" onchange="handleReferralUpload(this)">
+            </div>
+            <div id="self_referral_preview_container" class="d-none mt-3 p-3 rounded" style="background-color: rgba(25, 211, 140, 0.03); border: 1px solid rgba(25, 211, 140, 0.15);">
+                <div class="d-flex align-items-center justify-content-between">
+                    <span class="small text-accent fw-semibold" id="self_referral_file_label"><i class="bi bi-file-earmark-check-fill me-1"></i>Selected File</span>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-accent py-1 px-3 fw-bold" onclick="viewReferralFile('self')">View</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger py-1 px-3 fw-bold" onclick="removeUploadedReferral('self')">Remove</button>
                     </div>
                 </div>
             </div>
+            <small class="text-muted smaller d-block mt-1">Attach a doctor's referral note or prescription image if available.</small>
         </div>
 
         <div class="d-flex gap-2 mt-5">
@@ -143,66 +102,188 @@
                 <i class="bi bi-arrow-left me-2"></i> BACK
             </button>
             <button type="button" class="btn-custom btn-accent w-50 py-3 fw-bold uppercase shadow-sm" onclick="validateSelfStep2()">
-                NEXT: SELECT TESTS <i class="bi bi-arrow-right ms-2"></i>
+                NEXT: SELECT TESTS & PACKAGES <i class="bi bi-arrow-right ms-2"></i>
             </button>
         </div>
     </div>
 
-    <!-- SELF STEP 3: SELECT TESTS -->
+    <!-- ========================================================================= -->
+    <!-- SELF STEP 3: SELECT TESTS & PACKAGES (GENDER-FILTERED)                    -->
+    <!-- ========================================================================= -->
     <div class="wiz-section d-none text-start animate-page" id="self-step-3">
         <div class="mb-4 border-bottom border-secondary border-opacity-10 pb-3">
-            <h3 class="text-main fw-bold mb-1 uppercase tracking-tighter">Step 3: Select Tests</h3>
-            <p class="text-secondary small">Choose the laboratory examinations requested by your physician.</p>
-            <div class="mt-3">
-                <div class="input-group">
-                    <span class="input-group-text bg-secondary bg-opacity-10 border-secondary border-opacity-25 text-secondary"><i class="bi bi-search"></i></span>
-                    <input type="text" id="selfTestSearch" class="form-control shadow-none" placeholder="Type test name (e.g. CBC, Lipid Profile, X-Ray)..." oninput="filterTestList('self')">
-                </div>
+            <h3 class="text-main fw-bold mb-1 uppercase tracking-tighter">Step 3: Diagnostic Tests & Packages</h3>
+            <p class="text-secondary small mb-3">Choose health packages or standalone laboratory examinations requested by your physician.</p>
+            
+            {{-- Quick Search Input --}}
+            <div class="input-group">
+                <span class="input-group-text bg-secondary bg-opacity-10 border-secondary border-opacity-25 text-secondary"><i class="bi bi-search"></i></span>
+                <input type="text" id="selfTestSearch" class="form-control shadow-none" placeholder="Search tests or packages (e.g. CBC, Chem 8, Lipid Profile, X-Ray)..." oninput="filterTestList('self')">
             </div>
         </div>
 
-        <div class="test-list-container self-test-list custom-scroll border border-secondary border-opacity-25 rounded bg-card" style="max-height: 520px; overflow-y: auto;">
-            @foreach($services as $s)
-                <div class="test-item border-bottom border-secondary border-opacity-10 transition-all p-3" data-name="{{ strtoupper($s->name) }}">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div class="d-flex align-items-center flex-grow-1">
-                            <input type="checkbox" name="service_ids[]" value="{{ $s->id }}" id="self_test_{{ $s->id }}" class="test-checkbox self-test-checkbox d-none" data-name="{{ $s->name }}" data-price="{{ $s->price }}" onchange="updateSummary();">
-                            <label class="d-flex align-items-center cursor-pointer mb-0" for="self_test_{{ $s->id }}">
-                                <div class="check-indicator rounded border border-secondary me-3 d-flex align-items-center justify-content-center" style="width: 24px; height: 24px;">
-                                    <i class="bi bi-check-lg text-dark d-none"></i>
-                                </div>
-                                <div>
-                                    <div class="text-main fw-bold small uppercase mb-1">{{ $s->name }}</div>
-                                    <div class="d-flex gap-2">
-                                        <span class="badge bg-secondary bg-opacity-10 text-secondary smaller" style="font-size: 0.6rem;">
-                                            <i class="bi bi-droplet-fill text-danger me-1"></i>{{ $s->sample_required ?? 'N/A' }}
-                                        </span>
-                                        <span class="badge bg-secondary bg-opacity-10 text-secondary smaller" style="font-size: 0.6rem;">
-                                            <i class="bi bi-clock me-1"></i>{{ $s->formatted_time }}
-                                        </span>
-                                    </div>
-                                </div>
-                            </label>
-                        </div>
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="text-accent fw-bold" style="font-size: 0.95rem;">₱{{ number_format($s->price, 2) }}</div>
-                            <button type="button" class="btn btn-sm btn-link p-0 text-secondary" onclick="toggleTestDetails('self_details_{{ $s->id }}', this)">
-                                <i class="bi bi-chevron-down fs-5"></i>
-                            </button>
-                        </div>
-                    </div>
+        {{-- Sub-Tabs: Packages vs Individual Services --}}
+        <ul class="nav nav-pills mb-3 gap-2 border-bottom border-secondary border-opacity-10 pb-2.5 flex-wrap" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link active fw-bold px-3 py-1.5 uppercase btn-sm" data-bs-toggle="pill" data-bs-target="#self-pane-packages" type="button" role="tab">
+                    <i class="bi bi-box-seam me-1"></i> Health Packages ({{ $packages->count() }})
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link fw-bold px-3 py-1.5 uppercase btn-sm" data-bs-toggle="pill" data-bs-target="#self-pane-services" type="button" role="tab">
+                    <i class="bi bi-flask me-1"></i> Individual Tests ({{ $services->count() }})
+                </button>
+            </li>
+        </ul>
 
-                    <div id="self_details_{{ $s->id }}" class="test-details-drawer d-none mt-3 p-3 rounded text-start animate-page">
-                        <p class="mb-2 small text-muted lh-base" style="font-size:0.8rem;">{{ $s->description }}</p>
-                        @if($s->preparation)
-                            <div class="pt-2 border-top border-secondary border-opacity-25 mt-2">
-                                <small class="prep-badge d-block mb-1" style="font-size:0.7rem;"><i class="bi bi-exclamation-triangle-fill me-1"></i>PREPARATION REQUIRED:</small>
-                                <p class="mb-0 small text-muted" style="font-size:0.75rem;">{{ $s->preparation }}</p>
-                            </div>
+        <div class="tab-content" id="selfTestTabsContent">
+            {{-- 1. PACKAGES LIST --}}
+            <div class="tab-pane fade show active" id="self-pane-packages" role="tabpanel">
+                <div class="test-list-container self-test-list custom-scroll border border-secondary border-opacity-25 rounded bg-card" style="max-height: 480px; overflow-y: auto;">
+                    @php $pkgCount = 0; @endphp
+                    @forelse($packages as $pkg)
+                        @php $pkgGender = strtolower($pkg->gender_restriction ?? 'both'); @endphp
+                        @if($pkgGender !== 'both' && $pkgGender !== $userSex)
+                            @continue
                         @endif
-                    </div>
+                        @php $pkgCount++; @endphp
+                        <div class="test-item border-bottom border-secondary border-opacity-10 transition-all p-3" data-name="{{ strtoupper($pkg->name) }}" data-gender="{{ $pkgGender }}">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center flex-grow-1">
+                                    <input type="checkbox" name="package_ids[]" value="{{ $pkg->id }}" id="self_pkg_{{ $pkg->id }}" class="pkg-checkbox self-pkg-checkbox d-none" data-name="{{ $pkg->name }}" data-price="{{ $pkg->price }}" data-services="{{ json_encode($pkg->services->pluck('id')->toArray()) }}" onchange="handleTestSelectionChange('self');">
+                                    <label class="d-flex align-items-center cursor-pointer mb-0" for="self_pkg_{{ $pkg->id }}">
+                                        <div class="check-indicator rounded border border-secondary me-3 d-flex align-items-center justify-content-center" style="width: 24px; height: 24px;">
+                                            <i class="bi bi-check-lg text-dark d-none"></i>
+                                        </div>
+                                        <div>
+                                            <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                                                <span class="text-main fw-bold small uppercase">{{ $pkg->name }}</span>
+                                            </div>
+                                            <div class="d-flex gap-2 flex-wrap">
+                                                @if($pkg->sample_required && $pkg->sample_required !== 'N/A')
+                                                    <span class="badge bg-secondary bg-opacity-10 text-secondary smaller" style="font-size: 0.62rem;">
+                                                        <i class="bi bi-droplet-half text-danger me-1"></i>{{ $pkg->sample_required }}
+                                                    </span>
+                                                @endif
+                                                <span class="badge bg-secondary bg-opacity-10 text-secondary smaller" style="font-size: 0.62rem;">
+                                                    <i class="bi bi-clock me-1"></i>{{ $pkg->formatted_time }}
+                                                </span>
+                                                <span class="badge bg-info bg-opacity-10 text-info smaller" style="font-size: 0.62rem;">
+                                                    <i class="bi bi-check2-all me-1"></i>{{ $pkg->services->count() }} Tests
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </label>
+                                </div>
+                                <div class="d-flex align-items-center gap-2 ps-2">
+                                    <span class="badge bg-danger bg-opacity-15 text-white border border-danger border-opacity-30 pkg-conflict-badge d-none smaller" style="font-size: 0.6rem;">Conflicting</span>
+                                    <div class="text-accent fw-bold fs-6 text-nowrap">₱{{ number_format($pkg->price, 2) }}</div>
+                                    <button type="button" class="btn btn-sm btn-link p-0 text-secondary" onclick="toggleTestDetails('self_pkg_details_{{ $pkg->id }}', this)" title="View Details">
+                                        <i class="bi bi-chevron-down fs-5"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="self_pkg_details_{{ $pkg->id }}" class="test-details-drawer d-none mt-3 p-3 rounded text-start animate-page" style="background-color: var(--bg-main);">
+                                @if(!empty($pkg->description))
+                                    <p class="mb-2 small text-muted lh-base" style="font-size: 0.8rem;">{{ $pkg->description }}</p>
+                                @endif
+                                
+                                {{-- Constituent Services List --}}
+                                @if($pkg->services && $pkg->services->isNotEmpty())
+                                    <div class="mb-2 pt-2 border-top border-secondary border-opacity-10">
+                                        <small class="text-accent fw-800 d-block mb-1 fs-x-small uppercase"><i class="bi bi-check2-circle me-1"></i>Included Tests in this Package:</small>
+                                        <div class="d-flex flex-wrap gap-1">
+                                            @foreach($pkg->services as $svc)
+                                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-0.5 rounded fw-semibold" style="font-size: 0.68rem;">
+                                                    {{ strtoupper($svc->name) }}
+                                                </span>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @endif
+
+                                @if(!empty($pkg->preparation))
+                                    <div class="pt-2 border-top border-secondary border-opacity-10 mt-2">
+                                        <small class="text-warning fw-800 d-block mb-0.5 fs-x-small uppercase"><i class="bi bi-exclamation-triangle-fill me-1"></i>PREPARATION REQUIRED:</small>
+                                        <p class="mb-0 small text-muted" style="font-size: 0.75rem;">{{ $pkg->preparation }}</p>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    @empty
+                        <div class="py-5 text-center text-muted small">No diagnostic packages available.</div>
+                    @endforelse
+
+                    @if($pkgCount === 0)
+                        <div class="py-5 text-center text-muted small">No health packages available for your demographic profile.</div>
+                    @endif
                 </div>
-            @endforeach
+            </div>
+
+            {{-- 2. INDIVIDUAL SERVICES LIST --}}
+            <div class="tab-pane fade" id="self-pane-services" role="tabpanel">
+                <div class="test-list-container self-test-list custom-scroll border border-secondary border-opacity-25 rounded bg-card" style="max-height: 480px; overflow-y: auto;">
+                    @php $svcCount = 0; @endphp
+                    @forelse($services as $s)
+                        @php $sGender = strtolower($s->gender_restriction ?? 'both'); @endphp
+                        @if($sGender !== 'both' && $sGender !== $userSex)
+                            @continue
+                        @endif
+                        @php $svcCount++; @endphp
+                        <div class="test-item border-bottom border-secondary border-opacity-10 transition-all p-3" id="service_wrapper_{{ $s->id }}" data-name="{{ strtoupper($s->name) }}" data-gender="{{ $sGender }}">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center flex-grow-1">
+                                    <input type="checkbox" name="service_ids[]" value="{{ $s->id }}" id="self_test_{{ $s->id }}" class="service-checkbox test-checkbox self-test-checkbox svc-chk-item d-none" data-name="{{ $s->name }}" data-price="{{ $s->price }}" onchange="handleTestSelectionChange('self');">
+                                    <label class="d-flex align-items-center cursor-pointer mb-0" for="self_test_{{ $s->id }}">
+                                        <div class="check-indicator rounded border border-secondary me-3 d-flex align-items-center justify-content-center" style="width: 24px; height: 24px;">
+                                            <i class="bi bi-check-lg text-dark d-none"></i>
+                                        </div>
+                                        <div>
+                                            <div class="text-main fw-bold small uppercase mb-1">{{ $s->name }}</div>
+                                            <div class="d-flex gap-2 flex-wrap align-items-center">
+                                                @if($s->sample_required && $s->sample_required !== 'N/A')
+                                                    <span class="badge bg-secondary bg-opacity-10 text-secondary smaller" style="font-size: 0.62rem;">
+                                                        <i class="bi bi-droplet-half text-danger me-1"></i>{{ $s->sample_required }}
+                                                    </span>
+                                                @endif
+                                                <span class="badge bg-secondary bg-opacity-10 text-secondary smaller" style="font-size: 0.62rem;">
+                                                    <i class="bi bi-clock me-1"></i>{{ $s->formatted_time }}
+                                                </span>
+                                                <span class="badge bg-warning bg-opacity-15 text-secondary border border-warning border-opacity-30 pkg-covered-badge d-none smaller" style="font-size: 0.62rem;">
+                                                    <i class="bi bi-info-circle me-1"></i>Covered by Selected Package
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </label>
+                                </div>
+                                <div class="d-flex align-items-center gap-3 ps-2">
+                                    <div class="text-accent fw-bold fs-6 text-nowrap">₱{{ number_format($s->price, 2) }}</div>
+                                    <button type="button" class="btn btn-sm btn-link p-0 text-secondary" onclick="toggleTestDetails('self_details_{{ $s->id }}', this)" title="View Details">
+                                        <i class="bi bi-chevron-down fs-5"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="self_details_{{ $s->id }}" class="test-details-drawer d-none mt-3 p-3 rounded text-start animate-page" style="background-color: var(--bg-main);">
+                                <p class="mb-2 small text-muted lh-base" style="font-size: 0.8rem;">{{ $s->description }}</p>
+                                @if($s->preparation)
+                                    <div class="pt-2 border-top border-secondary border-opacity-10 mt-2">
+                                        <small class="text-warning fw-800 d-block mb-0.5 fs-x-small uppercase"><i class="bi bi-exclamation-triangle-fill me-1"></i>PREPARATION REQUIRED:</small>
+                                        <p class="mb-0 small text-muted" style="font-size: 0.75rem;">{{ $s->preparation }}</p>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    @empty
+                        <div class="py-5 text-center text-muted small">No individual tests available.</div>
+                    @endforelse
+
+                    @if($svcCount === 0)
+                        <div class="py-5 text-center text-muted small">No individual tests available for your demographic profile.</div>
+                    @endif
+                </div>
+            </div>
         </div>
 
         <div class="d-flex gap-2 mt-5">
@@ -215,12 +296,15 @@
         </div>
     </div>
 
-    <!-- SELF STEP 4: SELECT SCHEDULE -->
+    <!-- ========================================================================= -->
+    <!-- SELF STEP 4: SELECT SCHEDULE (SUPPORTS SAME-DAY & ADVANCE SLOTS)           -->
+    <!-- ========================================================================= -->
     <div class="wiz-section d-none text-start animate-page" id="self-step-4">
         <div class="mb-4">
             <h3 class="text-main fw-bold mb-1 uppercase tracking-tighter">Step 4: Select Schedule</h3>
-            <p class="text-secondary small">Choose your preferred date and time for the laboratory visit.</p>
+            <p class="text-secondary small">Choose your preferred date and time block for the laboratory visit.</p>
         </div>
+
         <div class="row g-4 align-items-stretch">
             <div class="col-md-5 border-end border-secondary border-opacity-25 pe-md-4 d-flex flex-column justify-content-between">
                 <div>
@@ -228,7 +312,7 @@
                     <input type="date" name="appointment_date" id="self_wiz_date" class="form-control py-3 shadow-none fw-bold mb-4" min="{{ date('Y-m-d') }}" onchange="fetchTimeSlots('self')">
                 </div>
 
-                {{-- Fixed High-Contrast Operating Hours Card --}}
+                {{-- High-Contrast Operating Hours Card --}}
                 <div class="p-3.5 border rounded-3 mt-3 text-start" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color) !important;">
                     <h6 class="text-main smaller fw-bold uppercase mb-2.5" style="font-size: 0.75rem; letter-spacing: 0.5px;">
                         <i class="bi bi-clock-history me-1.5 text-accent"></i>Operating Hours
@@ -271,7 +355,9 @@
         </div>
     </div>
 
-    <!-- SELF STEP 5: PAYMENT & FINALIZE -->
+    <!-- ========================================================================= -->
+    <!-- SELF STEP 5: PAYMENT & FINALIZE                                           -->
+    <!-- ========================================================================= -->
     <div class="wiz-section d-none text-start animate-page" id="self-step-5">
         <div class="mb-4">
             <h3 class="text-main fw-bold mb-1 uppercase tracking-tighter">Step 5: Payment & Finalize</h3>
@@ -323,9 +409,11 @@
 
             <div id="self_qr_section" class="col-12 d-none animate-fade-in mt-4">
                 <div class="p-4 border border-secondary border-opacity-25 rounded text-center" style="background-color: rgba(108, 117, 125, 0.05) !important;">
-                    <h6 class="text-main fw-bold mb-3 uppercase" style="font-size: 0.75rem;">Scan to Pay (<span id="self_selected_provider_name" class="text-accent">E-Wallet</span>)</h6>
+                    <h6 class="text-main fw-bold mb-3 uppercase" style="font-size: 0.75rem;">
+                        Scan to Pay (<span id="self_selected_provider_name" class="text-accent">E-Wallet</span>)
+                    </h6>
                     <div class="d-flex justify-content-center">
-                        <div id="self_qr_zoom_wrapper" class="bg-white p-2 rounded shadow-sm border border-secondary border-opacity-10" style="cursor: zoom-in;" onclick="window.zoomQR(document.getElementById('self_selected_provider_qr').src)" title="Click to view full screen">
+                        <div id="self_qr_zoom_wrapper" class="bg-white p-2 rounded shadow-sm border border-secondary border-opacity-10 cursor-pointer" style="cursor: zoom-in;" onclick="window.zoomQR(document.getElementById('self_selected_provider_qr').src)" title="Click to view full screen">
                             <img src="" id="self_selected_provider_qr" alt="Scan QR" style="width: 180px; height: 180px; object-fit: contain;">
                         </div>
                     </div>
@@ -342,7 +430,7 @@
                     <div class="d-flex align-items-center justify-content-between">
                         <span class="small text-accent fw-semibold" id="self_receipt_file_label"><i class="bi bi-file-earmark-check-fill me-1"></i>Selected File</span>
                         <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-sm btn-outline-accent py-1 px-3 fw-bold" onclick="viewReferralFile('self')">View</button>
+                            <button type="button" class="btn btn-sm btn-outline-accent py-1 px-3 fw-bold" onclick="viewReceiptFile('self')">View</button>
                             <button type="button" class="btn btn-sm btn-outline-danger py-1 px-3 fw-bold" onclick="removeUploadedReceipt('self')">Remove</button>
                         </div>
                     </div>

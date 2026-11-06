@@ -10,12 +10,15 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use App\Models\User;
 use App\Models\Service;
+use App\Models\Package;
+use App\Models\OrganizationMember;
 use App\Models\PaymentProvider;
 use App\Models\ActivityLog;
 use App\Models\LaboratoryHistory;
 use App\Notifications\AppointmentNotification;
 use App\Events\NotificationSent;
 use App\Http\Controllers\AppointmentController;
+use App\Http\Controllers\BulkAppointmentController;
 use App\Http\Controllers\DependentController;
 use App\Http\Controllers\HistoryController;
 use App\Http\Controllers\ResultController;
@@ -41,10 +44,17 @@ Route::get('/ping', function () {
 // Slot occupancy check (for booking wizard)
 Route::get('/check-slots', [AppointmentConfigController::class, 'checkOccupancy']);
 
-// Public catalog of services
+// Public catalog of individual atomic services
 Route::get('/services', function () {
     $services = Service::where('is_available', true)->orderBy('name')->get();
     return response()->json($services);
+});
+
+// Public catalog of diagnostic test packages/bundles
+Route::get('/packages', function (Request $request) {
+    $user = Auth::guard('sanctum')->user();
+    $packages = Package::availableFor($user)->with('services')->orderBy('name')->get();
+    return response()->json($packages);
 });
 
 // Public payment providers (QRs)
@@ -86,6 +96,7 @@ Route::post('/login', function (Request $request) {
         } else {
             $normalizedPhone = $digits;
         }
+
         $user = User::where('phone', $normalizedPhone)->first();
         $credentialType = 'phone';
     } else {
@@ -538,19 +549,22 @@ Route::middleware('auth:sanctum')->group(function () {
     // Appointments Endpoints
     Route::get('/appointments', function (Request $request) {
         $user = $request->user();
-        $self = \App\Models\Appointment::with(['services', 'dependent', 'result', 'user'])
+
+        $self = \App\Models\Appointment::with(['services', 'packages.services', 'dependent', 'result', 'user'])
             ->where('user_id', $user->id)
             ->whereNull('dependent_id')
             ->whereNull('batch_id')
             ->where('deleted_by_patient', false)
             ->latest()
             ->get();
-        $dependents = \App\Models\Appointment::with(['services', 'dependent', 'result', 'user'])
+
+        $dependents = \App\Models\Appointment::with(['services', 'packages.services', 'dependent', 'result', 'user'])
             ->where('user_id', $user->id)
             ->whereNotNull('dependent_id')
             ->where('deleted_by_patient', false)
             ->latest()
             ->get();
+
         return response()->json([
             'self' => $self,
             'dependents' => $dependents,
@@ -562,6 +576,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/appointments/{appointment}/cancel', [AppointmentController::class, 'cancel']);
     Route::post('/appointments/{appointment}/soft-delete', [AppointmentController::class, 'softDelete']);
     Route::post('/appointments/{appointment}/forward-email', [ResultController::class, 'forwardToEmail']);
+    
+    // Suggest Changes Endpoints
+    Route::post('/appointments/{appointment}/suggest-changes', [AppointmentController::class, 'suggestChanges']);
+    Route::post('/appointments/{appointment}/accept-changes', [AppointmentController::class, 'acceptSuggestedChanges']);
+    Route::post('/appointments/{appointment}/reject-changes', [AppointmentController::class, 'rejectSuggestedChanges']);
+
+    // Pre-recorded Roster Endpoints (OJT Students, Employees)
+    Route::get('/bulk/roster/members', [BulkAppointmentController::class, 'getRosterMembers']);
+    Route::post('/bulk/roster/store', [BulkAppointmentController::class, 'storeRosterMember']);
+    Route::delete('/bulk/roster/{id}', [BulkAppointmentController::class, 'deleteRosterMember']);
+    Route::post('/organization/apply', [BulkAppointmentController::class, 'applyRecognizedOrg']);
 
     // Mobile In-App Result Access
     Route::get('/appointments/{appointment}/result/{type}/{mode}', [ResultController::class, 'access']);
@@ -584,17 +609,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/patient-history', function (Request $request) {
         $user = $request->user();
         $labHistory = LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
-        $appointments = \App\Models\Appointment::with(['services', 'result', 'dependent', 'user'])
+
+        $appointments = \App\Models\Appointment::with(['services', 'packages.services', 'result', 'dependent', 'user'])
             ->where('user_id', $user->id)
             ->where('deleted_by_patient', false)
             ->latest()
             ->get();
+
         $recordsModels = \App\Models\LaboratoryHistoryRecord::whereHas('laboratoryHistory', function ($q) use ($user) {
             $q->where('user_id', $user->id);
         })
-            ->with(['scans', 'procedures'])
-            ->latest('date_of_record')
-            ->get();
+        ->with(['scans', 'procedures'])
+        ->latest('date_of_record')
+        ->get();
+
         $existingRecords = $recordsModels->map(function ($r) {
             return [
                 'id' => $r->id,
@@ -625,6 +653,7 @@ Route::middleware('auth:sanctum')->group(function () {
         $user = $request->user();
         $history = LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
         $history->update(['permission_status' => 'pending_staff']);
+
         ActivityLog::record('HISTORY REQUEST', 'Patient requested data import', $user->name);
 
         $internalStaff = User::whereIn('role', ['staff', 'lab_tech', 'admin'])->get();
@@ -635,6 +664,7 @@ Route::middleware('auth:sanctum')->group(function () {
                 'url' => route('admin.users.history', $user->id),
                 'type' => 'info'
             ]));
+
             event(new NotificationSent($staff->id, 'Lab History Request', "Patient {$user->name} is requesting a historical data import."));
         }
 
@@ -648,6 +678,7 @@ Route::middleware('auth:sanctum')->group(function () {
         $user = $request->user();
         $history = LaboratoryHistory::firstOrCreate(['user_id' => $user->id]);
         $history->update(['permission_status' => 'granted']);
+
         ActivityLog::record('HISTORY GRANTED', "Handshake accepted by {$user->role}", $user->name);
 
         return response()->json([

@@ -3,6 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Collection;
 use Carbon\Carbon;
 
 class Appointment extends Model
@@ -43,16 +47,17 @@ class Appointment extends Model
         'payment_method', // Cash, Cashless
         'payment_status', // unpaid, paid, invalid, refunded
         'payment_receipt', // Stores path for uploaded proof of payment receipts
-        'payment_amount', // Persists confirmed payment amount collected on-site
+        'payment_amount',  // Persists confirmed payment amount collected on-site
 
-        // STATUS LOGIC & SOFT DELETION
+        // STATUS LOGIC, REVISION WORKFLOW & SOFT DELETION
         'status',
+        'suggested_changes', // JSON payload holding staff proposed schedule/test adjustments
         'return_reason',
         'cancellation_reason',
         'deleted_by_patient', // boolean
         'tested_at',
         'result_estimated_at',
-        'results_released_at'
+        'results_released_at',
     ];
 
     /**
@@ -60,13 +65,14 @@ class Appointment extends Model
      * 'date:Y-m-d' enforces local date serialization across all JSON endpoints.
      */
     protected $casts = [
-        'appointment_date'    => 'date:Y-m-d',
-        'patient_birthdate'   => 'date:Y-m-d',
-        'deleted_by_patient'  => 'boolean',
-        'tested_at'           => 'datetime',
+        'appointment_date' => 'date:Y-m-d',
+        'patient_birthdate' => 'date:Y-m-d',
+        'suggested_changes' => 'array',
+        'deleted_by_patient' => 'boolean',
+        'tested_at' => 'datetime',
         'result_estimated_at' => 'datetime',
         'results_released_at' => 'datetime',
-        'payment_amount'      => 'decimal:2',
+        'payment_amount' => 'decimal:2',
     ];
 
     /**
@@ -81,25 +87,37 @@ class Appointment extends Model
     /** 
      * --- RELATIONSHIPS --- 
      */
-    public function user() 
+
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    public function dependent() 
+    public function dependent(): BelongsTo
     {
         return $this->belongsTo(Dependent::class);
     }
 
-    public function services() 
+    /**
+     * Individual atomic diagnostic services attached to this appointment.
+     */
+    public function services(): BelongsToMany
     {
         return $this->belongsToMany(Service::class, 'appointment_service');
     }
 
     /**
+     * Diagnostic packages/bundles attached to this appointment.
+     */
+    public function packages(): BelongsToMany
+    {
+        return $this->belongsToMany(Package::class, 'appointment_package');
+    }
+
+    /**
      * Connect to the clinical findings and uploaded scans.
      */
-    public function result() 
+    public function result(): HasOne
     {
         return $this->hasOne(AppointmentResult::class);
     }
@@ -109,16 +127,78 @@ class Appointment extends Model
      */
 
     /**
-     * Calculate the total price of all services in this appointment.
+     * Calculate the combined total bill of all individual services and packages booked.
      */
-    public function totalPrice() 
+    public function totalPrice(): float
     {
-        return $this->services->sum('price');
+        $servicesTotal = (float) $this->services->sum('price');
+        $packagesTotal = (float) $this->packages->sum('price');
+
+        return $servicesTotal + $packagesTotal;
     }
 
     /**
-     * Determine if an appointment is dynamically expired (24-hour unprogressed rule).
-     * Once an appointment has progressed to sampling ('tested', 'retest', 'encoded', 'released'), it can never expire.
+     * Returns a deduplicated collection of all individual Service models that must be tested,
+     * merging standalone selected services with the services included inside booked packages.
+     */
+    public function allServices(): Collection
+    {
+        $directServices = $this->services;
+        $packageServices = $this->packages->flatMap(function ($pkg) {
+            return $pkg->services;
+        });
+
+        return $directServices->concat($packageServices)->unique('id')->values();
+    }
+
+    /**
+     * Check if appointment has pending staff change suggestions awaiting patient confirmation.
+     */
+    public function hasSuggestedChanges(): bool
+    {
+        return $this->status === 'needs_review' && !empty($this->suggested_changes);
+    }
+
+    /**
+     * Applies staff proposed changes upon patient agreement and moves appointment to approved.
+     */
+    public function acceptSuggestedChanges(): bool
+    {
+        if (!$this->hasSuggestedChanges()) {
+            return false;
+        }
+
+        $changes = $this->suggested_changes;
+        $updates = [
+            'status' => 'approved',
+            'suggested_changes' => null,
+            'return_reason' => null,
+        ];
+
+        if (!empty($changes['appointment_date'])) {
+            $updates['appointment_date'] = $changes['appointment_date'];
+        }
+        if (!empty($changes['time_slot'])) {
+            $updates['time_slot'] = $changes['time_slot'];
+        }
+
+        $this->update($updates);
+
+        if (isset($changes['service_ids']) && is_array($changes['service_ids'])) {
+            $this->services()->sync($changes['service_ids']);
+        }
+
+        if (isset($changes['package_ids']) && is_array($changes['package_ids'])) {
+            $this->packages()->sync($changes['package_ids']);
+        }
+
+        return true;
+    }
+
+    /**
+     * Determine if an appointment is dynamically expired/voided (24-hour unprogressed rule).
+     * Once an appointment has progressed to sampling ('tested', 'retest', 'encoded', 'released'),
+     * it cannot be voided.
      */
     public function isExpired(): bool 
     {
@@ -131,7 +211,16 @@ class Appointment extends Model
             : (string) $this->appointment_date;
 
         $scheduledAt = Carbon::parse($dateFormatted . ' ' . $this->time_slot);
+
         return Carbon::now()->greaterThan($scheduledAt->addHours(24));
+    }
+
+    /**
+     * Semantic alias for views: Check if appointment has been voided due to no-show.
+     */
+    public function isVoided(): bool
+    {
+        return $this->isExpired();
     }
 
     /**
@@ -144,47 +233,61 @@ class Appointment extends Model
             return false;
         }
 
-        // Patients can only delete expired entries
+        // Patients can only delete expired/voided entries
         return $this->isExpired();
     }
 
     /**
      * Get the patient name, prioritizing the snapshot data.
      */
-    public function getPatientNameAttribute() 
+    public function getPatientNameAttribute(): string
     {
-        if (!empty($this->attributes['patient_name'])) return $this->attributes['patient_name'];
-        if ($this->dependent_id && $this->dependent) return $this->dependent->name;
+        if (!empty($this->attributes['patient_name'])) {
+            return $this->attributes['patient_name'];
+        }
+
+        if ($this->dependent_id && $this->dependent) {
+            return $this->dependent->name;
+        }
+
         return $this->user ? $this->user->name : 'UNKNOWN PATIENT';
     }
 
     /**
      * Get the patient email, prioritizing the snapshot data, falling back to linked User account.
      */
-    public function getPatientEmailAttribute()
+    public function getPatientEmailAttribute(): ?string
     {
         if (!empty($this->attributes['patient_email'])) {
             return $this->attributes['patient_email'];
         }
+
         return $this->user ? $this->user->email : null;
     }
 
     /**
      * Get the patient sex, prioritizing the snapshot data.
      */
-    public function getPatientSexAttribute() 
+    public function getPatientSexAttribute(): string
     {
-        if (!empty($this->attributes['patient_sex'])) return $this->attributes['patient_sex'];
-        if ($this->dependent_id && $this->dependent) return $this->dependent->sex;
+        if (!empty($this->attributes['patient_sex'])) {
+            return $this->attributes['patient_sex'];
+        }
+
+        if ($this->dependent_id && $this->dependent) {
+            return $this->dependent->sex;
+        }
+
         return $this->user ? $this->user->sex : 'N/A';
     }
 
     /**
      * Calculate age based on the prioritized birthdate source.
      */
-    public function getPatientAgeAttribute() 
+    public function getPatientAgeAttribute(): string|int
     {
         $date = null;
+
         if (!empty($this->patient_birthdate)) {
             $date = $this->patient_birthdate;
         } elseif ($this->dependent_id && $this->dependent) {
@@ -192,17 +295,19 @@ class Appointment extends Model
         } elseif ($this->user) {
             $date = $this->user->birthdate;
         }
+
         return $date ? Carbon::parse($date)->age : 'N/A';
     }
 
     /**
      * Dynamic Address Accessor (Compiles atomic snapshot fields into a single address string)
      */
-    public function getPatientAddressAttribute()
+    public function getPatientAddressAttribute(): string
     {
         if (!empty($this->patient_street)) {
             return strtoupper("{$this->patient_street}, BRGY. {$this->patient_barangay}, {$this->patient_city}, {$this->patient_province}");
         }
+
         return 'N/A';
     }
 

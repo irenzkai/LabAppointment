@@ -15,7 +15,7 @@ class AdminSeeder extends Seeder
     public function run(): void
     {
         // =========================================================================
-        // 1. SYSTEM ADMINISTRATORS (2 ACCOUNTS)
+        // 1. SYSTEM ADMINISTRATORS & SENIOR CLINICIANS (2 ACCOUNTS)
         // =========================================================================
         User::updateOrCreate(
             ['email' => 'admin@gmail.com'],
@@ -26,6 +26,8 @@ class AdminSeeder extends Seeder
                 'suffix' => null,
                 'password' => Hash::make('1@23qweASD'),
                 'role' => 'admin',
+                'occupation' => 'Pathologist',
+                'license_number' => 'PRC-MD-0043120',
                 'phone' => '09398510466',
                 'birthdate' => '1985-04-18',
                 'sex' => 'Male',
@@ -47,6 +49,8 @@ class AdminSeeder extends Seeder
                 'suffix' => null,
                 'password' => Hash::make('1@23qweASD'),
                 'role' => 'admin',
+                'occupation' => 'Attending Physician',
+                'license_number' => 'PRC-MD-0056781',
                 'phone' => '09399510465',
                 'birthdate' => '1989-11-24',
                 'sex' => 'Female',
@@ -71,6 +75,8 @@ class AdminSeeder extends Seeder
                 'suffix' => null,
                 'password' => Hash::make('1@23qweASD'),
                 'role' => 'staff',
+                'occupation' => 'Receptionist',
+                'license_number' => null,
                 'phone' => '09112223334',
                 'birthdate' => '1995-05-15',
                 'sex' => 'Female',
@@ -92,6 +98,8 @@ class AdminSeeder extends Seeder
                 'suffix' => null,
                 'password' => Hash::make('1@23qweASD'),
                 'role' => 'staff',
+                'occupation' => 'Clinical Encoder',
+                'license_number' => null,
                 'phone' => '09112223335',
                 'birthdate' => '1997-08-20',
                 'sex' => 'Male',
@@ -105,7 +113,7 @@ class AdminSeeder extends Seeder
         );
 
         // =========================================================================
-        // 3. REGISTERED MEDICAL TECHNOLOGISTS / LAB TECHS (2 ACCOUNTS)
+        // 3. REGISTERED MEDICAL TECHNOLOGISTS & RADIOLOGISTS (3 ACCOUNTS)
         // =========================================================================
         User::updateOrCreate(
             ['email' => 'labtech1@gmail.com'],
@@ -116,6 +124,8 @@ class AdminSeeder extends Seeder
                 'suffix' => null,
                 'password' => Hash::make('1@23qweASD'),
                 'role' => 'lab_tech',
+                'occupation' => 'Medical Technologist',
+                'license_number' => 'PRC-MT-0078421',
                 'phone' => '09112224334',
                 'birthdate' => '1994-05-15',
                 'sex' => 'Male',
@@ -137,11 +147,36 @@ class AdminSeeder extends Seeder
                 'suffix' => null,
                 'password' => Hash::make('1@23qweASD'),
                 'role' => 'lab_tech',
+                'occupation' => 'Medical Technologist',
+                'license_number' => 'PRC-MT-0089102',
                 'phone' => '09113223334',
                 'birthdate' => '1999-09-12',
                 'sex' => 'Female',
                 'street' => 'LOT 19 BLOCK 2 SAN ISIDRO ROAD',
                 'barangay' => 'SAN ISIDRO',
+                'city' => 'CITY OF GENERAL SANTOS',
+                'province' => 'SOUTH COTABATO',
+                'email_verified_at' => now(),
+                'phone_verified_at' => now(),
+            ]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'radiologist@gmail.com'],
+            [
+                'first_name' => 'EDUARDO',
+                'middle_name' => 'SANTOS',
+                'last_name' => 'RAMOS',
+                'suffix' => null,
+                'password' => Hash::make('1@23qweASD'),
+                'role' => 'lab_tech',
+                'occupation' => 'Radiologist',
+                'license_number' => 'PRC-MD-0062349',
+                'phone' => '09113224455',
+                'birthdate' => '1987-03-10',
+                'sex' => 'Male',
+                'street' => '77 MABINI STREET',
+                'barangay' => 'DADIANGAS NORTH',
                 'city' => 'CITY OF GENERAL SANTOS',
                 'province' => 'SOUTH COTABATO',
                 'email_verified_at' => now(),
@@ -161,6 +196,8 @@ class AdminSeeder extends Seeder
                 'suffix' => null,
                 'password' => Hash::make('1@23qweASD'),
                 'role' => 'user',
+                'occupation' => null,
+                'license_number' => null,
                 'phone' => '09445556667',
                 'birthdate' => '2000-12-25',
                 'sex' => 'Male',
@@ -173,7 +210,6 @@ class AdminSeeder extends Seeder
             ]
         );
 
-        // Demonstrating Spanish-Filipino "Ñ" character support inside database seeder
         User::updateOrCreate(
             ['email' => 'patient2@gmail.com'],
             [
@@ -183,6 +219,8 @@ class AdminSeeder extends Seeder
                 'suffix' => null,
                 'password' => Hash::make('1@23qweASD'),
                 'role' => 'user',
+                'occupation' => null,
+                'license_number' => null,
                 'phone' => '09445556668',
                 'birthdate' => '1998-03-15',
                 'sex' => 'Female',
@@ -195,7 +233,6 @@ class AdminSeeder extends Seeder
             ]
         );
 
-        // Demonstrating Suffix "JR" support inside database seeder
         User::updateOrCreate(
             ['email' => 'patient3@gmail.com'],
             [
@@ -205,6 +242,8 @@ class AdminSeeder extends Seeder
                 'suffix' => 'JR',
                 'password' => Hash::make('1@23qweASD'),
                 'role' => 'user',
+                'occupation' => null,
+                'license_number' => null,
                 'phone' => '09445556669',
                 'birthdate' => '1995-07-22',
                 'sex' => 'Male',
@@ -217,7 +256,6 @@ class AdminSeeder extends Seeder
             ]
         );
 
-        // Demonstrating Hyphenated Married Surname support inside database seeder
         User::updateOrCreate(
             ['email' => 'patient4@gmail.com'],
             [
@@ -227,6 +265,8 @@ class AdminSeeder extends Seeder
                 'suffix' => null,
                 'password' => Hash::make('1@23qweASD'),
                 'role' => 'user',
+                'occupation' => null,
+                'license_number' => null,
                 'phone' => '09445556670',
                 'birthdate' => '1996-11-30',
                 'sex' => 'Female',

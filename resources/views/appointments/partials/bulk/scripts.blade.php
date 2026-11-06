@@ -1,28 +1,165 @@
+<!-- resources/views/appointments/partials/bulk/scripts.blade.php -->
 @push('scripts')
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script>
-let rowCount = 0;
-let activeRowIdx = null;
+// =========================================================================
+// SCRIPT PARTIAL 2: SCHEDULING, SERVICES MODAL, EXCEL & PAYMENT WORKFLOW
+// =========================================================================
+
+// Global Configuration Hydration
+window.cachedConfigs = @json($configs);
+window.cachedOccupancy = {};
+window.servicesMap = @json($services->keyBy('id'));
+window.packagesMap = @json($packages->keyBy('id'));
+window.isRecognizedOrg = false;
 let isRestoringDraft = false;
-
-// Injected configurations directly as a safe JS object literal to bypass DOM escaping errors
-let cachedConfigs = @json($configs);
-let cachedOccupancy = {};
-
-// Formed global JS services map to lookup price and gender restrictions dynamically on changes
-const servicesMap = @json($services->keyBy('id'));
-const masterOrg = document.getElementById('master_org');
 const masterDate = document.getElementById('master_date');
-const apiBase = "https://psgc.gitlab.io/api";
 const DRAFT_STORAGE_KEY = 'medscreen_bulk_appointment_draft';
 
-// Track last selected payment settings for lock protections
+// Payment State Tracking
 let bulkLastMethod = 'Cash';
 let bulkLastProviderId = null;
 window.bulkReceiptLocalData = null;
 
 // =========================================================================
-// 1. NAVIGATION CONTROLLER (3 STEPS) & STEP RESTORATION
+// 1. RECOGNIZED ORGANIZATION MODE TOGGLER & INPUT CONTROLLERS
+// =========================================================================
+function handleUseOrgToggle(checkbox) {
+    const isChecked = checkbox ? checkbox.checked : false;
+    window.isRecognizedOrg = isChecked;
+
+    const hiddenUseOrg = document.getElementById('hidden_use_recognized_org');
+    if (hiddenUseOrg) hiddenUseOrg.value = isChecked ? '1' : '0';
+
+    const orgTextInput = document.getElementById('master_org');
+    const orgSelect = document.getElementById('master_org_select');
+    const rosterContainer = document.getElementById('roster_tools_container');
+
+    if (isChecked) {
+        if (orgTextInput) {
+            orgTextInput.classList.add('d-none');
+            orgTextInput.value = '';
+        }
+        if (orgSelect) {
+            orgSelect.classList.remove('d-none');
+            handleOrgDropdownChange(orgSelect);
+        }
+        if (rosterContainer) {
+            rosterContainer.classList.remove('d-none');
+            rosterContainer.classList.add('d-flex');
+        }
+    } else {
+        if (orgSelect) {
+            orgSelect.classList.add('d-none');
+            orgSelect.value = '';
+        }
+        if (orgTextInput) {
+            orgTextInput.classList.remove('d-none');
+        }
+        const hiddenOrgId = document.getElementById('hidden_org_id');
+        if (hiddenOrgId) hiddenOrgId.value = '';
+
+        if (rosterContainer) {
+            rosterContainer.classList.add('d-none');
+            rosterContainer.classList.remove('d-flex');
+        }
+    }
+
+    filterModalPackagesForOrg();
+    performGlobalSync();
+    saveBulkDraft();
+}
+window.handleUseOrgToggle = handleUseOrgToggle;
+
+function handleOrgDropdownChange(select) {
+    if (!select) return;
+    const selectedOpt = select.options[select.selectedIndex];
+    const orgId = select.value;
+    const orgName = selectedOpt ? (selectedOpt.dataset.name || selectedOpt.text) : '';
+
+    const hiddenOrg = document.getElementById('hidden_org');
+    const hiddenOrgId = document.getElementById('hidden_org_id');
+    if (hiddenOrg) hiddenOrg.value = orgName;
+    if (hiddenOrgId) hiddenOrgId.value = orgId;
+
+    const sumOrg = document.getElementById('sum_org');
+    if (sumOrg) sumOrg.innerText = orgName || '---';
+
+    // Fetch roster groups for this specific org
+    if (orgId) {
+        fetchRosterGroupsForOrg(orgId);
+    }
+
+    filterModalPackagesForOrg();
+    performGlobalSync();
+    saveBulkDraft();
+}
+window.handleOrgDropdownChange = handleOrgDropdownChange;
+
+function handleMasterOrgTextInput(input) {
+    const hiddenOrg = document.getElementById('hidden_org');
+    const hiddenOrgId = document.getElementById('hidden_org_id');
+    if (hiddenOrg) hiddenOrg.value = input.value.trim();
+    if (hiddenOrgId) hiddenOrgId.value = '';
+
+    const sumOrg = document.getElementById('sum_org');
+    if (sumOrg) sumOrg.innerText = input.value.trim() || '---';
+
+    performGlobalSync();
+    saveBulkDraft();
+}
+window.handleMasterOrgTextInput = handleMasterOrgTextInput;
+
+async function fetchRosterGroupsForOrg(orgId) {
+    const rosterSelect = document.getElementById('saved_roster_select');
+    if (!rosterSelect) return;
+
+    rosterSelect.innerHTML = '<option value="" disabled selected>-- Loading Rosters... --</option>';
+
+    try {
+        const res = await fetch(`/bulk/roster/members?organization_id=${encodeURIComponent(orgId)}`, {
+            headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+        rosterSelect.innerHTML = '<option value="" disabled selected>-- Load Saved Roster --</option>';
+        if (data.success && Array.isArray(data.members)) {
+            const groups = [...new Set(data.members.map(m => m.group_name).filter(Boolean))];
+            groups.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g;
+                opt.textContent = g;
+                rosterSelect.appendChild(opt);
+            });
+        }
+    } catch(e) {
+        rosterSelect.innerHTML = '<option value="" disabled selected>-- Load Saved Roster --</option>';
+    }
+}
+
+function filterModalPackagesForOrg() {
+    const isOrgMode = document.getElementById('toggle_use_org')?.checked || false;
+    const orgId = document.getElementById('hidden_org_id')?.value || '';
+
+    document.querySelectorAll('.pkg-item-card').forEach(card => {
+        const pkgOrgId = card.dataset.orgId;
+        if (pkgOrgId) {
+            // Org-exclusive package: Show ONLY if in Recognized Org mode and matching org is picked
+            if (isOrgMode && orgId && String(pkgOrgId) === String(orgId)) {
+                card.classList.remove('d-none');
+            } else {
+                card.classList.add('d-none');
+                const chk = card.querySelector('.pkg-chk-item');
+                if (chk) chk.checked = false;
+            }
+        } else {
+            // Global standard package: Always accessible
+            card.classList.remove('d-none');
+        }
+    });
+}
+
+// =========================================================================
+// 2. NAVIGATION CONTROLLER (3 STEPS) & VALIDATION
 // =========================================================================
 function goToPage(page) {
     document.querySelectorAll('.wiz-section').forEach(s => s.classList.add('d-none'));
@@ -34,36 +171,49 @@ function goToPage(page) {
     toggleBulkSubmitButton();
     saveBulkDraft();
 }
+window.goToPage = goToPage;
 
-// Performs final secure validations on proceed click
 async function proceedFromStep1() {
-    const org = masterOrg.value.trim();
-    const date = masterDate.value;
-    if (!org || !date) {
-        return showAlert("Organization name and Start Date are required.");
+    const isOrgMode = document.getElementById('toggle_use_org')?.checked || false;
+    const orgName = document.getElementById('hidden_org')?.value.trim() || '';
+    const date = masterDate ? masterDate.value : '';
+
+    if (!orgName) {
+        if (isOrgMode) {
+            return showAlert("Please select a recognized organization from the dropdown.");
+        } else {
+            return showAlert("Organization / Company Name is required.");
+        }
     }
+
+    if (!date) {
+        return showAlert("Preferred Start Date is required.");
+    }
+
     const isValid = await validateMasterDate();
     if (!isValid) {
-        const errorMsg = document.getElementById('date_validation_msg').innerText;
+        const errorMsg = document.getElementById('date_validation_msg')?.innerText || "Selected date is closed.";
         return showAlert(errorMsg);
     }
+
     performGlobalSync();
     goToPage(3);
 }
+window.proceedFromStep1 = proceedFromStep1;
 
-// Navigates from Step 3 to Step 4 (Payment Checkout)
 function validateStep2() {
     const rows = document.querySelectorAll('#rowContainer tr');
-    
-    // 1. Enforce that at least 2 patients are registered to proceed with bulk processes
     if (rows.length < 2) {
         return showAlert("Bulk booking requires at least 2 patient records. For single appointments, please use the standard booking wizard.");
     }
 
-    // 2. Comprehensive Patient Data Validation per Row
     let invalidRows = [];
     let missingTests = [];
     let missingSlots = [];
+    let conflictRows = [];
+    let seenBatchEmails = {};
+    let seenBatchPhones = {};
+    let duplicateErrors = [];
 
     rows.forEach((tr, index) => {
         const idx = tr.id.split('_')[1];
@@ -72,20 +222,48 @@ function validateStep2() {
         const rowErrors = getPatientRowValidationErrors(p);
         let hasError = false;
 
-        // Check demographic data
         if (rowErrors.length > 0) {
             invalidRows.push(`Row ${rowNum} (${p.name || 'Unnamed'}): ${rowErrors.join(', ')}`);
             hasError = true;
         }
 
-        // Check test selection
-        const testInputs = tr.querySelectorAll('input[type="hidden"][name*="[service_ids]"]');
-        if (testInputs.length === 0) {
+        // Check tests & packages
+        const svcInputs = Array.from(tr.querySelectorAll(`input[type="hidden"][name="patients[${idx}][service_ids][]"]`)).map(i => i.value);
+        const pkgInputs = Array.from(tr.querySelectorAll(`input[type="hidden"][name="patients[${idx}][package_ids][]"]`)).map(i => i.value);
+
+        if (svcInputs.length === 0 && pkgInputs.length === 0) {
             missingTests.push(`Row ${rowNum} (${p.name || 'Unnamed'})`);
             hasError = true;
+        } else {
+            // Anti-Double Selection & Conflict Check across row's tests
+            const coveredServices = new Set();
+            let hasOverlappingPackages = false;
+
+            pkgInputs.forEach(pkgId => {
+                const pkg = window.packagesMap[pkgId];
+                if (pkg && pkg.services) {
+                    pkg.services.forEach(svc => {
+                        if (coveredServices.has(svc.id.toString())) {
+                            hasOverlappingPackages = true;
+                        }
+                        coveredServices.add(svc.id.toString());
+                    });
+                }
+            });
+
+            if (hasOverlappingPackages) {
+                conflictRows.push(`Row ${rowNum} (${p.name || 'Unnamed'}): Contains multiple packages that share identical tests.`);
+                hasError = true;
+            }
+
+            const hasOverlappingIndiv = svcInputs.some(sId => coveredServices.has(sId.toString()));
+            if (hasOverlappingIndiv) {
+                conflictRows.push(`Row ${rowNum} (${p.name || 'Unnamed'}): Contains individual tests that are already covered in selected packages.`);
+                hasError = true;
+            }
         }
 
-        // Check Schedule Date & Time Slot selection
+        // Schedule check
         const rowDate = tr.querySelector('.row-date-input')?.value;
         const tSelect = tr.querySelector('.t-select')?.value;
         if (!rowDate || !tSelect) {
@@ -93,921 +271,56 @@ function validateStep2() {
             hasError = true;
         }
 
-        // Highlight offending rows
-        if (hasError) {
-            tr.style.borderColor = "#ff4d4d";
-        } else {
-            tr.style.borderColor = "var(--border-color)";
+        // Intra-batch duplicate checks
+        if (p.email && p.email.trim()) {
+            const cleanEmail = p.email.toLowerCase().trim();
+            if (seenBatchEmails[cleanEmail]) {
+                duplicateErrors.push(`Duplicate email '${cleanEmail}' on Row ${rowNum} (already assigned to Row ${seenBatchEmails[cleanEmail]})`);
+                hasError = true;
+            } else {
+                seenBatchEmails[cleanEmail] = rowNum;
+            }
         }
+
+        if (p.phone && p.phone.trim()) {
+            const cleanPhone = p.phone.replace(/[^0-9]/g, '');
+            if (seenBatchPhones[cleanPhone]) {
+                duplicateErrors.push(`Duplicate phone '${cleanPhone}' on Row ${rowNum} (already assigned to Row ${seenBatchPhones[cleanPhone]})`);
+                hasError = true;
+            } else {
+                seenBatchPhones[cleanPhone] = rowNum;
+            }
+        }
+
+        tr.style.borderColor = hasError ? "#ff4d4d" : "var(--border-color)";
     });
 
-    // 3. Validation Alerts
+    if (duplicateErrors.length > 0) {
+        return showAlert("Duplicate contact credentials detected within this batch list:<br><br>" + duplicateErrors.join('<br>'));
+    }
+
+    if (conflictRows.length > 0) {
+        return showAlert("Conflicting tests or packages detected:<br><br>" + conflictRows.join('<br>'));
+    }
+
     if (invalidRows.length > 0) {
-        return showAlert("One or more patient records have incomplete or invalid details. Please click 'Fix Details' on the highlighted rows before proceeding:<br><br>" + invalidRows.join('<br>'));
+        return showAlert("One or more patient records have incomplete details. Click 'Fix Details' on highlighted rows:<br><br>" + invalidRows.join('<br>'));
     }
 
     if (missingTests.length > 0) {
-        return showAlert("Every patient in the list must have at least one test selected. Missing tests on:<br><br>" + missingTests.join('<br>'));
+        return showAlert("Every patient must have at least one test or package selected. Missing on:<br><br>" + missingTests.join('<br>'));
     }
 
     if (missingSlots.length > 0) {
-        return showAlert("Please assign a schedule date and time slot for all patients before proceeding to checkout (or click <strong>SMART AUTO-TIME</strong> to automatically distribute slots). Missing time on:<br><br>" + missingSlots.join('<br>'));
+        return showAlert("Please assign schedules for all patients (or click <strong>SMART AUTO-TIME</strong>). Missing on:<br><br>" + missingSlots.join('<br>'));
     }
 
-    // Proceed to Step 4 (Payment & Finalize)
     goToPage(4);
 }
-
-// Calculates occupied slots live across all rows currently on the screen
-window.getOnScreenOccupiedCount = function(date, time, excludeRowIdx = null) {
-    let count = 0;
-    const rows = document.querySelectorAll('#rowContainer tr');
-    rows.forEach(tr => {
-        const idx = tr.id.split('_')[1];
-        if (excludeRowIdx !== null && idx == excludeRowIdx) return;
-        const rDateInput = tr.querySelector('.row-date-input');
-        const rTimeSelect = tr.querySelector('.t-select');
-        if (rDateInput && rTimeSelect) {
-            if (rDateInput.value === date && rTimeSelect.value === time) {
-                count++;
-            }
-        }
-    });
-    return count;
-};
+window.validateStep2 = validateStep2;
 
 // =========================================================================
-// 2. VALIDATION HELPERS & INLINE ERROR HANDLERS
-// =========================================================================
-function validateNameString(val, fieldName) {
-    if (!val || val === 'N/A') return null;
-    const charRegex = /^[a-zA-Z\u00f1\u00d1\u00e1\u00c1\u00e9\u00c9\u00ed\u00cd\u00f3\u00d3\u00fa\u00da\u00fc\u00dc \s.\'-]+$/;
-    const startRegex = /^[a-zA-Z\u00f1\u00d1\u00e1\u00c1\u00e9\u00c9\u00ed\u00cd\u00f3\u00d3\u00fa\u00da\u00fc\u00dc]/;
-    const consecutiveRegex = /[.\'-]{2,}/;
-    const letterRegex = /[a-zA-Z\u00f1\u00d1\u00e1\u00c1\u00e9\u00c9\u00ed\u00cd\u00f3\u00d3\u00fa\u00da\u00fc\u00dc]/;
-
-    if (!charRegex.test(val)) return `${fieldName} may only contain letters, spaces, periods, hyphens, and apostrophes.`;
-    if (!startRegex.test(val)) return `${fieldName} must start with a letter.`;
-    if (!letterRegex.test(val)) return `${fieldName} must contain at least one letter.`;
-    if (consecutiveRegex.test(val)) return `${fieldName} cannot contain consecutive punctuation marks.`;
-    if (val.length > 60) return `${fieldName} cannot exceed 60 characters.`;
-    return null;
-}
-
-function validateSuffixString(val) {
-    if (!val) return null;
-    const v = val.trim();
-    if (!v) return null;
-    if (v.length > 10) return "Suffix cannot exceed 10 characters.";
-    const suffixRegex = /^[a-zA-Z\s.]+$/;
-    if (!suffixRegex.test(v)) return "Suffix may only contain letters, spaces, and periods (e.g. JR, SR, II, III).";
-    return null;
-}
-
-function calculateAge(bday) {
-    if (!bday) return 'N/A';
-    const dob = new Date(bday);
-    const today = new Date();
-    if (isNaN(dob.getTime())) return 'N/A';
-    let age = today.getFullYear() - dob.getFullYear();
-    const m = today.getMonth() - dob.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-    return age >= 0 ? age : 'N/A';
-}
-
-function getPatientRowValidationErrors(p) {
-    let errors = [];
-    if (!p.first_name || validateNameString(p.first_name, 'First Name')) errors.push("Invalid First Name");
-    if (!p.last_name || validateNameString(p.last_name, 'Last Name')) errors.push("Invalid Last Name");
-    if (p.middle_name && p.middle_name !== 'N/A' && validateNameString(p.middle_name, 'Middle Name')) errors.push("Invalid Middle Name");
-    if (p.suffix && validateSuffixString(p.suffix)) errors.push("Invalid Suffix");
-    if (!p.sex || !['Male', 'Female'].includes(p.sex)) errors.push("Select Sex");
-    
-    if (!p.birthdate) {
-        errors.push("Missing Birthdate");
-    } else {
-        const dob = new Date(p.birthdate);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (isNaN(dob.getTime()) || dob > today) {
-            errors.push("Invalid Birthdate");
-        } else {
-            const age = calculateAge(p.birthdate);
-            if (age === 'N/A' || age < 18) {
-                errors.push("Must be 18+ Yrs Old");
-            }
-        }
-    }
-
-    const phoneClean = (p.phone || '').trim();
-    if (!phoneClean || !/^09\d{9}$/.test(phoneClean)) {
-        errors.push("Invalid Phone (09XXXXXXXXX)");
-    }
-
-    const emailClean = (p.email || '').trim();
-    if (!emailClean || !/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(emailClean)) {
-        errors.push("Invalid Email");
-    }
-
-    if (!p.province) errors.push("Missing Province");
-    if (!p.city) errors.push("Missing City");
-    if (!p.barangay) errors.push("Missing Barangay");
-    if (!p.street || !p.street.trim()) errors.push("Missing Street");
-
-    return errors;
-}
-
-function getRowPatientData(idx) {
-    const tr = document.getElementById(`r_${idx}`);
-    if (!tr) return {};
-    return {
-        first_name: tr.querySelector(`input[name="patients[${idx}][first_name]"]`)?.value || '',
-        middle_name: tr.querySelector(`input[name="patients[${idx}][middle_name]"]`)?.value || 'N/A',
-        last_name: tr.querySelector(`input[name="patients[${idx}][last_name]"]`)?.value || '',
-        suffix: tr.querySelector(`input[name="patients[${idx}][suffix]"]`)?.value || '',
-        name: tr.querySelector(`input[name="patients[${idx}][name]"]`)?.value || '',
-        sex: tr.querySelector(`input[name="patients[${idx}][sex]"]`)?.value || 'Male',
-        birthdate: tr.querySelector(`input[name="patients[${idx}][birthdate]"]`)?.value || '',
-        phone: tr.querySelector(`input[name="patients[${idx}][phone]"]`)?.value || '',
-        email: tr.querySelector(`input[name="patients[${idx}][email]"]`)?.value || '',
-        province: tr.querySelector(`input[name="patients[${idx}][province]"]`)?.value || '',
-        city: tr.querySelector(`input[name="patients[${idx}][city]"]`)?.value || '',
-        barangay: tr.querySelector(`input[name="patients[${idx}][barangay]"]`)?.value || '',
-        street: tr.querySelector(`input[name="patients[${idx}][street]"]`)?.value || '',
-        appointment_date: tr.querySelector('.row-date-input')?.value || '',
-        time_slot: tr.querySelector('.t-select')?.value || ''
-    };
-}
-
-function setModalError(inputId, errDivId, message) {
-    const input = document.getElementById(inputId);
-    const errDiv = document.getElementById(errDivId);
-    if (input) input.classList.add('is-invalid');
-    if (errDiv) {
-        errDiv.innerText = message;
-        errDiv.classList.remove('d-none');
-        errDiv.classList.add('d-block');
-    }
-}
-
-function clearModalErrors() {
-    document.querySelectorAll('#modalPatientForm .is-invalid').forEach(el => el.classList.remove('is-invalid'));
-    document.querySelectorAll('#modalPatientForm .invalid-feedback').forEach(el => {
-        el.innerText = '';
-        el.classList.add('d-none');
-        el.classList.remove('d-block');
-    });
-}
-
-function toggleModalMN(chk) {
-    const input = document.getElementById('modal_middle_name');
-    if (input) {
-        input.value = chk.checked ? 'N/A' : '';
-        input.readOnly = chk.checked;
-        input.classList.toggle('opacity-50', chk.checked);
-        if (chk.checked) {
-            input.classList.remove('is-invalid');
-            const errDiv = document.getElementById('err_modal_middle_name');
-            if (errDiv) {
-                errDiv.classList.add('d-none');
-                errDiv.classList.remove('d-block');
-                errDiv.innerText = '';
-            }
-        }
-    }
-}
-
-// =========================================================================
-// 3. PSGC ADDRESS ENGINE FOR MODAL
-// =========================================================================
-function findOptionFlexibly(selectEl, searchVal) {
-    if (!selectEl || !searchVal) return null;
-    const target = searchVal.toString().trim().toUpperCase();
-    return Array.from(selectEl.options).find(opt => {
-        if (!opt.value && !opt.text) return false;
-        const optVal = opt.value.toString().trim().toUpperCase();
-        const optText = opt.text.toString().trim().toUpperCase();
-        if (optVal === target || optText === target) return true;
-        const normOpt = optText.replace(/\b(CITY|PROVINCE|MUNICIPALITY) OF\b/g, '').replace(/[^A-Z0-9]/g, '');
-        const normTarget = target.replace(/\b(CITY|PROVINCE|MUNICIPALITY) OF\b/g, '').replace(/[^A-Z0-9]/g, '');
-        return normOpt && normOpt === normTarget;
-    });
-}
-
-async function fetchModalProvinces(targetProv = null, targetCity = null, targetBrgy = null) {
-    const provSel = document.getElementById('modal_province');
-    if (!provSel) return;
-    try {
-        const res = await fetch(`${apiBase}/provinces.json`);
-        const data = await res.json();
-        provSel.innerHTML = '<option value="">Select Province</option>';
-        data.sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = p.name;
-            opt.dataset.code = p.code;
-            opt.textContent = p.name;
-            provSel.appendChild(opt);
-        });
-        if (targetProv) {
-            const matched = findOptionFlexibly(provSel, targetProv);
-            if (matched) {
-                provSel.value = matched.value;
-                await fetchModalCities(matched.value, targetCity, targetBrgy);
-            }
-        }
-    } catch (e) {
-        console.error("Provinces fetch error:", e);
-    }
-}
-
-async function fetchModalCities(provName, targetCity = null, targetBrgy = null) {
-    const provSel = document.getElementById('modal_province');
-    const citySel = document.getElementById('modal_city');
-    const brgySel = document.getElementById('modal_barangay');
-    if (!citySel || !brgySel) return;
-    
-    citySel.disabled = true;
-    brgySel.disabled = true;
-    citySel.innerHTML = '<option value="">Loading Cities...</option>';
-    brgySel.innerHTML = '<option value="">Select City First</option>';
-
-    if (!provName) {
-        citySel.innerHTML = '<option value="">Select Province First</option>';
-        return;
-    }
-    const matchedProv = findOptionFlexibly(provSel, provName);
-    const provCode = matchedProv ? matchedProv.dataset.code : null;
-    if (!provCode) {
-        citySel.innerHTML = '<option value="">Select City</option>';
-        return;
-    }
-    try {
-        const res = await fetch(`${apiBase}/provinces/${provCode}/cities-municipalities.json`);
-        const data = await res.json();
-        citySel.innerHTML = '<option value="">Select City</option>';
-        data.sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.name;
-            opt.dataset.code = c.code;
-            opt.textContent = c.name;
-            citySel.appendChild(opt);
-        });
-        citySel.disabled = false;
-        if (targetCity) {
-            const matchedCity = findOptionFlexibly(citySel, targetCity);
-            if (matchedCity) {
-                citySel.value = matchedCity.value;
-                await fetchModalBarangays(matchedCity.value, targetBrgy);
-            }
-        }
-    } catch (e) {
-        console.error("Cities fetch error:", e);
-    }
-}
-
-async function fetchModalBarangays(cityName, targetBrgy = null) {
-    const citySel = document.getElementById('modal_city');
-    const brgySel = document.getElementById('modal_barangay');
-    if (!brgySel) return;
-    
-    brgySel.disabled = true;
-    brgySel.innerHTML = '<option value="">Loading Barangays...</option>';
-
-    if (!cityName) {
-        brgySel.innerHTML = '<option value="">Select City First</option>';
-        return;
-    }
-    const matchedCity = findOptionFlexibly(citySel, cityName);
-    const cityCode = matchedCity ? matchedCity.dataset.code : null;
-    if (!cityCode) {
-        brgySel.innerHTML = '<option value="">Select Barangay</option>';
-        return;
-    }
-    try {
-        const res = await fetch(`${apiBase}/cities-municipalities/${cityCode}/barangays.json`);
-        const data = await res.json();
-        brgySel.innerHTML = '<option value="">Select Barangay</option>';
-        data.sort((a, b) => a.name.localeCompare(b.name)).forEach(b => {
-            const opt = document.createElement('option');
-            opt.value = b.name;
-            opt.dataset.code = b.code;
-            opt.textContent = b.name;
-            brgySel.appendChild(opt);
-        });
-        brgySel.disabled = false;
-        if (targetBrgy) {
-            const matchedBrgy = findOptionFlexibly(brgySel, targetBrgy);
-            if (matchedBrgy) {
-                brgySel.value = matchedBrgy.value;
-            }
-        }
-    } catch (e) {
-        console.error("Barangays fetch error:", e);
-    }
-}
-
-// =========================================================================
-// 4. PATIENT MODAL WORKFLOW (ADD & EDIT WITH 18+ AGE ENFORCEMENT)
-// =========================================================================
-function openCreatePatientModal() {
-    clearModalErrors();
-    document.getElementById('modal_row_idx').value = "";
-    document.getElementById('modal_patient_mode_title').innerText = "Add Patient Profile";
-    document.getElementById('modal_first_name').value = "";
-    document.getElementById('modal_middle_name').value = "";
-    document.getElementById('modal_middle_name').readOnly = false;
-    document.getElementById('modal_middle_name').classList.remove('opacity-50');
-    document.getElementById('modal_no_mn').checked = false;
-    document.getElementById('modal_last_name').value = "";
-    document.getElementById('modal_suffix').value = "";
-    document.getElementById('modal_sex').value = "Male";
-    document.getElementById('modal_birthdate').value = "";
-    document.getElementById('modal_phone_display').value = "";
-    document.getElementById('modal_phone').value = "";
-    document.getElementById('modal_email').value = "";
-    document.getElementById('modal_street').value = "";
-
-    fetchModalProvinces();
-    const modalEl = document.getElementById('bulkPatientModal');
-    const modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-    modalInstance.show();
-}
-
-function openEditPatientModal(idx) {
-    clearModalErrors();
-    document.getElementById('modal_row_idx').value = idx;
-    document.getElementById('modal_patient_mode_title').innerText = `Edit Patient Profile (Row #${parseInt(idx) + 1})`;
-    
-    const tr = document.getElementById(`r_${idx}`);
-    if (!tr) return;
-    const p = getRowPatientData(idx);
-
-    document.getElementById('modal_first_name').value = p.first_name;
-    document.getElementById('modal_no_mn').checked = (p.middle_name === 'N/A');
-    document.getElementById('modal_middle_name').value = (p.middle_name === 'N/A' ? '' : p.middle_name);
-    document.getElementById('modal_middle_name').readOnly = (p.middle_name === 'N/A');
-    document.getElementById('modal_middle_name').classList.toggle('opacity-50', p.middle_name === 'N/A');
-    document.getElementById('modal_last_name').value = p.last_name;
-    document.getElementById('modal_suffix').value = p.suffix;
-    document.getElementById('modal_sex').value = p.sex;
-    document.getElementById('modal_birthdate').value = p.birthdate;
-
-    let displayPhone = p.phone;
-    if (displayPhone.startsWith('09')) displayPhone = displayPhone.substring(2);
-    else if (displayPhone.startsWith('+639')) displayPhone = displayPhone.substring(4);
-    else if (displayPhone.startsWith('639')) displayPhone = displayPhone.substring(3);
-
-    document.getElementById('modal_phone_display').value = displayPhone;
-    document.getElementById('modal_phone').value = p.phone;
-    document.getElementById('modal_email').value = p.email;
-    document.getElementById('modal_street').value = p.street;
-
-    fetchModalProvinces(p.province, p.city, p.barangay);
-
-    const modalEl = document.getElementById('bulkPatientModal');
-    const modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-    modalInstance.show();
-
-    setTimeout(() => {
-        validateModalFieldsLive();
-    }, 200);
-}
-
-function validateModalFieldsLive() {
-    const fName = document.getElementById('modal_first_name').value.trim();
-    if (fName) {
-        const err = validateNameString(fName, 'First Name');
-        if (err) setModalError('modal_first_name', 'err_modal_first_name', err);
-    }
-    const mName = document.getElementById('modal_middle_name').value.trim();
-    if (mName && mName !== 'N/A') {
-        const err = validateNameString(mName, 'Middle Name');
-        if (err) setModalError('modal_middle_name', 'err_modal_middle_name', err);
-    }
-    const lName = document.getElementById('modal_last_name').value.trim();
-    if (lName) {
-        const err = validateNameString(lName, 'Last Name');
-        if (err) setModalError('modal_last_name', 'err_modal_last_name', err);
-    }
-    const suffix = document.getElementById('modal_suffix').value.trim();
-    if (suffix) {
-        const err = validateSuffixString(suffix);
-        if (err) setModalError('modal_suffix', 'err_modal_suffix', err);
-    }
-    const bday = document.getElementById('modal_birthdate').value;
-    if (bday) {
-        const age = calculateAge(bday);
-        if (age === 'N/A' || age < 18) {
-            setModalError('modal_birthdate', 'err_modal_birthdate', 'Administrative Policy: Patients must be at least 18 years of age.');
-        }
-    }
-    const phoneDisp = document.getElementById('modal_phone_display').value.trim();
-    if (phoneDisp && !/^09\d{9}$/.test('09' + phoneDisp)) {
-        setModalError('modal_phone_display', 'err_modal_phone', 'Contact number must contain exactly 11 digits (09 + 9 digits).');
-    }
-    const email = document.getElementById('modal_email').value.trim();
-    if (email && !/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) {
-        setModalError('modal_email', 'err_modal_email', 'Please enter a valid email address with a domain.');
-    }
-}
-
-function savePatientModal() {
-    clearModalErrors();
-    let isValid = true;
-    let firstInvalid = null;
-
-    function markInvalid(inputId, errDivId, msg) {
-        setModalError(inputId, errDivId, msg);
-        isValid = false;
-        if (!firstInvalid) firstInvalid = document.getElementById(inputId);
-    }
-
-    const fName = document.getElementById('modal_first_name').value.trim();
-    const fErr = validateNameString(fName, 'First Name');
-    if (!fName) markInvalid('modal_first_name', 'err_modal_first_name', 'First Name is required.');
-    else if (fErr) markInvalid('modal_first_name', 'err_modal_first_name', fErr);
-
-    const mName = document.getElementById('modal_middle_name').value.trim();
-    if (mName && mName !== 'N/A') {
-        const mErr = validateNameString(mName, 'Middle Name');
-        if (mErr) markInvalid('modal_middle_name', 'err_modal_middle_name', mErr);
-    }
-
-    const lName = document.getElementById('modal_last_name').value.trim();
-    const lErr = validateNameString(lName, 'Last Name');
-    if (!lName) markInvalid('modal_last_name', 'err_modal_last_name', 'Last Name is required.');
-    else if (lErr) markInvalid('modal_last_name', 'err_modal_last_name', lErr);
-
-    const suffix = document.getElementById('modal_suffix').value.trim();
-    if (suffix) {
-        const sfxErr = validateSuffixString(suffix);
-        if (sfxErr) markInvalid('modal_suffix', 'err_modal_suffix', sfxErr);
-    }
-
-    const sex = document.getElementById('modal_sex').value;
-    if (!sex) markInvalid('modal_sex', 'err_modal_sex', 'Sex is required.');
-
-    const bday = document.getElementById('modal_birthdate').value;
-    if (!bday) {
-        markInvalid('modal_birthdate', 'err_modal_birthdate', 'Birthdate is required.');
-    } else {
-        const dObj = new Date(bday);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (isNaN(dObj.getTime()) || dObj > today) {
-            markInvalid('modal_birthdate', 'err_modal_birthdate', 'Birthdate cannot be in the future.');
-        } else {
-            const calculatedAge = calculateAge(bday);
-            if (calculatedAge === 'N/A' || calculatedAge < 18) {
-                markInvalid('modal_birthdate', 'err_modal_birthdate', 'Administrative Policy: Patients must be at least 18 years of age.');
-            }
-        }
-    }
-
-    const phoneDisp = document.getElementById('modal_phone_display').value.trim();
-    const phoneFull = '09' + phoneDisp;
-    const phoneRegex = /^09\d{9}$/;
-    if (!phoneDisp) {
-        markInvalid('modal_phone_display', 'err_modal_phone', 'Contact Number is required.');
-    } else if (!phoneRegex.test(phoneFull)) {
-        markInvalid('modal_phone_display', 'err_modal_phone', 'Contact number must contain exactly 11 digits (09 + 9 digits).');
-    }
-
-    const email = document.getElementById('modal_email').value.trim();
-    const emailRegex = /^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!email) {
-        markInvalid('modal_email', 'err_modal_email', 'Email Address is required.');
-    } else if (!emailRegex.test(email)) {
-        markInvalid('modal_email', 'err_modal_email', 'Please enter a valid email address with a domain.');
-    }
-
-    const prov = document.getElementById('modal_province').value;
-    const city = document.getElementById('modal_city').value;
-    const brgy = document.getElementById('modal_barangay').value;
-    const street = document.getElementById('modal_street').value.trim();
-
-    if (!prov) markInvalid('modal_province', 'err_modal_province', 'Province selection is required.');
-    if (!city) markInvalid('modal_city', 'err_modal_city', 'City selection is required.');
-    if (!brgy) markInvalid('modal_barangay', 'err_modal_barangay', 'Barangay selection is required.');
-    if (!street) markInvalid('modal_street', 'err_modal_street', 'Street address is required.');
-
-    if (!isValid) {
-        if (firstInvalid) {
-            firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            firstInvalid.focus();
-        }
-        return;
-    }
-
-    const middleFinal = mName ? (mName.toUpperCase() === 'N/A' ? 'N/A' : mName.toUpperCase()) : 'N/A';
-    const compiledFullName = `${fName.toUpperCase()}${middleFinal !== 'N/A' ? ' ' + middleFinal : ''} ${lName.toUpperCase()}${suffix ? ' ' + suffix.toUpperCase() : ''}`.trim();
-
-    const patientData = {
-        first_name: fName.toUpperCase(),
-        middle_name: middleFinal,
-        last_name: lName.toUpperCase(),
-        suffix: suffix ? suffix.toUpperCase() : '',
-        name: compiledFullName,
-        sex: sex,
-        birthdate: bday,
-        phone: phoneFull,
-        email: email,
-        province: prov,
-        city: city,
-        barangay: brgy,
-        street: street.toUpperCase(),
-    };
-
-    const editIdx = document.getElementById('modal_row_idx').value;
-    if (editIdx !== "") {
-        updateRowPatientData(editIdx, patientData);
-    } else {
-        addRow(patientData);
-    }
-
-    const modalEl = document.getElementById('bulkPatientModal');
-    const modalInstance = bootstrap.Modal.getInstance(modalEl);
-    if (modalInstance) modalInstance.hide();
-
-    updateBulkSummary();
-    performGlobalSync();
-    saveBulkDraft();
-}
-
-function updateRowPatientData(idx, p) {
-    const tr = document.getElementById(`r_${idx}`);
-    if (!tr) return;
-
-    tr.querySelector(`input[name="patients[${idx}][first_name]"]`).value = p.first_name || '';
-    tr.querySelector(`input[name="patients[${idx}][middle_name]"]`).value = p.middle_name || 'N/A';
-    tr.querySelector(`input[name="patients[${idx}][last_name]"]`).value = p.last_name || '';
-    tr.querySelector(`input[name="patients[${idx}][suffix]"]`).value = p.suffix || '';
-    tr.querySelector(`input[name="patients[${idx}][name]"]`).value = p.name || '';
-    tr.querySelector(`input[name="patients[${idx}][sex]"]`).value = p.sex || 'Male';
-    tr.querySelector(`input[name="patients[${idx}][birthdate]"]`).value = p.birthdate || '';
-    tr.querySelector(`input[name="patients[${idx}][phone]"]`).value = p.phone || '';
-    tr.querySelector(`input[name="patients[${idx}][email]"]`).value = p.email || '';
-    tr.querySelector(`input[name="patients[${idx}][province]"]`).value = p.province || '';
-    tr.querySelector(`input[name="patients[${idx}][city]"]`).value = p.city || '';
-    tr.querySelector(`input[name="patients[${idx}][barangay]"]`).value = p.barangay || '';
-    tr.querySelector(`input[name="patients[${idx}][street]"]`).value = p.street || '';
-
-    const errors = getPatientRowValidationErrors(p);
-    const hasErrors = errors.length > 0;
-    const age = calculateAge(p.birthdate);
-    const addressStr = (p.street || p.barangay || p.city || p.province)
-        ? `${p.street || ''}, BRGY. ${p.barangay || ''}, ${p.city || ''}, ${p.province || ''}`.toUpperCase()
-        : 'N/A';
-
-    const summaryContainer = tr.querySelector('.patient-summary-cell');
-    if (summaryContainer) {
-        summaryContainer.innerHTML = `
-            <div class="d-flex justify-content-between align-items-start mb-1 gap-2">
-                <div class="text-truncate">
-                    <span class="fw-bold ${hasErrors ? 'text-danger' : 'text-main'} fs-6 text-truncate d-block" style="max-width: 250px;">${p.name || 'Incomplete Record'}</span>
-                    <div class="d-flex align-items-center gap-2 mt-0.5 flex-wrap">
-                        <span class="badge ${p.sex === 'Male' ? 'bg-info' : 'bg-danger'} bg-opacity-10 ${p.sex === 'Male' ? 'text-info' : 'text-danger'} border ${p.sex === 'Male' ? 'border-info' : 'border-danger'} border-opacity-25 fw-bold uppercase" style="font-size: 0.65rem;">${p.sex ? p.sex.toUpperCase() : 'N/A'}</span>
-                        <span class="text-secondary smaller fw-semibold">${age !== 'N/A' ? age + ' YRS OLD' : 'AGE UNKNOWN'}</span>
-                        ${hasErrors ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 fw-bold uppercase" style="font-size: 0.6rem;"><i class="bi bi-exclamation-triangle-fill me-1"></i>REVISION NEEDED</span>` : ''}
-                    </div>
-                </div>
-                <button type="button" class="btn btn-sm ${hasErrors ? 'btn-danger-custom text-danger btn-outline-danger' : 'btn-outline-accent'} py-1 px-2.5 fw-bold d-inline-flex align-items-center flex-shrink-0" style="font-size: 0.7rem; border-radius: 6px;" onclick="openEditPatientModal(${idx})" title="Edit Details">
-                    <i class="bi ${hasErrors ? 'bi-exclamation-octagon-fill' : 'bi-pencil-square'} me-1"></i>${hasErrors ? 'Fix Details' : 'Edit Info'}
-                </button>
-            </div>
-            ${hasErrors ? `<div class="text-danger smaller fw-bold mt-1" style="font-size: 0.8rem;"><i class="bi bi-info-circle me-1" style="font-size: 0.8rem;"></i>${errors.join(' &bull; ')}</div>` : ''}
-            <div class="text-muted smaller text-truncate mt-1" style="font-size: 0.72rem;">
-                <i class="bi bi-telephone text-accent me-1"></i>${p.phone || 'No Phone'} &bull; <i class="bi bi-envelope text-accent me-1"></i>${p.email || 'No Email'}
-            </div>
-            <div class="text-secondary smaller text-truncate mt-0.5" style="font-size: 0.7rem;">
-                <i class="bi bi-geo-alt text-accent me-1"></i>${addressStr}
-            </div>
-        `;
-    }
-
-    if (hasErrors) {
-        tr.style.borderColor = "#ff4d4d";
-    } else {
-        tr.style.borderColor = "var(--border-color)";
-    }
-
-    handleRowSexChange(idx, p.sex);
-}
-
-// =========================================================================
-// 5. TABLE ROW RENDERER & SPREADSHEET BUILDER
-// =========================================================================
-function addRow(patient = null) {
-    const minDate = document.getElementById('master_date').value || "{{ date('Y-m-d') }}";
-    let fName = patient?.first_name || '';
-    let mName = patient?.middle_name || 'N/A';
-    let lName = patient?.last_name || '';
-    let suffix = patient?.suffix || '';
-    let fullName = patient?.name || '';
-    if (!fullName && (fName || lName)) {
-        fullName = `${fName}${mName && mName !== 'N/A' ? ' ' + mName : ''} ${lName}${suffix ? ' ' + suffix : ''}`.trim();
-    }
-    const email = patient?.email || '';
-    const phone = patient?.phone || '';
-    const sex = patient?.sex ? (patient.sex.toLowerCase() === 'female' ? 'Female' : 'Male') : 'Male';
-    const bday = patient?.birthdate || '';
-    const province = patient?.province || '';
-    const city = patient?.city || '';
-    const barangay = patient?.barangay || '';
-    const street = patient?.street || '';
-
-    const pData = {
-        first_name: fName,
-        middle_name: mName,
-        last_name: lName,
-        suffix: suffix,
-        name: fullName,
-        sex: sex,
-        birthdate: bday,
-        phone: phone,
-        email: email,
-        province: province,
-        city: city,
-        barangay: barangay,
-        street: street
-    };
-
-    const errors = getPatientRowValidationErrors(pData);
-    const hasErrors = errors.length > 0;
-    const age = calculateAge(bday);
-    const addressStr = (street || barangay || city || province) 
-        ? `${street}, BRGY. ${barangay}, ${city}, ${province}`.toUpperCase() 
-        : 'N/A';
-    const selectedServiceIds = patient?.service_ids || [];
-
-    const html = `
-        <tr id="r_${rowCount}" class="border-secondary border-opacity-10 align-middle text-main" style="${hasErrors ? 'border: 1.5px solid #ff4d4d !important;' : ''}">
-            {{-- 1. Patient Information & Address (Compact Summary & Edit Trigger) --}}
-            <td class="ps-4 py-3" style="width: 38%;">
-                <input type="hidden" name="patients[${rowCount}][first_name]" value="${fName}">
-                <input type="hidden" name="patients[${rowCount}][middle_name]" value="${mName}">
-                <input type="hidden" name="patients[${rowCount}][last_name]" value="${lName}">
-                <input type="hidden" name="patients[${rowCount}][suffix]" value="${suffix}">
-                <input type="hidden" name="patients[${rowCount}][name]" id="p_name_${rowCount}" value="${fullName}">
-                <input type="hidden" name="patients[${rowCount}][email]" value="${email}">
-                <input type="hidden" name="patients[${rowCount}][phone]" value="${phone}">
-                <input type="hidden" name="patients[${rowCount}][sex]" class="p-sex" value="${sex}">
-                <input type="hidden" name="patients[${rowCount}][birthdate]" value="${bday}">
-                <input type="hidden" name="patients[${rowCount}][province]" value="${province}">
-                <input type="hidden" name="patients[${rowCount}][city]" value="${city}">
-                <input type="hidden" name="patients[${rowCount}][barangay]" value="${barangay}">
-                <input type="hidden" name="patients[${rowCount}][street]" value="${street}">
-                
-                <div class="patient-summary-cell p-2 rounded bg-card border border-secondary border-opacity-10 shadow-sm">
-                    <div class="d-flex justify-content-between align-items-start mb-1 gap-2">
-                        <div class="text-truncate">
-                            <span class="fw-bold ${hasErrors ? 'text-danger' : 'text-main'} fs-6 text-truncate d-block" style="max-width: 250px;">${fullName || 'Incomplete Record'}</span>
-                            <div class="d-flex align-items-center gap-2 mt-0.5 flex-wrap">
-                                <span class="badge ${sex === 'Male' ? 'bg-info' : 'bg-danger'} bg-opacity-10 ${sex === 'Male' ? 'text-info' : 'text-danger'} border ${sex === 'Male' ? 'border-info' : 'border-danger'} border-opacity-25 fw-bold uppercase" style="font-size: 0.65rem;">${sex.toUpperCase()}</span>
-                                <span class="text-secondary smaller fw-semibold">${age !== 'N/A' ? age + ' YRS OLD' : 'AGE UNKNOWN'}</span>
-                                ${hasErrors ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 fw-bold uppercase" style="font-size: 0.6rem;"><i class="bi bi-exclamation-triangle-fill me-1"></i>REVISION NEEDED</span>` : ''}
-                            </div>
-                        </div>
-                        <button type="button" class="btn btn-sm ${hasErrors ? 'btn-danger-custom text-danger btn-outline-danger' : 'btn-outline-accent'} py-1 px-2.5 fw-bold d-inline-flex align-items-center flex-shrink-0" style="font-size: 0.7rem; border-radius: 6px;" onclick="openEditPatientModal(${rowCount})" title="Edit Details">
-                            <i class="bi ${hasErrors ? 'bi-exclamation-octagon-fill' : 'bi-pencil-square'} me-1"></i>${hasErrors ? 'Fix Details' : 'Edit Info'}
-                        </button>
-                    </div>
-                    ${hasErrors ? `<div class="text-danger smaller fw-bold mt-1" style="font-size: 0.8rem;"><i class="bi bi-info-circle me-1" style="font-size: 0.8rem;"></i>${errors.join(' &bull; ')}</div>` : ''}
-                    <div class="text-muted smaller text-truncate mt-1" style="font-size: 0.72rem;">
-                        <i class="bi bi-telephone text-accent me-1"></i>${phone || 'No Phone'} &bull; <i class="bi bi-envelope text-accent me-1"></i>${email || 'No Email'}
-                    </div>
-                    <div class="text-secondary smaller text-truncate mt-0.5" style="font-size: 0.7rem;">
-                        <i class="bi bi-geo-alt text-accent me-1"></i>${addressStr}
-                    </div>
-                </div>
-            </td>
-
-            {{-- 2. Tests Selection --}}
-            <td class="py-3 px-3" style="width: 22%;">
-                <div id="display_tests_${rowCount}" class="text-main fw-bold mb-2 uppercase border border-secondary border-opacity-10 p-2 rounded small" style="min-height: 48px; font-size: 0.7rem; overflow-y: auto; max-height: 80px; background-color: rgba(0,0,0,0.02);">NO TESTS</div>
-                <div id="hidden_inputs_${rowCount}">
-                    ${selectedServiceIds.map(id => `<input type="hidden" name="patients[${rowCount}][service_ids][]" value="${id}">`).join('')}
-                </div>
-                <div class="d-flex gap-1">
-                    <button type="button" class="btn-custom btn-outline-accent flex-grow-1 py-1.5 fw-bold small" style="font-size: 0.75rem;" onclick="openServiceModal(${rowCount})">SELECT</button>
-                    <div class="dropdown">
-                        <button class="btn-custom btn-outline-accent border-secondary text-secondary py-1.5 px-2.5" type="button" data-bs-toggle="dropdown" title="Copy Tests">
-                            <i class="bi bi-copy"></i>
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark bg-black border-secondary shadow-lg">
-                            <li><h6 class="dropdown-header text-accent small">COPY TO:</h6></li>
-                            <li><button type="button" class="dropdown-item text-white small" onclick="bulkCopy(${rowCount}, 'all')">ALL PATIENTS</button></li>
-                            <li><button type="button" class="dropdown-item text-white small" onclick="bulkCopy(${rowCount}, 'Male')">ALL MALES</button></li>
-                            <li><button type="button" class="dropdown-item text-white small" onclick="bulkCopy(${rowCount}, 'Female')">ALL FEMALES</button></li>
-                        </ul>
-                    </div>
-                </div>
-            </td>
-
-            {{-- 3. Schedule Slot --}}
-            <td class="py-3 px-3" style="width: 22%;">
-                <div class="mb-2">
-                    <label class="text-secondary mb-1 uppercase fw-bold" style="font-size: 0.62rem; letter-spacing: 0.5px;">Schedule Date</label>
-                    <input type="date" name="patients[${rowCount}][appointment_date]" class="form-control form-control-sm row-date-input shadow-none fw-semibold" value="${patient?.appointment_date || minDate}" min="${minDate}" onchange="updateRowSlots(this)">
-                </div>
-                <div>
-                    <label class="text-secondary mb-1 uppercase fw-bold" style="font-size: 0.62rem; letter-spacing: 0.5px;">Time Slot</label>
-                    <select name="patients[${rowCount}][time_slot]" class="form-select form-select-sm border-secondary text-accent fw-bold t-select shadow-none" required onchange="refreshAllRowSlots()">
-                        <option value="">Choose Date First</option>
-                    </select>
-                </div>
-            </td>
-
-            {{-- 4. Actions --}}
-            <td class="pe-4 py-3 text-center align-middle" style="width: 18%;">
-                <div class="d-flex flex-column gap-2 align-items-center justify-content-center w-100">
-                    <button type="button" class="btn btn-sm btn-outline-accent d-flex align-items-center justify-content-center w-100 py-1.5 px-3" style="border-radius: 8px; font-size: 0.7rem; font-weight: 700; gap: 6px; letter-spacing: 0.5px; white-space: nowrap;" onclick="duplicateRow(${rowCount})">
-                        <i class="bi bi-files"></i> DUPLICATE
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-danger d-flex align-items-center justify-content-center w-100 py-1.5 px-3" style="border-radius: 8px; font-size: 0.7rem; font-weight: 700; gap: 6px; letter-spacing: 0.5px; white-space: nowrap;" onclick="removeSpreadsheetRow(${rowCount})">
-                        <i class="bi bi-trash3"></i> DELETE
-                    </button>
-                </div>
-            </td>
-        </tr>
-    `;
-
-    document.getElementById('rowContainer').insertAdjacentHTML('beforeend', html);
-    const newTr = document.getElementById(`r_${rowCount}`);
-    updateRowSlots(newTr.querySelector('.row-date-input'), patient?.time_slot || '');
-    if (selectedServiceIds.length > 0) {
-        const labels = selectedServiceIds.map(id => servicesMap[id]?.name).filter(Boolean);
-        document.getElementById(`display_tests_${rowCount}`).innerText = labels.join(', ') || 'NO TESTS';
-    }
-    performGlobalSync();
-    saveBulkDraft();
-    rowCount++;
-}
-
-function removeSpreadsheetRow(idx) {
-    document.getElementById(`r_${idx}`)?.remove();
-    performGlobalSync();
-    saveBulkDraft();
-}
-
-function confirmClearAllBulkRows() {
-    document.getElementById('rowContainer').innerHTML = '';
-    rowCount = 0;
-    const modalEl = document.getElementById('clearAllBulkModal');
-    if (modalEl) {
-        const modal = bootstrap.Modal.getInstance(modalEl);
-        if (modal) modal.hide();
-    }
-    performGlobalSync();
-    saveBulkDraft();
-}
-
-function duplicateRow(idx) {
-    const row = document.getElementById(`r_${idx}`);
-    if (!row) return;
-    const hiddenInputs = document.querySelectorAll(`#hidden_inputs_${idx} input`);
-    const serviceIds = Array.from(hiddenInputs).map(input => input.value);
-    const clonedPatient = getRowPatientData(idx);
-    clonedPatient.service_ids = serviceIds;
-    addRow(clonedPatient);
-}
-
-// =========================================================================
-// 6. LOCAL STORAGE STATE PERSISTENCE & ANTI-STALE REVALIDATION (DRAFT ENGINE)
-// =========================================================================
-function saveBulkDraft() {
-    if (isRestoringDraft) return;
-    const activeSection = document.querySelector('.wiz-section:not(.d-none)');
-    const currentStep = activeSection ? parseInt(activeSection.id.replace('page-', '')) : 2;
-    const patients = [];
-    const rows = document.querySelectorAll('#rowContainer tr');
-    rows.forEach(tr => {
-        const idx = tr.id.split('_')[1];
-        if (!idx) return;
-        const p = getRowPatientData(idx);
-        const hiddenInputs = tr.querySelectorAll(`#hidden_inputs_${idx} input`);
-        p.service_ids = Array.from(hiddenInputs).map(i => i.value);
-        patients.push(p);
-    });
-
-    const activeProvider = document.querySelector('.bulk-prov-radio:checked');
-    const payMethod = document.querySelector('input[name="payment_method"]:checked')?.value || 'Cash';
-
-    const draft = {
-        step: currentStep,
-        organization_name: masterOrg ? masterOrg.value.trim() : '',
-        appointment_date: masterDate ? masterDate.value : '',
-        payment_method: payMethod,
-        payment_provider_id: activeProvider ? activeProvider.value : '',
-        agree_terms: document.getElementById('agree_terms')?.checked || false,
-        patients: patients,
-        saved_at: Date.now()
-    };
-
-    try {
-        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-    } catch (e) {
-        console.warn("Failed to write bulk draft to localStorage:", e);
-    }
-}
-
-async function loadBulkDraft() {
-    try {
-        const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
-        if (!raw) return false;
-        const draft = JSON.parse(raw);
-        if (!draft) return false;
-
-        isRestoringDraft = true;
-        const now = new Date();
-        const todayLocal = now.toLocaleDateString('en-CA');
-
-        // REVALIDATE MASTER APPOINTMENT DATE: Reset if date is in the past
-        let isDateOutdated = false;
-        if (draft.appointment_date) {
-            if (draft.appointment_date < todayLocal) {
-                isDateOutdated = true;
-                draft.appointment_date = todayLocal;
-            }
-            if (masterDate) masterDate.value = draft.appointment_date;
-        }
-
-        if (draft.organization_name && masterOrg) {
-            masterOrg.value = draft.organization_name;
-        }
-
-        await fetchOccupancy();
-
-        if (Array.isArray(draft.patients) && draft.patients.length > 0) {
-            document.getElementById('rowContainer').innerHTML = '';
-            rowCount = 0;
-            draft.patients.forEach(p => {
-                // Clear stale time slot if date changed or was in the past
-                if (isDateOutdated || (p.appointment_date && p.appointment_date < todayLocal)) {
-                    p.appointment_date = todayLocal;
-                    p.time_slot = '';
-                }
-                addRow(p);
-            });
-        }
-
-        // Restore Payment Method & Provider
-        if (draft.payment_method) {
-            const payRadio = document.getElementById(draft.payment_method === 'Cashless' ? 'pay_cashless' : 'pay_cash');
-            if (payRadio) {
-                payRadio.checked = true;
-                bulkLastMethod = draft.payment_method;
-            }
-        }
-
-        if (draft.payment_provider_id) {
-            const provRadio = document.getElementById(`provider_${draft.payment_provider_id}`);
-            if (provRadio) {
-                provRadio.checked = true;
-                bulkLastProviderId = draft.payment_provider_id;
-                const qrImg = document.getElementById('selected_provider_qr');
-                const qrName = document.getElementById('selected_provider_name');
-                if (qrImg && provRadio.dataset.qr) qrImg.src = provRadio.dataset.qr;
-                if (qrName && provRadio.dataset.name) qrName.innerText = provRadio.dataset.name;
-            }
-        }
-
-        if (draft.agree_terms) {
-            const agreeTerms = document.getElementById('agree_terms');
-            if (agreeTerms) agreeTerms.checked = true;
-        }
-
-        restoreBulkReceiptPreview();
-        toggleBulkPaymentFields();
-        performGlobalSync();
-        toggleBulkSubmitButton();
-
-        // If date was in the past, keep user on Step 2 to pick a fresh valid schedule
-        if (!isDateOutdated && draft.step && draft.step > 2 && draft.organization_name && draft.appointment_date) {
-            goToPage(draft.step);
-        } else {
-            goToPage(2);
-        }
-
-        isRestoringDraft = false;
-        return true;
-    } catch (e) {
-        console.error("Failed to load bulk draft:", e);
-        isRestoringDraft = false;
-        return false;
-    }
-}
-
-function clearBulkDraft() {
-    try {
-        localStorage.removeItem(DRAFT_STORAGE_KEY);
-        localStorage.removeItem('receipt_base64_bulk');
-        localStorage.removeItem('receipt_name_bulk');
-    } catch (e) {}
-}
-
-// =========================================================================
-// 7. SUMMARY UPDATER & REAL-TIME SYNCS
+// 3. REAL-TIME SUMMARY & SYNC
 // =========================================================================
 function updateBulkSummary() {
     const rows = document.querySelectorAll('#rowContainer tr');
@@ -1018,12 +331,14 @@ function updateBulkSummary() {
     rows.forEach(tr => {
         const idx = tr.id.split('_')[1];
         if (!idx) return;
+
         const p = getRowPatientData(idx);
         const age = calculateAge(p.birthdate);
         const address = (p.street || p.barangay || p.city || p.province) 
             ? `${p.street}, BRGY. ${p.barangay}, ${p.city}, ${p.province}`.toUpperCase() 
             : 'N/A';
-        const displayTests = document.getElementById(`display_tests_${idx}`)?.innerText || 'No tests selected';
+
+        const displayTests = document.getElementById(`display_tests_${idx}`)?.innerText || 'No selections';
 
         let hoverDetails = `
             <strong>Sex:</strong> ${p.sex}<br>
@@ -1044,23 +359,29 @@ function updateBulkSummary() {
                      data-bs-content="${hoverDetails}"
                      title="${p.name}">
                     <span class="text-truncate small text-main fw-semibold" style="max-width: 180px;">${p.name}</span>
-                    <span class="badge bg-secondary bg-opacity-10 text-secondary x-small py-0.5" style="font-size:0.6rem;">${p.sex.toUpperCase()}</span>
+                    <span class="badge bg-secondary text-white x-small py-0.5" style="font-size:0.6rem;">${p.sex.toUpperCase()}</span>
                 </div>
             `;
         }
 
-        const selectedServices = tr.querySelectorAll('input[type="hidden"][name*="[service_ids]"]');
+        // Calculate Packages total
+        const selectedPackages = tr.querySelectorAll(`input[name="patients[${idx}][package_ids][]"]`);
+        selectedPackages.forEach(input => {
+            const pkg = window.packagesMap[input.value];
+            if (pkg) totalSum += parseFloat(pkg.price) || 0;
+        });
+
+        // Calculate Services total
+        const selectedServices = tr.querySelectorAll(`input[name="patients[${idx}][service_ids][]"]`);
         selectedServices.forEach(input => {
-            const serviceId = input.value;
-            const service = servicesMap[serviceId];
-            if (service) {
-                totalSum += parseFloat(service.price) || 0;
-            }
+            const svc = window.servicesMap[input.value];
+            if (svc) totalSum += parseFloat(svc.price) || 0;
         });
     });
 
     const listContainer = document.getElementById('sum_pax_list_container');
     const listDiv = document.getElementById('sum_pax_list');
+
     if (paxListHtml && listContainer && listDiv) {
         listDiv.innerHTML = paxListHtml;
         listContainer.classList.remove('d-none');
@@ -1070,130 +391,116 @@ function updateBulkSummary() {
         listContainer.classList.add('d-none');
     }
 
-    document.getElementById('sum_pax_count').innerText = `${paxCount} PATIENT${paxCount === 1 ? '' : 'S'} ADDED`;
-    document.getElementById('sum_total').innerText = totalSum.toLocaleString(undefined, { minimumFractionDigits: 2 });
+    const countEl = document.getElementById('sum_pax_count');
+    if (countEl) countEl.innerText = `${paxCount} PATIENT${paxCount === 1 ? '' : 'S'} ADDED`;
+
+    const totalEl = document.getElementById('sum_total');
+    if (totalEl) totalEl.innerText = totalSum.toLocaleString(undefined, { minimumFractionDigits: 2 });
 }
+window.updateBulkSummary = updateBulkSummary;
 
 function performGlobalSync() {
-    document.getElementById('hidden_org').value = masterOrg.value;
-    document.getElementById('hidden_date').value = masterDate.value;
-    document.getElementById('sum_org').innerText = masterOrg.value || '---';
-    if (masterDate.value) {
-        document.getElementById('sum_schedule').classList.remove('d-none');
-        document.getElementById('sum_date').innerText = masterDate.value;
+    const hiddenOrg = document.getElementById('hidden_org');
+    const hiddenDate = document.getElementById('hidden_date');
+    const sumOrg = document.getElementById('sum_org');
+    const sumSched = document.getElementById('sum_schedule');
+    const sumDate = document.getElementById('sum_date');
+
+    const orgVal = hiddenOrg ? hiddenOrg.value : '';
+    if (sumOrg) sumOrg.innerText = orgVal || '---';
+
+    if (masterDate && masterDate.value) {
+        if (hiddenDate) hiddenDate.value = masterDate.value;
+        if (sumSched) sumSched.classList.remove('d-none');
+        if (sumDate) sumDate.innerText = masterDate.value;
     } else {
-        document.getElementById('sum_schedule').classList.add('d-none');
+        if (sumSched) sumSched.classList.add('d-none');
     }
+
     updateBulkSummary();
 }
-
-masterOrg.addEventListener('input', () => {
-    performGlobalSync();
-    saveBulkDraft();
-});
+window.performGlobalSync = performGlobalSync;
 
 // =========================================================================
-// 8. TIME SLOTS & OCCUPANCY ENGINE
+// 4. OCCUPANCY & UNCAPPED CASCADING TIME ALLOCATOR
 // =========================================================================
 async function fetchOccupancy() {
-    const mDateInput = document.getElementById('master_date').value;
+    const mDateInput = document.getElementById('master_date')?.value;
     const now = new Date();
     const todayLocal = now.toLocaleDateString('en-CA');
     const mDate = mDateInput || todayLocal;
+
     try {
         const res = await fetch(`/api/check-slots?date=${mDate}`);
         const data = await res.json();
-        cachedOccupancy = data.occupied_slots || {};
+        window.cachedOccupancy = data.occupied_slots || {};
     } catch (e) {
         console.error("Occupancy Fetch Failed", e);
-        cachedOccupancy = {};
+        window.cachedOccupancy = {};
     }
 }
+window.fetchOccupancy = fetchOccupancy;
 
 async function validateMasterDate() {
+    if (!masterDate) return false;
     const selectedDate = masterDate.value;
     if (!selectedDate) return false;
+
     const parts = selectedDate.split('-');
     const d = new Date(parts[0], parts[1] - 1, parts[2]);
     const dayNum = d.getDay();
-    const config = cachedConfigs[dayNum];
+    const config = window.cachedConfigs ? window.cachedConfigs[dayNum] : null;
+
     const proceedBtn = document.getElementById('proceed_to_compilation_btn');
     const errorMsg = document.getElementById('date_validation_msg');
 
     if (!config || !config.is_open || config.is_open === '0' || config.is_open === 0 || config.is_open === false) {
-        errorMsg.innerText = "Clinic is closed on this day. Please select another date.";
-        errorMsg.classList.remove('d-none');
-        proceedBtn.classList.add('opacity-75');
+        if (errorMsg) {
+            errorMsg.innerText = "Clinic is closed on this day. Please select another date.";
+            errorMsg.classList.remove('d-none');
+        }
+        if (proceedBtn) proceedBtn.classList.add('opacity-75');
         return false;
     }
 
-    let hasAvailableSlots = false;
-    let start = new Date(`2000-01-01 ${config.opening_time}`);
-    let end = new Date(`2000-01-01 ${config.closing_time}`);
-    const now = new Date();
-    const todayLocal = now.toLocaleDateString('en-CA');
-
-    while (start < end) {
-        let tStr = start.toTimeString().split(' ')[0];
-        let isLunch = ((config.has_lunch_break === true || config.has_lunch_break === 1 || parseInt(config.has_lunch_break) === 1) && tStr >= config.lunch_start && tStr < config.lunch_end);
-        let dbCount = parseInt(cachedOccupancy[tStr] || 0);
-        let isPast = false;
-        if (selectedDate === todayLocal) {
-            const leadTimeMs = (parseInt(config.lead_time_hours) || 0) * 3600 * 1000;
-            const cutoffTime = now.getTime() + leadTimeMs;
-            const slotDate = new Date(`${selectedDate} ${tStr}`);
-            isPast = slotDate.getTime() < cutoffTime;
-        }
-
-        if (!isLunch && !isPast && dbCount < parseInt(config.max_patients_per_slot || 1)) {
-            hasAvailableSlots = true;
-            break;
-        }
-        start.setMinutes(start.getMinutes() + parseInt(config.slot_duration));
-    }
-
-    if (!hasAvailableSlots) {
-        errorMsg.innerText = "All time slots for this date are fully booked or unavailable due to lead-time limits. Please select another date.";
-        errorMsg.classList.remove('d-none');
-        proceedBtn.classList.add('opacity-75');
-        return false;
-    } else {
-        errorMsg.classList.add('d-none');
-        proceedBtn.classList.remove('opacity-75');
-        return true;
-    }
+    if (errorMsg) errorMsg.classList.add('d-none');
+    if (proceedBtn) proceedBtn.classList.remove('opacity-75');
+    return true;
 }
+window.validateMasterDate = validateMasterDate;
 
-masterDate.addEventListener('change', async function () {
-    const selectedDate = this.value;
-    if (!selectedDate) return;
-    await fetchOccupancy();
-    const isValid = await validateMasterDate();
-    if (isValid) {
-        document.querySelectorAll('.row-date-input').forEach(input => {
-            input.value = selectedDate;
-            input.min = selectedDate;
-            updateRowSlots(input);
-        });
-        performGlobalSync();
-        saveBulkDraft();
-    }
-});
+if (masterDate) {
+    masterDate.addEventListener('change', async function () {
+        const selectedDate = this.value;
+        if (!selectedDate) return;
+        await fetchOccupancy();
+        const isValid = await validateMasterDate();
+        if (isValid) {
+            document.querySelectorAll('.row-date-input').forEach(input => {
+                input.value = selectedDate;
+                input.min = selectedDate;
+                updateRowSlots(input);
+            });
+            performGlobalSync();
+            saveBulkDraft();
+        }
+    });
+}
 
 function updateRowSlots(input, savedSlot = '') {
     const td = input.closest('td');
+    if (!td) return;
     const select = td.querySelector('.t-select');
     const selectedDate = input.value;
-    const tr = input.closest('tr');
-    const idx = tr.id.split('_')[1];
+    if (!select) return;
 
-    if (!selectedDate || !cachedConfigs) {
+    if (!selectedDate || !window.cachedConfigs) {
         select.innerHTML = '<option value="">Pick Date First</option>';
         return;
     }
 
     const dayNum = new Date(selectedDate).getDay();
-    const config = cachedConfigs[dayNum];
+    const config = window.cachedConfigs[dayNum];
 
     if (!config || !config.is_open || config.is_open === '0' || config.is_open === 0 || config.is_open === false) {
         select.innerHTML = '<option value="">CLOSED</option>';
@@ -1204,6 +511,7 @@ function updateRowSlots(input, savedSlot = '') {
     let start = new Date(`2000-01-01 ${config.opening_time}`);
     let end = new Date(`2000-01-01 ${config.closing_time}`);
     let availableCount = 0;
+
     const now = new Date();
     const todayLocal = now.toLocaleDateString('en-CA');
 
@@ -1213,10 +521,6 @@ function updateRowSlots(input, savedSlot = '') {
         let tStr = `${hours}:${minutes}:00`;
 
         let isLunch = ((config.has_lunch_break === true || config.has_lunch_break === 1 || parseInt(config.has_lunch_break) === 1) && tStr >= config.lunch_start && tStr < config.lunch_end);
-        let dbCount = parseInt(cachedOccupancy[tStr] || 0);
-        let onScreenCount = getOnScreenOccupiedCount(selectedDate, tStr, idx);
-        const maxLimit = config ? parseInt(config.max_patients_per_slot) : 1;
-        let isFull = (dbCount + onScreenCount) >= maxLimit;
         let isPast = false;
 
         if (selectedDate === todayLocal) {
@@ -1226,20 +530,21 @@ function updateRowSlots(input, savedSlot = '') {
             isPast = slotDate.getTime() < cutoffTime;
         }
 
-        if (!isLunch && !isPast && (!isFull || savedSlot === tStr)) {
+        if (!isLunch && !isPast) {
             let disp = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             let selectedAttr = (savedSlot === tStr) ? 'selected' : '';
             html += `<option value="${tStr}" ${selectedAttr}>${disp}</option>`;
             availableCount++;
         }
+
         start.setMinutes(start.getMinutes() + parseInt(config.slot_duration));
     }
 
-    select.innerHTML = (availableCount > 0) ? html : '<option value="">FULLY BOOKED</option>';
-    select.disabled = (availableCount === 0);
+    select.innerHTML = (availableCount > 0) ? html : '<option value="">NO SLOTS</option>';
 }
+window.updateRowSlots = updateRowSlots;
 
-window.refreshAllRowSlots = function () {
+function refreshAllRowSlots() {
     const rows = document.querySelectorAll('#rowContainer tr');
     rows.forEach(tr => {
         const rDateInput = tr.querySelector('.row-date-input');
@@ -1251,28 +556,23 @@ window.refreshAllRowSlots = function () {
     });
     performGlobalSync();
     saveBulkDraft();
-};
+}
+window.refreshAllRowSlots = refreshAllRowSlots;
 
+// Uncapped Cascading Smart Auto-Time Allocation
 async function runSmartScheduler() {
-    const mDateInput = document.getElementById('master_date').value;
+    const mDateInput = document.getElementById('master_date')?.value;
     if (!mDateInput) return showAlert("Please select a Preferred Start Date first.");
+
     const btn = document.getElementById('smartSchedBtn');
-    btn.disabled = true;
-    btn.innerHTML = 'SCHEDULING...';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1.5"></span> SCHEDULING...';
+    }
 
     try {
         await fetchOccupancy();
         let localTracker = {};
-        const initialRows = document.querySelectorAll('#rowContainer tr');
-        initialRows.forEach(tr => {
-            const rDateInput = tr.querySelector('.row-date-input');
-            const rTimeSelect = tr.querySelector('.t-select');
-            if (rDateInput?.value && rTimeSelect?.value) {
-                const key = `${rDateInput.value}_${rTimeSelect.value}`;
-                localTracker[key] = (localTracker[key] || 0) + 1;
-            }
-        });
-
         let currentPtrDate = new Date(mDateInput);
         const rows = document.querySelectorAll('#rowContainer tr');
         const now = new Date();
@@ -1280,14 +580,13 @@ async function runSmartScheduler() {
 
         for (let tr of rows) {
             const dInput = tr.querySelector('.row-date-input');
-            const tSelect = tr.querySelector('.t-select');
-            if (dInput?.value && tSelect?.value && tSelect.value !== '') continue;
-
             let assigned = false;
             let daySafety = 0;
-            while (!assigned && daySafety < 30) {
+
+            while (!assigned && daySafety < 60) {
                 let dStr = currentPtrDate.toLocaleDateString('en-CA');
-                let config = cachedConfigs[currentPtrDate.getDay()];
+                let config = window.cachedConfigs[currentPtrDate.getDay()];
+
                 if (!config || parseInt(config.is_open) === 0) {
                     currentPtrDate.setDate(currentPtrDate.getDate() + 1);
                     daySafety++;
@@ -1296,6 +595,7 @@ async function runSmartScheduler() {
 
                 const openingTime = config ? config.opening_time : '08:00:00';
                 const closingTime = config ? config.closing_time : '17:00:00';
+
                 let startPtr = new Date(`${dStr} ${openingTime}`);
                 let endPtr = new Date(`${dStr} ${closingTime}`);
 
@@ -1306,6 +606,7 @@ async function runSmartScheduler() {
 
                     let isLunch = ((config.has_lunch_break === true || config.has_lunch_break === 1 || parseInt(config.has_lunch_break) === 1) && tStr >= config.lunch_start && tStr < config.lunch_end);
                     let isPast = false;
+
                     if (dStr === todayLocal) {
                         const leadTimeMs = (parseInt(config.lead_time_hours) || 0) * 3600 * 1000;
                         const cutoffTime = now.getTime() + leadTimeMs;
@@ -1314,9 +615,9 @@ async function runSmartScheduler() {
                     }
 
                     if (!isLunch && !isPast) {
-                        let dbCount = parseInt(cachedOccupancy[tStr] || 0);
+                        let dbCount = parseInt(window.cachedOccupancy[tStr] || 0);
                         let localCount = localTracker[`${dStr}_${tStr}`] || 0;
-                        const maxPatients = config ? parseInt(config.max_patients_per_slot) : 1;
+                        const maxPatients = config ? parseInt(config.max_patients_per_slot) : 2;
 
                         if (dbCount + localCount < maxPatients) {
                             dInput.value = dStr;
@@ -1326,47 +627,69 @@ async function runSmartScheduler() {
                             break;
                         }
                     }
+
                     startPtr.setMinutes(startPtr.getMinutes() + parseInt(config.slot_duration));
                 }
+
                 if (!assigned) currentPtrDate.setDate(currentPtrDate.getDate() + 1);
                 daySafety++;
             }
         }
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-cpu me-1"></i> SMART AUTO-TIME';
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-cpu me-1.5"></i> SMART AUTO-TIME';
+        }
         performGlobalSync();
         saveBulkDraft();
     }
 }
+window.runSmartScheduler = runSmartScheduler;
 
 // =========================================================================
-// 9. SERVICES SELECTION & GENDER RESTRICTIONS
+// 5. SERVICES & PACKAGES MODAL (BIDIRECTIONAL CONFLICT ENGINE)
 // =========================================================================
 window.openServiceModal = function (idx) {
     activeRowIdx = idx;
     const row = document.getElementById(`r_${idx}`);
     const sexInput = row ? row.querySelector(`input[name="patients[${idx}][sex]"]`) : null;
     const activeSex = sexInput ? sexInput.value : 'Male';
-    const hiddenContainer = document.getElementById(`hidden_inputs_${idx}`);
-    const selectedIds = hiddenContainer ? Array.from(hiddenContainer.querySelectorAll('input')).map(i => i.value) : [];
 
-    document.querySelectorAll('.service-item').forEach(item => {
-        const checkbox = item.querySelector('input[type="checkbox"]');
+    const hiddenContainer = document.getElementById(`hidden_inputs_${idx}`);
+    const selectedSvcIds = hiddenContainer ? Array.from(hiddenContainer.querySelectorAll('input[name*="[service_ids]"]')).map(i => i.value) : [];
+    const selectedPkgIds = hiddenContainer ? Array.from(hiddenContainer.querySelectorAll('input[name*="[package_ids]"]')).map(i => i.value) : [];
+
+    // Pre-check packages
+    document.querySelectorAll('.pkg-chk-item').forEach(chk => {
+        chk.checked = selectedPkgIds.includes(chk.value);
+    });
+
+    // Pre-check services
+    document.querySelectorAll('.svc-chk-item').forEach(chk => {
+        chk.checked = selectedSvcIds.includes(chk.value);
+        chk.onchange = function() {
+            recalculateModalTestDependencies();
+        };
+    });
+
+    // Filter by Organization Mode
+    filterModalPackagesForOrg();
+
+    // Filter by gender
+    document.querySelectorAll('.modal-item-row').forEach(item => {
         const restriction = item.dataset.gender;
-        if (checkbox) {
-            checkbox.checked = selectedIds.includes(checkbox.value);
-            if (activeSex === 'Male' && restriction === 'female') {
-                item.classList.add('d-none');
-                checkbox.checked = false;
-            } else if (activeSex === 'Female' && restriction === 'male') {
-                item.classList.add('d-none');
-                checkbox.checked = false;
-            } else {
-                item.classList.remove('d-none');
-            }
+        if (activeSex === 'Male' && restriction === 'female') {
+            item.classList.add('d-none');
+            const chk = item.querySelector('input[type="checkbox"]');
+            if (chk) chk.checked = false;
+        } else if (activeSex === 'Female' && restriction === 'male') {
+            item.classList.add('d-none');
+            const chk = item.querySelector('input[type="checkbox"]');
+            if (chk) chk.checked = false;
         }
     });
+
+    recalculateModalTestDependencies();
 
     const searchInput = document.getElementById('serviceSearch');
     if (searchInput) searchInput.value = '';
@@ -1378,79 +701,219 @@ window.openServiceModal = function (idx) {
     }
 };
 
+window.handlePackageCheckboxChange = function() {
+    recalculateModalTestDependencies();
+};
+
+function recalculateModalTestDependencies() {
+    const coveredByCheckedPackages = new Set();
+    const activePackages = Array.from(document.querySelectorAll('.pkg-chk-item:checked'));
+
+    activePackages.forEach(pkgChk => {
+        const pkgId = pkgChk.value;
+        const pkg = window.packagesMap[pkgId];
+        if (pkg && pkg.services) {
+            pkg.services.forEach(svc => coveredByCheckedPackages.add(svc.id.toString()));
+        } else if (pkgChk.dataset.services) {
+            try {
+                const sArr = JSON.parse(pkgChk.dataset.services);
+                sArr.forEach(id => coveredByCheckedPackages.add(id.toString()));
+            } catch(e) {}
+        }
+    });
+
+    const checkedIndividualServices = new Set();
+    document.querySelectorAll('.svc-chk-item:checked').forEach(svcChk => {
+        checkedIndividualServices.add(svcChk.value.toString());
+    });
+
+    // Package-to-Package Conflict Rules
+    document.querySelectorAll('.pkg-chk-item').forEach(pkgChk => {
+        const pkgId = pkgChk.value;
+        const pkg = window.packagesMap[pkgId];
+        let pkgServiceIds = [];
+
+        if (pkg && pkg.services) {
+            pkgServiceIds = pkg.services.map(s => s.id.toString());
+        } else if (pkgChk.dataset.services) {
+            try {
+                pkgServiceIds = JSON.parse(pkgChk.dataset.services).map(String);
+            } catch(e) {}
+        }
+
+        const wrapper = pkgChk.closest('.form-check') || pkgChk.parentElement;
+        let conflictBadge = wrapper ? wrapper.querySelector('.pkg-conflict-badge') : null;
+
+        if (pkgChk.checked) {
+            pkgChk.disabled = false;
+            if (wrapper) {
+                wrapper.classList.remove('opacity-50');
+                wrapper.style.pointerEvents = 'auto';
+                wrapper.style.cursor = 'default';
+                wrapper.removeAttribute('title');
+            }
+            if (conflictBadge) conflictBadge.classList.add('d-none');
+            return;
+        }
+
+        const conflictsWithPackage = pkgServiceIds.some(id => coveredByCheckedPackages.has(id));
+        const conflictsWithIndividual = pkgServiceIds.some(id => checkedIndividualServices.has(id));
+        const isConflicting = conflictsWithPackage || conflictsWithIndividual;
+
+        if (isConflicting) {
+            pkgChk.disabled = true;
+            if (wrapper) {
+                wrapper.classList.add('opacity-50');
+                wrapper.style.pointerEvents = 'none';
+                wrapper.style.cursor = 'not-allowed';
+                wrapper.setAttribute('title', conflictsWithPackage 
+                    ? 'Conflicting package: shares tests with an already selected package.' 
+                    : 'Conflicting package: includes an individual test that is already selected.');
+            }
+            if (!conflictBadge && wrapper) {
+                const priceContainer = wrapper.querySelector('.d-flex.justify-content-between');
+                if (priceContainer) {
+                    conflictBadge = document.createElement('span');
+                    conflictBadge.className = 'badge bg-danger text-white border border-danger pkg-conflict-badge smaller ms-2';
+                    conflictBadge.style.fontSize = '0.6rem';
+                    conflictBadge.innerText = 'Conflicting';
+                    priceContainer.appendChild(conflictBadge);
+                }
+            }
+            if (conflictBadge) conflictBadge.classList.remove('d-none');
+        } else {
+            pkgChk.disabled = false;
+            if (wrapper) {
+                wrapper.classList.remove('opacity-50');
+                wrapper.style.pointerEvents = 'auto';
+                wrapper.style.cursor = 'default';
+                wrapper.removeAttribute('title');
+            }
+            if (conflictBadge) conflictBadge.classList.add('d-none');
+        }
+    });
+
+    // Package-to-Service Conflict Rules
+    document.querySelectorAll('.svc-chk-item').forEach(svcChk => {
+        const isCovered = coveredByCheckedPackages.has(svcChk.value.toString());
+        const wrapper = document.getElementById('service_wrapper_' + svcChk.value) || svcChk.closest('.form-check');
+        let coveredBadge = wrapper ? wrapper.querySelector('.pkg-covered-badge') : null;
+
+        if (isCovered) {
+            svcChk.checked = false;
+            svcChk.disabled = true;
+            if (wrapper) {
+                wrapper.classList.add('opacity-50');
+                wrapper.style.pointerEvents = 'none';
+                wrapper.style.cursor = 'not-allowed';
+                wrapper.setAttribute('title', 'Already included in your selected package.');
+            }
+            if (!coveredBadge && wrapper) {
+                const flexRow = wrapper.querySelector('.d-flex.justify-content-between');
+                if (flexRow) {
+                    coveredBadge = document.createElement('span');
+                    coveredBadge.className = 'badge bg-warning text-dark border border-warning pkg-covered-badge smaller ms-2';
+                    coveredBadge.style.fontSize = '0.6rem';
+                    coveredBadge.innerText = 'In Package';
+                    flexRow.appendChild(coveredBadge);
+                }
+            }
+            if (coveredBadge) coveredBadge.classList.remove('d-none');
+        } else {
+            svcChk.disabled = false;
+            if (wrapper) {
+                wrapper.classList.remove('opacity-50');
+                wrapper.style.pointerEvents = 'auto';
+                wrapper.style.cursor = 'default';
+                wrapper.removeAttribute('title');
+            }
+            if (coveredBadge) coveredBadge.classList.add('d-none');
+        }
+    });
+
+    // Make selection pronounced: dynamically toggle .is-selected class on all cards
+    document.querySelectorAll('.pkg-chk-item, .svc-chk-item').forEach(chk => {
+        const wrapper = chk.closest('.form-check');
+        if (wrapper) {
+            wrapper.classList.toggle('is-selected', chk.checked);
+        }
+    });
+
+    const totalSelected = activePackages.length + document.querySelectorAll('.svc-chk-item:checked').length;
+    const counterEl = document.getElementById('modal_selection_counter');
+    if (counterEl) {
+        counterEl.innerText = `${totalSelected} selected (${activePackages.length} package${activePackages.length === 1 ? '' : 's'}, ${document.querySelectorAll('.svc-chk-item:checked').length} test${document.querySelectorAll('.svc-chk-item:checked').length === 1 ? '' : 's'})`;
+    }
+}
+
+window.filterModalServices = function(query) {
+    const q = (query || '').toUpperCase().trim();
+    document.querySelectorAll('.modal-item-row').forEach(item => {
+        const name = (item.dataset.name || '').toUpperCase();
+        item.classList.toggle('d-none', q && !name.includes(q));
+    });
+};
+
 function applyServices() {
-    const sel = Array.from(document.querySelectorAll('.service-item input:checked'));
-    document.getElementById(`display_tests_${activeRowIdx}`).innerText = sel.map(s => s.dataset.label).join(', ') || 'NO TESTS';
+    const checkedPkgs = Array.from(document.querySelectorAll('.pkg-chk-item:checked'));
+    const checkedSvcs = Array.from(document.querySelectorAll('.svc-chk-item:checked'));
+
+    const coveredIds = new Set();
+    let hasOverlappingPackages = false;
+
+    checkedPkgs.forEach(pkgChk => {
+        const pkg = window.packagesMap[pkgChk.value];
+        if (pkg && pkg.services) {
+            pkg.services.forEach(s => {
+                if (coveredIds.has(s.id.toString())) {
+                    hasOverlappingPackages = true;
+                }
+                coveredIds.add(s.id.toString());
+            });
+        }
+    });
+
+    if (hasOverlappingPackages) {
+        return alert("Selection error: You have selected multiple packages that share overlapping tests. Please remove one of the conflicting packages.");
+    }
+
+    const hasOverlappingSvc = checkedSvcs.some(s => coveredIds.has(s.value.toString()));
+    if (hasOverlappingSvc) {
+        return alert("Selection error: An individual test is already covered in a selected package. Please remove the duplicate test.");
+    }
+
     let h = '';
-    sel.forEach(s => h += `<input type="hidden" name="patients[${activeRowIdx}][service_ids][]" value="${s.value}">`);
-    document.getElementById(`hidden_inputs_${activeRowIdx}`).innerHTML = h;
+    let labels = [];
+
+    checkedPkgs.forEach(p => {
+        h += `<input type="hidden" name="patients[${activeRowIdx}][package_ids][]" value="${p.value}">`;
+        labels.push(`[PKG] ${p.dataset.label}`);
+    });
+
+    checkedSvcs.forEach(s => {
+        h += `<input type="hidden" name="patients[${activeRowIdx}][service_ids][]" value="${s.value}">`;
+        labels.push(s.dataset.label);
+    });
+
+    const displayElem = document.getElementById(`display_tests_${activeRowIdx}`);
+    if (displayElem) displayElem.innerText = labels.join(', ') || 'NO SELECTIONS';
+
+    const hiddenElem = document.getElementById(`hidden_inputs_${activeRowIdx}`);
+    if (hiddenElem) hiddenElem.innerHTML = h;
 
     const modalEl = document.getElementById('serviceModal');
-    const modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-    modalInstance.hide();
+    if (modalEl) {
+        const modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modalInstance.hide();
+    }
+
     performGlobalSync();
     saveBulkDraft();
 }
-
-function handleRowSexChange(idx, newSex) {
-    const hiddenInputs = document.querySelectorAll(`#hidden_inputs_${idx} input`);
-    let updatedLabels = [];
-    hiddenInputs.forEach(input => {
-        const serviceId = input.value;
-        const service = servicesMap[serviceId];
-        if (service) {
-            const restriction = service.gender_restriction;
-            if (newSex === 'Male' && restriction === 'female') {
-                input.remove();
-            } else if (newSex === 'Female' && restriction === 'male') {
-                input.remove();
-            } else {
-                updatedLabels.push(service.name);
-            }
-        }
-    });
-    document.getElementById(`display_tests_${idx}`).innerText = updatedLabels.join(', ') || 'NO TESTS';
-    performGlobalSync();
-    saveBulkDraft();
-}
-
-function bulkCopy(sourceIdx, genderTarget) {
-    const sourceInputs = document.querySelectorAll(`#hidden_inputs_${sourceIdx} input`);
-    const sourceIds = Array.from(sourceInputs).map(i => i.value);
-    if (sourceIds.length === 0) return showAlert("Please select tests for this row first before copying.");
-
-    const rows = document.querySelectorAll('#rowContainer tr');
-    let count = 0;
-    rows.forEach(tr => {
-        const targetIdx = tr.id.split('_')[1];
-        if (targetIdx == sourceIdx) return;
-        const targetSex = tr.querySelector(`input[name="patients[${targetIdx}][sex]"]`)?.value || 'Male';
-        if (genderTarget === 'all' || targetSex === genderTarget) {
-            let filteredIds = [];
-            let filteredLabels = [];
-            sourceIds.forEach(id => {
-                const service = servicesMap[id];
-                if (service) {
-                    const restriction = service.gender_restriction;
-                    if (targetSex === 'Male' && restriction === 'female') return;
-                    if (targetSex === 'Female' && restriction === 'male') return;
-                    filteredIds.push(id);
-                    filteredLabels.push(service.name);
-                }
-            });
-            document.getElementById(`display_tests_${targetIdx}`).innerText = filteredLabels.join(', ') || 'NO TESTS';
-            let h = '';
-            filteredIds.forEach(id => h += `<input type="hidden" name="patients[${targetIdx}][service_ids][]" value="${id}">`);
-            document.getElementById(`hidden_inputs_${targetIdx}`).innerHTML = h;
-            count++;
-        }
-    });
-    performGlobalSync();
-    saveBulkDraft();
-}
+window.applyServices = applyServices;
 
 // =========================================================================
-// 10. 12-COLUMN EXCEL IMPORT & PARSER
+// 6. EXCEL IMPORT & PARSER
 // =========================================================================
 function switchTab(tab) {
     const manualPane = document.getElementById('pane-manual');
@@ -1459,17 +922,18 @@ function switchTab(tab) {
     const excelBtn = document.getElementById('btn-excel');
 
     if (tab === 'manual') {
-        manualPane.style.display = 'block';
-        excelPane.style.display = 'none';
-        manualBtn.className = 'btn-custom btn-accent px-4 py-2 fw-bold';
-        excelBtn.className = 'btn-custom btn-outline-accent text-white px-4 py-2 border-0 fw-bold';
+        if (manualPane) manualPane.style.display = 'block';
+        if (excelPane) excelPane.style.display = 'none';
+        if (manualBtn) manualBtn.className = 'btn-custom btn-accent px-4 py-2 fw-bold btn-sm';
+        if (excelBtn) excelBtn.className = 'btn-custom btn-outline-accent px-4 py-2 border-0 fw-bold btn-sm';
     } else {
-        manualPane.style.display = 'none';
-        excelPane.style.display = 'block';
-        excelBtn.className = 'btn-custom btn-accent px-4 py-2 fw-bold';
-        manualBtn.className = 'btn-custom btn-outline-accent text-white px-4 py-2 border-0 fw-bold';
+        if (manualPane) manualPane.style.display = 'none';
+        if (excelPane) excelPane.style.display = 'block';
+        if (excelBtn) excelBtn.className = 'btn-custom btn-accent px-4 py-2 fw-bold btn-sm';
+        if (manualBtn) manualBtn.className = 'btn-custom btn-outline-accent px-4 py-2 border-0 fw-bold btn-sm';
     }
 }
+window.switchTab = switchTab;
 
 function excelDateToJSDate(serial) {
     const utc_days = Math.floor(serial - 25569);
@@ -1502,13 +966,6 @@ function formatExcelDate(val) {
             const d = String(dObj.getDate()).padStart(2, '0');
             return `${y}-${m}-${d}`;
         }
-        const match = cleanStr.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-        if (match) {
-            const y = match[3];
-            const m = match[1].padStart(2, '0');
-            const d = match[2].padStart(2, '0');
-            return `${y}-${m}-${d}`;
-        }
     }
     return val;
 }
@@ -1517,22 +974,17 @@ function normalizeExcelPhone(val) {
     if (val === undefined || val === null) return '';
     let phone = String(val).trim().split('.')[0];
     phone = phone.replace(/[^\d+]/g, '');
-    if (phone.startsWith('+639') && phone.length === 13) {
-        return '0' + phone.substring(3);
-    }
-    if (phone.startsWith('639') && phone.length === 12) {
-        return '0' + phone.substring(2);
-    }
-    if (phone.startsWith('9') && phone.length === 10) {
-        return '0' + phone;
-    }
+    if (phone.startsWith('+639') && phone.length === 13) return '0' + phone.substring(3);
+    if (phone.startsWith('639') && phone.length === 12) return '0' + phone.substring(2);
+    if (phone.startsWith('9') && phone.length === 10) return '0' + phone;
     return phone;
 }
 
 function importExcelData() {
     const fileInput = document.getElementById('excel_file_input');
     const btn = document.getElementById('importBtn');
-    if (!fileInput.files[0]) return showAlert("Please select an Excel file first.");
+
+    if (!fileInput || !fileInput.files[0]) return showAlert("Please select an Excel file first.");
 
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>IMPORTING...';
@@ -1565,6 +1017,7 @@ function importExcelData() {
                     const barangay = String(row[9] || '').trim();
                     const city = String(row[10] || '').trim();
                     const province = String(row[11] || '').trim();
+
                     const fullName = `${firstName}${middleName && middleName !== 'N/A' ? ' ' + middleName : ''} ${lastName}${suffix ? ' ' + suffix : ''}`.trim();
 
                     addRow({
@@ -1587,19 +1040,21 @@ function importExcelData() {
             });
 
             switchTab('manual');
-            showAlert(`Success! ${loadedCount} patient records loaded into the manual form. Please review any flagged records and select tests.`);
+            showAlert(`Success! ${loadedCount} patient record(s) loaded into the manual form.`);
         } else {
             showAlert("Excel sheet contains no data records.");
         }
+
         btn.disabled = false;
         btn.innerHTML = 'LOAD DATA INTO MANUAL FORM <i class="bi bi-arrow-right-short ms-1"></i>';
     };
 
     reader.readAsArrayBuffer(file);
 }
+window.importExcelData = importExcelData;
 
 // =========================================================================
-// 11. PAYMENT CONTROLS, RECEIPT WORKFLOW & LOCK PROTOCOL
+// 7. PAYMENT WORKFLOW & RECEIPT LOCK
 // =========================================================================
 function hasActiveBulkReceipt() {
     const receiptInput = document.getElementById('in_receipt');
@@ -1607,6 +1062,7 @@ function hasActiveBulkReceipt() {
     const hasCachedData = (window.bulkReceiptLocalData !== null) || (localStorage.getItem('receipt_base64_bulk') !== null);
     return hasNewFile || hasCachedData;
 }
+window.hasActiveBulkReceipt = hasActiveBulkReceipt;
 
 function updateBulkFieldLockState() {
     const hasReceipt = hasActiveBulkReceipt();
@@ -1624,40 +1080,47 @@ function updateBulkFieldLockState() {
         providerRadios.forEach(radio => radio.disabled = false);
     }
 }
+window.updateBulkFieldLockState = updateBulkFieldLockState;
 
 function handleBulkPaymentMethodChange(radio) {
     const targetMethod = radio.value;
     if (targetMethod === 'Cash' && bulkLastMethod === 'Cashless' && hasActiveBulkReceipt()) {
-        alert("You have an attached proof of payment receipt. Please click 'Remove' on the receipt first before switching to Cash on Site.");
+        alert("You have an attached proof of payment receipt. Please remove the receipt before switching to Cash on Site.");
         const payCashless = document.getElementById('pay_cashless');
         if (payCashless) payCashless.checked = true;
         return;
     }
+
     bulkLastMethod = targetMethod;
     toggleBulkPaymentFields();
     updateBulkFieldLockState();
     toggleBulkSubmitButton();
 }
+window.handleBulkPaymentMethodChange = handleBulkPaymentMethodChange;
 
 function handleBulkProviderChange(radio) {
     const targetProviderId = radio.value;
     if (bulkLastProviderId && bulkLastProviderId !== targetProviderId && hasActiveBulkReceipt()) {
-        alert("You have an attached proof of payment receipt. Please click 'Remove' on the receipt first before changing E-Wallet providers.");
+        alert("Please remove the attached receipt before changing E-Wallet providers.");
         const prev = document.getElementById('provider_' + bulkLastProviderId);
         if (prev) prev.checked = true;
         return;
     }
+
     bulkLastProviderId = targetProviderId;
     const qrImg = document.getElementById('selected_provider_qr');
     const qrName = document.getElementById('selected_provider_name');
+
     if (radio && radio.checked) {
         if (qrImg) qrImg.src = radio.dataset.qr;
         if (qrName) qrName.innerText = radio.dataset.name;
         toggleBulkPaymentFields();
     }
+
     updateBulkFieldLockState();
     toggleBulkSubmitButton();
 }
+window.handleBulkProviderChange = handleBulkProviderChange;
 
 function toggleBulkPaymentFields() {
     const payCashless = document.getElementById('pay_cashless');
@@ -1687,10 +1150,12 @@ function toggleBulkPaymentFields() {
         providerRadios.forEach(radio => radio.checked = false);
         bulkLastProviderId = null;
     }
+
     updateBulkFieldLockState();
     toggleBulkSubmitButton();
     saveBulkDraft();
 }
+window.toggleBulkPaymentFields = toggleBulkPaymentFields;
 
 function handleBulkReceiptUpload(input) {
     const file = input.files[0];
@@ -1708,38 +1173,46 @@ function handleBulkReceiptUpload(input) {
         window.bulkReceiptLocalData = e.target.result;
         localStorage.setItem('receipt_base64_bulk', e.target.result);
         localStorage.setItem('receipt_name_bulk', file.name);
+
         if (inputWrapper) inputWrapper.classList.add('d-none');
         if (previewContainer) previewContainer.classList.remove('d-none');
-        if (label) label.innerHTML = `<i class="bi bi-file-earmark-check-fill me-1"></i>Selected File: ${file.name}`;
+        if (label) label.innerHTML = `<i class="bi bi-file-earmark-check-fill me-1"></i>Selected: ${file.name}`;
+
         updateBulkFieldLockState();
         toggleBulkSubmitButton();
     };
     reader.readAsDataURL(file);
 }
+window.handleBulkReceiptUpload = handleBulkReceiptUpload;
 
 function removeBulkUploadedReceipt() {
     const input = document.getElementById('in_receipt');
     const previewContainer = document.getElementById('receipt_preview_container');
     const inputWrapper = document.getElementById('receipt_input_wrapper');
+
     if (input) input.value = '';
     if (previewContainer) previewContainer.classList.add('d-none');
     if (inputWrapper) inputWrapper.classList.remove('d-none');
+
     window.bulkReceiptLocalData = null;
     localStorage.removeItem('receipt_base64_bulk');
     localStorage.removeItem('receipt_name_bulk');
+
     updateBulkFieldLockState();
     toggleBulkSubmitButton();
 }
+window.removeBulkUploadedReceipt = removeBulkUploadedReceipt;
 
 function viewBulkReceiptFile() {
     const b64 = window.bulkReceiptLocalData || localStorage.getItem('receipt_base64_bulk');
-    const name = localStorage.getItem('receipt_name_bulk') || 'Proof of Payment Receipt';
+    const name = localStorage.getItem('receipt_name_bulk') || 'Proof of Payment';
     if (b64 && typeof window.openFilePreview === 'function') {
         window.openFilePreview(b64, name);
     } else if (b64) {
         window.zoomQR(b64);
     }
 }
+window.viewBulkReceiptFile = viewBulkReceiptFile;
 
 function restoreBulkReceiptPreview() {
     const b64 = localStorage.getItem('receipt_base64_bulk');
@@ -1749,9 +1222,10 @@ function restoreBulkReceiptPreview() {
         const previewContainer = document.getElementById('receipt_preview_container');
         const inputWrapper = document.getElementById('receipt_input_wrapper');
         const label = document.getElementById('receipt_file_label');
+
         if (inputWrapper) inputWrapper.classList.add('d-none');
         if (previewContainer) previewContainer.classList.remove('d-none');
-        if (label) label.innerHTML = `<i class="bi bi-file-earmark-check-fill me-1"></i>Selected File: ${name}`;
+        if (label) label.innerHTML = `<i class="bi bi-file-earmark-check-fill me-1"></i>Selected: ${name}`;
     }
 }
 
@@ -1780,8 +1254,8 @@ function toggleBulkSubmitButton() {
         submitBtn.style.pointerEvents = 'none';
     }
 }
+window.toggleBulkSubmitButton = toggleBulkSubmitButton;
 
-// Global zoomQR helper redirecting directly to openFilePreview so controls, image, and scale toolbar work
 window.zoomQR = function(qrSrc) {
     if (qrSrc && typeof window.openFilePreview === 'function') {
         const providerName = document.getElementById('selected_provider_name')?.innerText || 'E-Wallet';
@@ -1790,22 +1264,182 @@ window.zoomQR = function(qrSrc) {
 };
 
 // =========================================================================
-// 12. FINAL SUBMISSION VALIDATOR & STEP 4 INTERCEPTOR
+// 8. DRAFT PERSISTENCE
+// =========================================================================
+function saveBulkDraft() {
+    if (isRestoringDraft) return;
+
+    const activeSection = document.querySelector('.wiz-section:not(.d-none)');
+    const currentStep = activeSection ? parseInt(activeSection.id.replace('page-', '')) : 2;
+
+    const patients = [];
+    const rows = document.querySelectorAll('#rowContainer tr');
+    rows.forEach(tr => {
+        const idx = tr.id.split('_')[1];
+        if (!idx) return;
+
+        const p = getRowPatientData(idx);
+        const svcInputs = tr.querySelectorAll(`input[name="patients[${idx}][service_ids][]"]`);
+        p.service_ids = Array.from(svcInputs).map(i => i.value);
+
+        const pkgInputs = tr.querySelectorAll(`input[name="patients[${idx}][package_ids][]"]`);
+        p.package_ids = Array.from(pkgInputs).map(i => i.value);
+
+        patients.push(p);
+    });
+
+    const activeProvider = document.querySelector('.bulk-prov-radio:checked');
+    const payMethod = document.querySelector('input[name="payment_method"]:checked')?.value || 'Cash';
+    const toggleUseOrg = document.getElementById('toggle_use_org');
+
+    const draft = {
+        step: currentStep,
+        use_recognized_org: toggleUseOrg ? toggleUseOrg.checked : false,
+        organization_id: document.getElementById('hidden_org_id')?.value || '',
+        organization_name: document.getElementById('hidden_org')?.value.trim() || '',
+        appointment_date: masterDate ? masterDate.value : '',
+        payment_method: payMethod,
+        payment_provider_id: activeProvider ? activeProvider.value : '',
+        agree_terms: document.getElementById('agree_terms')?.checked || false,
+        patients: patients,
+        saved_at: Date.now()
+    };
+
+    try {
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    } catch (e) {
+        console.warn("Failed to write bulk draft:", e);
+    }
+}
+window.saveBulkDraft = saveBulkDraft;
+
+async function loadBulkDraft() {
+    try {
+        const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+        if (!raw) return false;
+        const draft = JSON.parse(raw);
+        if (!draft) return false;
+
+        isRestoringDraft = true;
+        const now = new Date();
+        const todayLocal = now.toLocaleDateString('en-CA');
+        let isDateOutdated = false;
+
+        if (draft.appointment_date) {
+            if (draft.appointment_date < todayLocal) {
+                isDateOutdated = true;
+                draft.appointment_date = todayLocal;
+            }
+            if (masterDate) masterDate.value = draft.appointment_date;
+        }
+
+        if (draft.use_recognized_org !== undefined) {
+            const toggleUseOrg = document.getElementById('toggle_use_org');
+            if (toggleUseOrg) {
+                toggleUseOrg.checked = Boolean(draft.use_recognized_org);
+                handleUseOrgToggle(toggleUseOrg);
+            }
+        }
+
+        if (draft.organization_id) {
+            const orgSelect = document.getElementById('master_org_select');
+            if (orgSelect) {
+                orgSelect.value = draft.organization_id;
+                handleOrgDropdownChange(orgSelect);
+            }
+        } else if (draft.organization_name) {
+            const orgInput = document.getElementById('master_org');
+            if (orgInput) {
+                orgInput.value = draft.organization_name;
+                handleMasterOrgTextInput(orgInput);
+            }
+        }
+
+        await fetchOccupancy();
+
+        if (Array.isArray(draft.patients) && draft.patients.length > 0) {
+            document.getElementById('rowContainer').innerHTML = '';
+            rowCount = 0;
+            draft.patients.forEach(p => {
+                if (isDateOutdated || (p.appointment_date && p.appointment_date < todayLocal)) {
+                    p.appointment_date = todayLocal;
+                    p.time_slot = '';
+                }
+                addRow(p);
+            });
+        }
+
+        if (draft.payment_method) {
+            const payRadio = document.getElementById(draft.payment_method === 'Cashless' ? 'pay_cashless' : 'pay_cash');
+            if (payRadio) {
+                payRadio.checked = true;
+                bulkLastMethod = draft.payment_method;
+            }
+        }
+
+        if (draft.payment_provider_id) {
+            const provRadio = document.getElementById(`provider_${draft.payment_provider_id}`);
+            if (provRadio) {
+                provRadio.checked = true;
+                bulkLastProviderId = draft.payment_provider_id;
+                const qrImg = document.getElementById('selected_provider_qr');
+                const qrName = document.getElementById('selected_provider_name');
+                if (qrImg && provRadio.dataset.qr) qrImg.src = provRadio.dataset.qr;
+                if (qrName && provRadio.dataset.name) qrName.innerText = provRadio.dataset.name;
+            }
+        }
+
+        if (draft.agree_terms) {
+            const agreeTerms = document.getElementById('agree_terms');
+            if (agreeTerms) agreeTerms.checked = true;
+        }
+
+        restoreBulkReceiptPreview();
+        toggleBulkPaymentFields();
+        performGlobalSync();
+        toggleBulkSubmitButton();
+
+        if (!isDateOutdated && draft.step && draft.step > 2 && draft.organization_name && draft.appointment_date) {
+            goToPage(draft.step);
+        } else {
+            goToPage(2);
+        }
+
+        isRestoringDraft = false;
+        return true;
+    } catch (e) {
+        console.error("Failed to load draft:", e);
+        isRestoringDraft = false;
+        return false;
+    }
+}
+window.loadBulkDraft = loadBulkDraft;
+
+function clearBulkDraft() {
+    try {
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+        localStorage.removeItem('receipt_base64_bulk');
+        localStorage.removeItem('receipt_name_bulk');
+    } catch (e) {}
+}
+window.clearBulkDraft = clearBulkDraft;
+
+// =========================================================================
+// 9. FINAL SUBMISSION HANDLER & VALIDATION
 // =========================================================================
 function submitBulkManualForm(e) {
     if (e) {
         e.preventDefault();
         e.stopPropagation();
     }
+
     const form = document.getElementById('bulkForm');
     if (!form) return;
 
-    // Run full validation check
     if (!validateBulkForm(e)) {
         return false;
     }
 
-    // Activate the loading spinner immediately
     const submitBtn = document.getElementById('final_submit_btn');
     if (submitBtn) {
         submitBtn.style.pointerEvents = 'none';
@@ -1813,26 +1447,25 @@ function submitBulkManualForm(e) {
         submitBtn.innerHTML = 'SUBMITTING... <span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>';
     }
 
-    // Clear active draft from local storage
     clearBulkDraft();
-
-    // Dispatch native POST submission
     form.submit();
 }
 window.submitBulkManualForm = submitBulkManualForm;
 
 function validateBulkForm(e) {
-    // 1. Sync hidden organization and date fields
     performGlobalSync();
     let errors = [];
 
-    // 2. Validate Step 2 Fields
-    const org = masterOrg ? masterOrg.value.trim() : '';
+    const isOrgMode = document.getElementById('toggle_use_org')?.checked || false;
+    const orgName = document.getElementById('hidden_org')?.value.trim() || '';
     const date = masterDate ? masterDate.value : '';
-    if (!org) errors.push("Organization / Company Name is required.");
+
+    if (!orgName) {
+        errors.push(isOrgMode ? "Please select a recognized organization from the dropdown." : "Organization / Company Name is required.");
+    }
+
     if (!date) errors.push("Preferred Start Date is required.");
 
-    // 3. Validate Patient Rows (Minimum 2)
     const rows = document.querySelectorAll('#rowContainer tr');
     if (rows.length < 2) {
         errors.push("Bulk booking requires at least 2 patient records.");
@@ -1843,12 +1476,38 @@ function validateBulkForm(e) {
         const rowNum = index + 1;
         const p = getRowPatientData(idx);
         const rowErrors = getPatientRowValidationErrors(p);
-        
+
         rowErrors.forEach(err => errors.push(`Row ${rowNum} (${p.name || 'Unnamed'}): ${err}`));
 
-        const testInputs = tr.querySelectorAll('input[type="hidden"][name*="[service_ids]"]');
-        if (testInputs.length === 0) {
-            errors.push(`Row ${rowNum} (${p.name || 'Unnamed'}): At least one laboratory test must be selected.`);
+        const svcInputs = Array.from(tr.querySelectorAll(`input[name="patients[${idx}][service_ids][]"]`)).map(i => i.value);
+        const pkgInputs = Array.from(tr.querySelectorAll(`input[name="patients[${idx}][package_ids][]"]`)).map(i => i.value);
+
+        if (svcInputs.length === 0 && pkgInputs.length === 0) {
+            errors.push(`Row ${rowNum} (${p.name || 'Unnamed'}): At least one test or package must be selected.`);
+        } else {
+            const covered = new Set();
+            let rowHasConflictingPackages = false;
+
+            pkgInputs.forEach(pkgId => {
+                const pkg = window.packagesMap[pkgId];
+                if (pkg && pkg.services) {
+                    pkg.services.forEach(svc => {
+                        if (covered.has(svc.id.toString())) {
+                            rowHasConflictingPackages = true;
+                        }
+                        covered.add(svc.id.toString());
+                    });
+                }
+            });
+
+            if (rowHasConflictingPackages) {
+                errors.push(`Row ${rowNum} (${p.name || 'Unnamed'}): Contains multiple packages that share overlapping tests.`);
+            }
+
+            const hasDouble = svcInputs.some(sId => covered.has(sId.toString()));
+            if (hasDouble) {
+                errors.push(`Row ${rowNum} (${p.name || 'Unnamed'}): Contains individual tests that are already covered in selected packages.`);
+            }
         }
 
         const rowDate = tr.querySelector('.row-date-input')?.value;
@@ -1857,30 +1516,24 @@ function validateBulkForm(e) {
         if (!tSelect) errors.push(`Row ${rowNum}: Preferred Time Slot is required.`);
     });
 
-    // 4. Validate Payment Method & E-Wallet Receipt
     const payCashless = document.getElementById('pay_cashless');
     if (payCashless && payCashless.checked) {
         const selectedProvider = document.querySelector('.bulk-prov-radio:checked');
-        if (!selectedProvider) {
-            errors.push("Payment: Please select an E-Wallet provider (e.g., GCash, Maya).");
-        }
-        if (!hasActiveBulkReceipt()) {
-            errors.push("Payment: Please upload a copy of your transaction receipt to finalize.");
-        }
+        if (!selectedProvider) errors.push("Payment: Please select an E-Wallet provider (GCash, Maya).");
+        if (!hasActiveBulkReceipt()) errors.push("Payment: Please upload a transaction receipt.");
     }
 
-    // 5. Validate Terms Checkbox
     const agreeTerms = document.getElementById('agree_terms');
     if (agreeTerms && !agreeTerms.checked) {
-        errors.push("Agreements: You must agree to the Clinical Privacy Policy to confirm.");
+        errors.push("Agreements: You must agree to the Clinical Privacy Policy.");
     }
 
-    // 6. Display Validation Modal If Any Errors Exist
     if (errors.length > 0) {
         if (e) {
             e.preventDefault();
             e.stopPropagation();
         }
+
         let errorHtml = '<div class="text-start mb-3 small text-white-50">Please correct the following omissions to proceed:</div>';
         errorHtml += '<ul class="text-start small text-danger mb-0 ps-3" style="max-height: 250px; overflow-y: auto;">';
         errors.forEach(err => {
@@ -1888,30 +1541,39 @@ function validateBulkForm(e) {
         });
         errorHtml += '</ul>';
 
-        document.getElementById('wizardValidationTitle').innerText = "Requirements Lacking";
-        document.getElementById('wizardValidationMsg').innerHTML = errorHtml;
+        const titleEl = document.getElementById('wizardValidationTitle');
+        const msgEl = document.getElementById('wizardValidationMsg');
+        if (titleEl) titleEl.innerText = "Requirements Lacking";
+        if (msgEl) msgEl.innerHTML = errorHtml;
+
         const modalEl = document.getElementById('wizardValidationModal');
-        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-        modal.show();
+        if (modalEl) {
+            const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+            modal.show();
+        }
         return false;
     }
-
     return true;
 }
 
 function showAlert(msg) {
-    document.getElementById('wizardValidationTitle').innerText = "Attention Required";
-    document.getElementById('wizardValidationMsg').innerHTML = msg;
+    const titleEl = document.getElementById('wizardValidationTitle');
+    const msgEl = document.getElementById('wizardValidationMsg');
+    if (titleEl) titleEl.innerText = "Attention Required";
+    if (msgEl) msgEl.innerHTML = msg;
+
     const modalEl = document.getElementById('wizardValidationModal');
-    const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-    modal.show();
+    if (modalEl) {
+        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.show();
+    }
 }
+window.showAlert = showAlert;
 
 // =========================================================================
-// 13. DOM INITIALIZER & LIFECYCLE HOOKS
+// 10. DOM INITIALIZER
 // =========================================================================
 document.addEventListener('DOMContentLoaded', async () => {
-    // Real-time error clearance on modal inputs
     document.querySelectorAll('#modalPatientForm input, #modalPatientForm select').forEach(input => {
         const clearAction = () => {
             input.classList.remove('is-invalid');
@@ -1930,7 +1592,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (searchInput) {
         searchInput.addEventListener('input', function () {
             const query = this.value.toUpperCase();
-            document.querySelectorAll('.service-item').forEach(item => {
+            document.querySelectorAll('.modal-item-row').forEach(item => {
                 const name = item.dataset.name || '';
                 item.classList.toggle('d-none', !name.includes(query));
             });
@@ -1941,17 +1603,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (modalPhoneDisp) {
         modalPhoneDisp.addEventListener('input', function() {
             this.value = this.value.replace(/[^0-9]/g, '');
-            document.getElementById('modal_phone').value = this.value ? '09' + this.value : '';
+            const phoneHidden = document.getElementById('modal_phone');
+            if (phoneHidden) phoneHidden.value = this.value ? '09' + this.value : '';
         });
     }
 
-    // Attempt to restore and revalidate state from localStorage
     const hasDraft = await loadBulkDraft();
     if (!hasDraft) {
         await fetchOccupancy();
         await validateMasterDate();
         toggleBulkPaymentFields();
         toggleBulkSubmitButton();
+        filterModalPackagesForOrg();
     }
 });
 </script>

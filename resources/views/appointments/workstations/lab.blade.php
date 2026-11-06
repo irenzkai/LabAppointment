@@ -1,7 +1,5 @@
 @extends('layouts.app')
-
 @section('title', 'Encode Results')
-
 @section('content')
 @php
     $res = $appointment->result;
@@ -11,7 +9,6 @@
     $isVerified = ($status === 'verified');
     $isReadonly = in_array($status, ['encoded', 'verified']);
     $hasScan = ($res && $res->lab_scan);
-
     $scanPath = $res->lab_scan ?? null;
     $isImage = false;
     if ($scanPath) {
@@ -21,10 +18,30 @@
 
     // Dynamically reveal preview on page load if scan exists
     $showPreview = $isReadonly || $hasScan;
+
+    $requestedExaminations = $appointment->packages->pluck('name')->map(fn($n) => "[PKG] {$n}")
+        ->concat($appointment->services->pluck('name'))
+        ->implode(', ');
+
+    // Merge all laboratory technologists, pathologists, and licensed clinical personnel into one single list
+    $allLabTechs = collect();
+    if (isset($medTechs) && $medTechs->isNotEmpty()) {
+        $allLabTechs = $allLabTechs->concat($medTechs);
+    }
+    if (isset($pathologists) && $pathologists->isNotEmpty()) {
+        $allLabTechs = $allLabTechs->concat($pathologists);
+    }
+
+    // Also include any other active lab tech or admin with a license number
+    $dbLabTechs = \App\Models\User::whereIn('role', ['lab_tech', 'admin', 'staff'])
+        ->where('is_active', true)
+        ->whereNotNull('license_number')
+        ->orderBy('last_name')
+        ->get();
+    $allLabTechs = $allLabTechs->concat($dbLabTechs)->unique('id')->sortBy('name')->values();
 @endphp
 
 <div class="container text-start animate-page pt-4 px-3 px-sm-4" id="lab-workstation-root">
-
     {{-- 1. HEADER SECTION --}}
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4 border-bottom pb-3" style="border-color: var(--border-color) !important;">
         <div>
@@ -48,7 +65,6 @@
                 @if($status !== 'verified' || Auth::user()->isLabTech())
                     <button type="button" data-bs-toggle="modal" data-bs-target="#returnModal" class="btn-custom btn-outline-danger px-3 px-sm-4 py-2 flex-grow-1 flex-md-grow-0 text-center">RETURN FOR RE-EDIT</button>
                 @endif
-
                 @if($status == 'encoded')
                     @can('isLabTech')
                         <button type="button" data-bs-toggle="modal" data-bs-target="#verifyModal" class="btn-custom btn-accent px-4 px-sm-5 py-2 shadow-lg flex-grow-1 flex-md-grow-0 text-center">VERIFY & APPROVE</button>
@@ -76,7 +92,6 @@
         @csrf
         <input type="hidden" name="clear_scan" id="clear_scan_field" value="0">
         <div class="row g-4">
-
             {{-- SIDEBAR: METADATA & CLINICAL SIGNATORIES --}}
             <div class="col-12 col-lg-4" id="sidebar-container">
                 <div class="card p-3 p-sm-4 border-secondary bg-card mb-3 shadow-sm" style="background-color: var(--bg-card); color: var(--text-main);">
@@ -85,7 +100,7 @@
                     {{-- Case # / Cert No (Always Required & Always Visible) --}}
                     <div class="mb-3">
                         <label class="smaller text-secondary fw-bold mb-1 uppercase">Case # / Cert No.</label>
-                        <input type="text" name="case_no" id="case_no_field" class="form-control @error('case_no') is-invalid @enderror" value="{{ $res->lab_data['metadata']['case_no'] ?? '' }}" placeholder="Enter Case ID" required>
+                        <input type="text" name="case_no" id="case_no_field" class="form-control @error('case_no') is-invalid @enderror" value="{{ $res->lab_data['metadata']['case_no'] ?? ($res->labDetails?->case_no ?? '') }}" placeholder="Enter Case ID" required>
                         <div class="invalid-feedback d-none" id="err_case_no"></div>
                         @error('case_no')
                             <div class="text-danger small mt-1 fw-bold">{{ $message }}</div>
@@ -104,7 +119,15 @@
                         </div>
                         <div class="text-main fw-bold small mb-1 text-break">{{ strtoupper($appointment->patient_name) }}</div>
                         <div class="text-secondary smaller mb-1">{{ $appointment->patient_age }} YRS / {{ strtoupper($appointment->patient_sex) }}</div>
-                        <div class="text-muted smaller text-break" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
+                        <div class="text-muted smaller text-break mb-2" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
+
+                        {{-- Requested Examinations Summary --}}
+                        <div class="pt-2 border-top border-secondary border-opacity-10">
+                            <small class="text-secondary d-block smaller fw-bold uppercase">Requested Examinations</small>
+                            <span class="small fw-semibold text-accent text-break" style="font-size: 0.75rem;">
+                                {{ $requestedExaminations ?: 'None registered' }}
+                            </span>
+                        </div>
 
                         {{-- Hidden snapshot payloads for backend backwards-compatibility --}}
                         <input type="hidden" name="lab_data[metadata][name]" value="{{ strtoupper($appointment->patient_name) }}">
@@ -136,31 +159,199 @@
 
                         <h6 class="text-accent mb-3 small fw-bold uppercase border-top border-secondary border-opacity-10 pt-3">Clinical Signatories</h6>
 
-                        {{-- Released By --}}
+                        {{-- Signatory 1: Released By --}}
                         <div class="mb-3 border border-secondary border-opacity-10 p-2.5 rounded" style="background-color: rgba(0,0,0,0.015);">
-                            <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">Released By</label>
-                            <input type="text" name="lab_data[sig][rel_name]" id="sig_rel_name" class="form-control mb-1 @error('lab_data.sig.rel_name') is-invalid @enderror" placeholder="Encoder Name" value="{{ $res->lab_data['sig']['rel_name'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
-                            <div class="invalid-feedback d-none mb-1" id="err_sig_rel_name"></div>
-                            <input type="text" name="lab_data[sig][rel_lic]" id="sig_rel_lic" class="form-control @error('lab_data.sig.rel_lic') is-invalid @enderror" placeholder="License / Position" value="{{ $res->lab_data['sig']['rel_lic'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
-                            <div class="invalid-feedback d-none" id="err_sig_rel_lic"></div>
+                            <label class="text-secondary smaller fw-bold mb-1.5 d-block uppercase" style="font-size: 0.65rem;">Released By</label>
+                            
+                            {{-- Search & Select Dropdown --}}
+                            <div class="position-relative mb-2 signatory-search-wrapper" id="sig_rel_wrapper">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-secondary bg-opacity-10 text-muted border-secondary border-opacity-25">
+                                        <i class="bi bi-search"></i>
+                                    </span>
+                                    <input type="text" 
+                                           id="sig_rel_search" 
+                                           class="form-control form-control-sm signatory-search-input" 
+                                           placeholder="Search or choose lab tech..." 
+                                           autocomplete="off"
+                                           onfocus="openSignatoryMenu('rel')" 
+                                           oninput="filterSignatoryMenu('rel', this.value)"
+                                           {{ $hasScan ? 'disabled' : '' }}>
+                                    <button type="button" 
+                                            class="btn btn-outline-secondary btn-sm signatory-toggle-btn" 
+                                            onclick="toggleSignatoryMenu('rel')" 
+                                            tabindex="-1"
+                                            {{ $hasScan ? 'disabled' : '' }}>
+                                        <i class="bi bi-chevron-down" style="font-size: 0.7rem;"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="signatory-dropdown-list shadow-lg bg-card border rounded-3 p-1 d-none position-absolute w-100 mt-1" 
+                                     id="sig_rel_menu" 
+                                     style="z-index: 1050; max-height: 220px; overflow-y: auto; background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                                    @foreach($allLabTechs as $lt)
+                                        <div class="signatory-item p-2 rounded cursor-pointer transition-all d-flex justify-content-between align-items-center" 
+                                             data-name="{{ $lt->name }}" 
+                                             data-lic="{{ $lt->license_number ?: ($lt->occupation ?: '') }}" 
+                                             onclick="selectSignatory('rel', '{{ addslashes($lt->name) }}', '{{ addslashes($lt->license_number ?: ($lt->occupation ?: '')) }}')">
+                                            <div>
+                                                <span class="fw-bold small d-block text-main">{{ $lt->name }}</span>
+                                                <small class="text-muted" style="font-size: 0.68rem;">{{ $lt->occupation ?: 'Lab Personnel' }}</small>
+                                            </div>
+                                            @if($lt->license_number)
+                                                <span class="badge bg-secondary bg-opacity-10 text-accent font-monospace" style="font-size: 0.65rem;">
+                                                    PRC #{{ $lt->license_number }}
+                                                </span>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                    <div class="signatory-empty-msg text-muted small p-2 text-center d-none" id="sig_rel_empty">
+                                        No matching personnel found
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Stacked Full-Width Name & License Inputs --}}
+                            <div class="d-flex flex-column gap-1">
+                                <div>
+                                    <input type="text" name="lab_data[sig][rel_name]" id="sig_rel_name" class="form-control form-control-sm @error('lab_data.sig.rel_name') is-invalid @enderror" placeholder="Full Name" value="{{ $res->lab_data['sig']['rel_name'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
+                                    <div class="invalid-feedback d-none" id="err_sig_rel_name"></div>
+                                </div>
+                                <div>
+                                    <input type="text" name="lab_data[sig][rel_lic]" id="sig_rel_lic" class="form-control form-control-sm @error('lab_data.sig.rel_lic') is-invalid @enderror" placeholder="PRC License #" value="{{ $res->lab_data['sig']['rel_lic'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
+                                    <div class="invalid-feedback d-none" id="err_sig_rel_lic"></div>
+                                </div>
+                            </div>
                         </div>
 
-                        {{-- Validated By 1 --}}
+                        {{-- Signatory 2: Validated By 1 --}}
                         <div class="mb-3 border border-secondary border-opacity-10 p-2.5 rounded" style="background-color: rgba(0,0,0,0.015);">
-                            <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">Validated By 1</label>
-                            <input type="text" name="lab_data[sig][val1_name]" id="sig_val1_name" class="form-control mb-1 @error('lab_data.sig.val1_name') is-invalid @enderror" placeholder="Validator Name" value="{{ $res->lab_data['sig']['val1_name'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
-                            <div class="invalid-feedback d-none mb-1" id="err_sig_val1_name"></div>
-                            <input type="text" name="lab_data[sig][val1_lic]" id="sig_val1_lic" class="form-control @error('lab_data.sig.val1_lic') is-invalid @enderror" placeholder="License / Position" value="{{ $res->lab_data['sig']['val1_lic'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
-                            <div class="invalid-feedback d-none" id="err_sig_val1_lic"></div>
+                            <label class="text-secondary smaller fw-bold mb-1.5 d-block uppercase" style="font-size: 0.65rem;">Validated By 1</label>
+                            
+                            {{-- Search & Select Dropdown --}}
+                            <div class="position-relative mb-2 signatory-search-wrapper" id="sig_val1_wrapper">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-secondary bg-opacity-10 text-muted border-secondary border-opacity-25">
+                                        <i class="bi bi-search"></i>
+                                    </span>
+                                    <input type="text" 
+                                           id="sig_val1_search" 
+                                           class="form-control form-control-sm signatory-search-input" 
+                                           placeholder="Search or choose lab tech..." 
+                                           autocomplete="off"
+                                           onfocus="openSignatoryMenu('val1')" 
+                                           oninput="filterSignatoryMenu('val1', this.value)"
+                                           {{ $hasScan ? 'disabled' : '' }}>
+                                    <button type="button" 
+                                            class="btn btn-outline-secondary btn-sm signatory-toggle-btn" 
+                                            onclick="toggleSignatoryMenu('val1')" 
+                                            tabindex="-1"
+                                            {{ $hasScan ? 'disabled' : '' }}>
+                                        <i class="bi bi-chevron-down" style="font-size: 0.7rem;"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="signatory-dropdown-list shadow-lg bg-card border rounded-3 p-1 d-none position-absolute w-100 mt-1" 
+                                     id="sig_val1_menu" 
+                                     style="z-index: 1050; max-height: 220px; overflow-y: auto; background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                                    @foreach($allLabTechs as $lt)
+                                        <div class="signatory-item p-2 rounded cursor-pointer transition-all d-flex justify-content-between align-items-center" 
+                                             data-name="{{ $lt->name }}" 
+                                             data-lic="{{ $lt->license_number ?: ($lt->occupation ?: '') }}" 
+                                             onclick="selectSignatory('val1', '{{ addslashes($lt->name) }}', '{{ addslashes($lt->license_number ?: ($lt->occupation ?: '')) }}')">
+                                            <div>
+                                                <span class="fw-bold small d-block text-main">{{ $lt->name }}</span>
+                                                <small class="text-muted" style="font-size: 0.68rem;">{{ $lt->occupation ?: 'Lab Personnel' }}</small>
+                                            </div>
+                                            @if($lt->license_number)
+                                                <span class="badge bg-secondary bg-opacity-10 text-accent font-monospace" style="font-size: 0.65rem;">
+                                                    PRC #{{ $lt->license_number }}
+                                                </span>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                    <div class="signatory-empty-msg text-muted small p-2 text-center d-none" id="sig_val1_empty">
+                                        No matching personnel found
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Stacked Full-Width Name & License Inputs --}}
+                            <div class="d-flex flex-column gap-1">
+                                <div>
+                                    <input type="text" name="lab_data[sig][val1_name]" id="sig_val1_name" class="form-control form-control-sm @error('lab_data.sig.val1_name') is-invalid @enderror" placeholder="Full Name" value="{{ $res->lab_data['sig']['val1_name'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
+                                    <div class="invalid-feedback d-none" id="err_sig_val1_name"></div>
+                                </div>
+                                <div>
+                                    <input type="text" name="lab_data[sig][val1_lic]" id="sig_val1_lic" class="form-control form-control-sm @error('lab_data.sig.val1_lic') is-invalid @enderror" placeholder="PRC License #" value="{{ $res->lab_data['sig']['val1_lic'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
+                                    <div class="invalid-feedback d-none" id="err_sig_val1_lic"></div>
+                                </div>
+                            </div>
                         </div>
 
-                        {{-- Validated By 2 --}}
+                        {{-- Signatory 3: Validated By 2 --}}
                         <div class="mb-0 border border-secondary border-opacity-10 p-2.5 rounded" style="background-color: rgba(0,0,0,0.015);">
-                            <label class="text-secondary smaller fw-bold mb-1 d-block" style="font-size: 0.65rem;">Validated By 2</label>
-                            <input type="text" name="lab_data[sig][val2_name]" id="sig_val2_name" class="form-control mb-1 @error('lab_data.sig.val2_name') is-invalid @enderror" placeholder="Pathologist Name" value="{{ $res->lab_data['sig']['val2_name'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
-                            <div class="invalid-feedback d-none mb-1" id="err_sig_val2_name"></div>
-                            <input type="text" name="lab_data[sig][val2_lic]" id="sig_val2_lic" class="form-control @error('lab_data.sig.val2_lic') is-invalid @enderror" placeholder="License / Position" value="{{ $res->lab_data['sig']['val2_lic'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
-                            <div class="invalid-feedback d-none" id="err_sig_val2_lic"></div>
+                            <label class="text-secondary smaller fw-bold mb-1.5 d-block uppercase" style="font-size: 0.65rem;">Validated By 2</label>
+                            
+                            {{-- Search & Select Dropdown --}}
+                            <div class="position-relative mb-2 signatory-search-wrapper" id="sig_val2_wrapper">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-secondary bg-opacity-10 text-muted border-secondary border-opacity-25">
+                                        <i class="bi bi-search"></i>
+                                    </span>
+                                    <input type="text" 
+                                           id="sig_val2_search" 
+                                           class="form-control form-control-sm signatory-search-input" 
+                                           placeholder="Search or choose lab tech..." 
+                                           autocomplete="off"
+                                           onfocus="openSignatoryMenu('val2')" 
+                                           oninput="filterSignatoryMenu('val2', this.value)"
+                                           {{ $hasScan ? 'disabled' : '' }}>
+                                    <button type="button" 
+                                            class="btn btn-outline-secondary btn-sm signatory-toggle-btn" 
+                                            onclick="toggleSignatoryMenu('val2')" 
+                                            tabindex="-1"
+                                            {{ $hasScan ? 'disabled' : '' }}>
+                                        <i class="bi bi-chevron-down" style="font-size: 0.7rem;"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="signatory-dropdown-list shadow-lg bg-card border rounded-3 p-1 d-none position-absolute w-100 mt-1" 
+                                     id="sig_val2_menu" 
+                                     style="z-index: 1050; max-height: 220px; overflow-y: auto; background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                                    @foreach($allLabTechs as $lt)
+                                        <div class="signatory-item p-2 rounded cursor-pointer transition-all d-flex justify-content-between align-items-center" 
+                                             data-name="{{ $lt->name }}" 
+                                             data-lic="{{ $lt->license_number ?: ($lt->occupation ?: '') }}" 
+                                             onclick="selectSignatory('val2', '{{ addslashes($lt->name) }}', '{{ addslashes($lt->license_number ?: ($lt->occupation ?: '')) }}')">
+                                            <div>
+                                                <span class="fw-bold small d-block text-main">{{ $lt->name }}</span>
+                                                <small class="text-muted" style="font-size: 0.68rem;">{{ $lt->occupation ?: 'Lab Personnel' }}</small>
+                                            </div>
+                                            @if($lt->license_number)
+                                                <span class="badge bg-secondary bg-opacity-10 text-accent font-monospace" style="font-size: 0.65rem;">
+                                                    PRC #{{ $lt->license_number }}
+                                                </span>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                    <div class="signatory-empty-msg text-muted small p-2 text-center d-none" id="sig_val2_empty">
+                                        No matching personnel found
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Stacked Full-Width Name & License Inputs --}}
+                            <div class="d-flex flex-column gap-1">
+                                <div>
+                                    <input type="text" name="lab_data[sig][val2_name]" id="sig_val2_name" class="form-control form-control-sm @error('lab_data.sig.val2_name') is-invalid @enderror" placeholder="Full Name" value="{{ $res->lab_data['sig']['val2_name'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
+                                    <div class="invalid-feedback d-none" id="err_sig_val2_name"></div>
+                                </div>
+                                <div>
+                                    <input type="text" name="lab_data[sig][val2_lic]" id="sig_val2_lic" class="form-control form-control-sm @error('lab_data.sig.val2_lic') is-invalid @enderror" placeholder="PRC License #" value="{{ $res->lab_data['sig']['val2_lic'] ?? '' }}" {{ $hasScan ? 'disabled' : 'required' }}>
+                                    <div class="invalid-feedback d-none" id="err_sig_val2_lic"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -188,12 +379,15 @@
                 {{-- MANUAL ENTRY SPREADSHEET LIST --}}
                 @if(!$isReadonly)
                     <div id="manual-workstation" class="card p-3 p-sm-4 border-secondary bg-card min-vh-75 shadow-lg {{ $hasScan ? 'd-none' : '' }}">
-                        <h6 class="text-main border-bottom border-secondary border-opacity-25 pb-2 mb-4 uppercase small fw-bold">Manual Content Entry</h6>
+                        <div class="d-flex justify-content-between align-items-center border-bottom border-secondary border-opacity-25 pb-2 mb-4 flex-wrap gap-2">
+                            <h6 class="text-main mb-0 uppercase small fw-bold">Manual Content Entry</h6>
+                        </div>
 
                         <div class="row g-2 mb-4">
                             <div class="col-12 col-md-5">
                                 <select id="testSearch" class="form-select py-2">
                                     <option value="">Search test line (e.g. WBC, TSH)...</option>
+
                                     <optgroup label="HEMATOLOGY">
                                         <option value="WBC Count">WBC Count</option>
                                         <option value="Hemoglobin">Hemoglobin</option>
@@ -263,12 +457,11 @@
                                 <input type="text" id="customTestInput" class="form-control py-2 shadow-none" placeholder="Or type a custom test name...">
                             </div>
                             <div class="col-12 col-sm-5 col-md-3">
-                                <button type="button" id="add_field_btn" class="btn-custom btn-neon w-100 py-2">Add Field</button>
+                                <button type="button" id="add_field_btn" class="btn-custom btn-accent w-100 py-2">Add Field</button>
                             </div>
                         </div>
 
                         <div class="invalid-feedback d-none mb-3 text-danger fw-bold fs-6 text-center" id="err_manual_table"></div>
-
                         <div class="table-responsive">
                             <table class="table align-middle workstation-table" style="color: var(--text-main); min-width: 480px;">
                                 <thead class="text-secondary smaller uppercase border-bottom border-secondary border-opacity-25">
@@ -304,7 +497,6 @@
                         @endif
                     </div>
                     <div class="card border-warning border-top-0 rounded-0 rounded-bottom overflow-hidden shadow bg-card p-2 p-sm-3 text-center d-flex justify-content-center align-items-center" style="min-height: 500px;">
-
                         {{-- Image Preview Container --}}
                         <div id="imagePreviewContainer" class="position-relative d-inline-block image-preview-wrapper w-100 {{ $hasScan && $isImage ? '' : 'd-none' }}" style="cursor: zoom-in;" onclick="zoomQR('{{ $hasScan && $isImage ? Storage::url($scanPath) : '' }}')">
                             <img id="imagePreviewImg" src="{{ $hasScan && $isImage ? Storage::url($scanPath) : '' }}" class="img-fluid rounded shadow-sm w-100" style="max-height: 800px; object-fit: contain; border: 1px solid var(--border-color);">
@@ -324,22 +516,19 @@
                                 <iframe id="scanViewer" src="{{ $hasScan && !$isImage ? Storage::url($scanPath) : '' }}" class="w-100 h-100 rounded-bottom border border-warning bg-card" style="min-height: 800px; border: none;"></iframe>
                             </div>
                         @endif
-
                     </div>
                 </div>
-
             </div>
         </div>
     </form>
 </div>
-@endsection
 
 <!-- VERIFY MODAL -->
 <div class="modal fade" id="verifyModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
         <form action="{{ route('workstation.verify', [$appointment->id, 'lab']) }}" method="POST" class="modal-content shadow-lg p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
             @csrf
-            <h5 class="text-neon fw-bold mb-1 uppercase">Clinical Verification</h5>
+            <h5 class="text-accent fw-bold mb-1 uppercase">Clinical Verification</h5>
             <p class="text-secondary small mb-4">Enter your name to verify these results for the Hub audit trail.</p>
             <div class="mb-4">
                 <label class="text-white small fw-bold uppercase mb-1">Verifier Name</label>
@@ -428,7 +617,7 @@
 
 @push('scripts')
 <script>
-// 1. Reference ranges lookup map
+// 1. Reference ranges lookup map (Includes all Hematology, Urinalysis, Fecalysis & Serology)
 const refMap = {
     // Hematology
     'WBC Count': '5-10 x 10 /L',
@@ -503,14 +692,80 @@ window.zoomQR = function(fileSrc) {
     }
 };
 
-// 2. Function to dynamically add a manual test examination row
+// 2. Searchable Signatory Dropdown Handlers
+window.openSignatoryMenu = function(key) {
+    document.querySelectorAll('.signatory-dropdown-list').forEach(el => {
+        if (el.id !== `sig_${key}_menu`) el.classList.add('d-none');
+    });
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (menu) menu.classList.remove('d-none');
+};
+
+window.toggleSignatoryMenu = function(key) {
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (menu) {
+        menu.classList.toggle('d-none');
+        if (!menu.classList.contains('d-none')) {
+            document.getElementById(`sig_${key}_search`)?.focus();
+        }
+    }
+};
+
+window.filterSignatoryMenu = function(key, query) {
+    const q = (query || '').toLowerCase().trim();
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (!menu) return;
+    menu.classList.remove('d-none');
+    let matchCount = 0;
+    menu.querySelectorAll('.signatory-item').forEach(item => {
+        const name = (item.dataset.name || '').toLowerCase();
+        const lic = (item.dataset.lic || '').toLowerCase();
+        const match = name.includes(q) || lic.includes(q);
+        item.classList.toggle('d-none', !match);
+        if (match) matchCount++;
+    });
+    const emptyMsg = document.getElementById(`sig_${key}_empty`);
+    if (emptyMsg) {
+        emptyMsg.classList.toggle('d-none', matchCount > 0);
+    }
+};
+
+window.selectSignatory = function(key, name, lic) {
+    const searchInput = document.getElementById(`sig_${key}_search`);
+    const nameInput = document.getElementById(`sig_${key}_name`);
+    const licInput = document.getElementById(`sig_${key}_lic`);
+    if (searchInput) searchInput.value = name;
+    if (nameInput) {
+        nameInput.value = name;
+        nameInput.classList.remove('is-invalid');
+        const errDiv = document.getElementById(`err_sig_${key}_name`);
+        if (errDiv) errDiv.classList.add('d-none');
+    }
+    if (licInput) {
+        licInput.value = lic;
+        licInput.classList.remove('is-invalid');
+        const errDiv = document.getElementById(`err_sig_${key}_lic`);
+        if (errDiv) errDiv.classList.add('d-none');
+    }
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (menu) menu.classList.add('d-none');
+};
+
+// Close signatory menus when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.signatory-search-wrapper')) {
+        document.querySelectorAll('.signatory-dropdown-list').forEach(el => el.classList.add('d-none'));
+    }
+});
+
+// 3. Function to dynamically add a manual test examination row
 function addTestRow(name = null, val = '', ref = null) {
     const selectEl = document.getElementById('testSearch');
     const customInput = document.getElementById('customTestInput');
-    
+
     let testName = name;
     let isCustom = false;
-    
+
     if (!testName) {
         if (customInput && customInput.value.trim() !== '') {
             testName = customInput.value.trim();
@@ -519,27 +774,26 @@ function addTestRow(name = null, val = '', ref = null) {
             testName = selectEl.value;
         }
     }
-    
+
     if (!testName) return;
-    
+
     const template = document.getElementById('rowTemplate').innerHTML;
     const html = template.replace(/INDEX/g, rowIdx);
-    
+
     document.getElementById('labBody').insertAdjacentHTML('beforeend', html);
     const lastRow = document.getElementById('labBody').lastElementChild;
-
     lastRow.querySelector('.test-name-label').innerText = testName;
     lastRow.querySelector('.input-test-name').value = testName;
-    
+
     let refRange = '';
     if (ref !== null) {
         refRange = ref;
-    } else if (!isCustom) {
-        refRange = refMap[testName] || 'NONE';
+    } else if (refMap[testName]) {
+        refRange = refMap[testName];
     } else {
         refRange = 'NONE';
     }
-    
+
     const refInput = lastRow.querySelector('.input-ref-range');
     if (refInput) {
         refInput.value = refRange;
@@ -552,7 +806,7 @@ function addTestRow(name = null, val = '', ref = null) {
             valInput.readOnly = true;
         }
     }
-    
+
     rowIdx++;
     if (selectEl) selectEl.value = '';
     if (customInput) customInput.value = '';
@@ -569,10 +823,13 @@ function setManualFieldsRequired(required) {
         document.getElementById('case_no_field'),
         document.getElementById('lab_meta_date'),
         document.getElementById('lab_meta_requested_by'),
+        document.getElementById('sig_rel_search'),
         document.getElementById('sig_rel_name'),
         document.getElementById('sig_rel_lic'),
+        document.getElementById('sig_val1_search'),
         document.getElementById('sig_val1_name'),
         document.getElementById('sig_val1_lic'),
+        document.getElementById('sig_val2_search'),
         document.getElementById('sig_val2_name'),
         document.getElementById('sig_val2_lic')
     ];
@@ -584,8 +841,12 @@ function setManualFieldsRequired(required) {
                 field.removeAttribute('disabled');
             } else {
                 if (required) {
-                    field.setAttribute('required', 'required');
-                    field.removeAttribute('disabled');
+                    if (field.id.startsWith('sig_') && field.id.endsWith('_search')) {
+                        field.removeAttribute('disabled');
+                    } else {
+                        field.setAttribute('required', 'required');
+                        field.removeAttribute('disabled');
+                    }
                 } else {
                     field.removeAttribute('required');
                     field.setAttribute('disabled', 'disabled');
@@ -639,9 +900,11 @@ function toggleScanPriority(input) {
             if (document.getElementById('report-scan-upload-box')) {
                 document.getElementById('report-scan-upload-box').classList.add('d-none');
             }
+
             document.getElementById('scan-preview-zone').classList.remove('d-none');
             document.getElementById('main-panel-container').className = 'col-12 col-lg-8';
         };
+
         reader.readAsDataURL(file);
     }
 }
@@ -706,6 +969,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const form = document.getElementById('labForm');
         form.querySelectorAll('input:not([type="hidden"]), textarea, select').forEach(el => el.disabled = true);
     }
+
+    // Pre-populate search placeholders with existing clinician names
+    ['rel', 'val1', 'val2'].forEach(key => {
+        const nameInput = document.getElementById(`sig_${key}_name`);
+        const searchInput = document.getElementById(`sig_${key}_search`);
+        if (nameInput && searchInput && nameInput.value) {
+            searchInput.value = nameInput.value;
+        }
+    });
 
     const selectEl = document.getElementById('return_reason_select');
     const textareaWrapper = document.getElementById('custom_return_reason_wrapper');
@@ -788,16 +1060,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (relLic && !relLic.value.trim()) markInvalid(relLic, 'err_sig_rel_lic', 'Released By license is required.');
 
                 const val1Name = document.getElementById('sig_val1_name');
-                if (val1Name && !val1Name.value.trim()) markInvalid(val1Name, 'err_sig_val1_name', 'Validator 1 name is required.');
+                if (val1Name && !val1Name.value.trim()) markInvalid(val1Name, 'err_sig_val1_name', 'Validated By 1 name is required.');
 
                 const val1Lic = document.getElementById('sig_val1_lic');
-                if (val1Lic && !val1Lic.value.trim()) markInvalid(val1Lic, 'err_sig_val1_lic', 'Validator 1 license is required.');
+                if (val1Lic && !val1Lic.value.trim()) markInvalid(val1Lic, 'err_sig_val1_lic', 'Validated By 1 license is required.');
 
                 const val2Name = document.getElementById('sig_val2_name');
-                if (val2Name && !val2Name.value.trim()) markInvalid(val2Name, 'err_sig_val2_name', 'Validator 2 name is required.');
+                if (val2Name && !val2Name.value.trim()) markInvalid(val2Name, 'err_sig_val2_name', 'Validated By 2 name is required.');
 
                 const val2Lic = document.getElementById('sig_val2_lic');
-                if (val2Lic && !val2Lic.value.trim()) markInvalid(val2Lic, 'err_sig_val2_lic', 'Validator 2 license is required.');
+                if (val2Lic && !val2Lic.value.trim()) markInvalid(val2Lic, 'err_sig_val2_lic', 'Validated By 2 license is required.');
 
                 const totalRows = document.querySelectorAll('#labBody tr').length;
                 if (totalRows === 0) {
@@ -933,6 +1205,12 @@ document.addEventListener('DOMContentLoaded', () => {
 .image-preview-wrapper:hover .zoom-overlay {
     opacity: 1;
 }
+.signatory-item {
+    cursor: pointer;
+}
+.signatory-item:hover {
+    background-color: rgba(25, 211, 140, 0.08) !important;
+}
 #lab-workstation-root .is-invalid {
     border-color: #ff4d4d !important;
     box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.15) !important;
@@ -952,3 +1230,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 }
 </style>
+@endsection

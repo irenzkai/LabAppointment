@@ -21,6 +21,28 @@
 
     // Dynamically reveal preview on page load if scan exists
     $showPreview = $isReadonly || $hasScan;
+
+    // Requested Examinations Breakdown
+    $requestedExaminations = $appointment->packages->pluck('name')->map(fn($n) => "[PKG] {$n}")
+        ->concat($appointment->services->pluck('name'))
+        ->implode(', ');
+
+    // Workstation Audit Trail (Encoder & Verifier)
+    $customAudit = $res ? $res->audits->where('workstation_type', "custom_{$customRes->id}")->first() : null;
+    $customEncoderName = $customAudit->v1_by_name ?? '---';
+    $customVerifierName = $customAudit->v2_by_name ?? '---';
+    $customEncodedAt = $customAudit && $customAudit->v1_at ? \Carbon\Carbon::parse($customAudit->v1_at) : null;
+    $customVerifiedAt = $customAudit && $customAudit->v2_at ? \Carbon\Carbon::parse($customAudit->v2_at) : null;
+
+    // Pre-load registered clinical personnel for 1-click verifier selection
+    $allVerifiers = \App\Models\User::whereIn('role', ['admin', 'lab_tech', 'staff'])
+        ->where('is_active', true)
+        ->where(function($q) {
+            $q->whereIn('role', ['admin', 'lab_tech'])
+              ->orWhereNotNull('license_number');
+        })
+        ->orderBy('last_name')
+        ->get();
 @endphp
 
 <div class="container text-start animate-page pt-4 px-3 px-sm-4" id="custom-workstation-root">
@@ -71,7 +93,7 @@
         <input type="hidden" name="clear_scan" id="clear_scan_field" value="0">
         <div class="row g-4">
 
-            {{-- SIDEBAR: METADATA & PATIENT PROFILE --}}
+            {{-- SIDEBAR: METADATA, AUDIT & PATIENT PROFILE --}}
             <div class="col-12 col-lg-4" id="sidebar-container">
                 <div class="card p-3 p-sm-4 border-secondary bg-card mb-3 shadow-sm" id="sidebar-card" style="background-color: var(--bg-card); color: var(--text-main);">
                     <h6 class="text-accent mb-3 small fw-bold uppercase">{{ $customRes->name }} Metadata</h6>
@@ -91,15 +113,48 @@
                         <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
                             <small class="text-secondary smaller fw-bold uppercase">Patient Profile</small>
                             @if(!$isReadonly && auth()->user()->isEmployee())
-                                <a href="{{ route('appointments.edit-details', $appointment->id) }}?from=custom" class="btn btn-sm btn-outline-accent py-0.5 px-2 smaller uppercase fw-bold" style="font-size: 0.68rem;" title="Edit Patient Details">
+                                <a href="{{ route('appointments.edit-details', $appointment->id) }}?from=custom&custom_id={{ $customRes->id }}" class="btn btn-sm btn-outline-accent py-0.5 px-2 smaller uppercase fw-bold" style="font-size: 0.68rem;" title="Edit Patient Details">
                                     <i class="bi bi-pencil-square me-1"></i>Edit Details
                                 </a>
                             @endif
                         </div>
                         <div class="text-main fw-bold small mb-1 text-break">{{ strtoupper($appointment->patient_name) }}</div>
                         <div class="text-secondary smaller mb-1">{{ $appointment->patient_age }} YRS / {{ strtoupper($appointment->patient_sex) }}</div>
-                        <div class="text-muted smaller text-break" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
+                        <div class="text-muted smaller text-break mb-2" style="font-size: 0.72rem; line-height: 1.35;">{{ $appointment->patient_address }}</div>
+
+                        {{-- Requested Examinations Summary --}}
+                        <div class="pt-2 border-top border-secondary border-opacity-10">
+                            <small class="text-secondary d-block smaller fw-bold uppercase">Requested Examinations</small>
+                            <span class="small fw-semibold text-accent text-break" style="font-size: 0.75rem;">
+                                {{ $requestedExaminations ?: 'None registered' }}
+                            </span>
+                        </div>
                     </div>
+
+                    {{-- System Audit Trail (Theme-Aware Container) --}}
+                    <div class="p-3 rounded border border-secondary border-opacity-10" style="background-color: rgba(0, 0, 0, 0.02);">
+                        <div class="row g-2">
+                            <div class="col-6 pe-2">
+                                <label class="text-secondary smaller fw-bold uppercase d-block mb-1" style="font-size: 0.6rem;">System Encoder</label>
+                                <span class="fw-bold d-block text-truncate" style="color: var(--text-main); font-size: 0.85rem;" title="{{ $customEncoderName }}">{{ $customEncoderName }}</span>
+                                @if($customEncodedAt)
+                                    <span class="text-secondary smaller italic d-block text-truncate" style="font-size: 0.65rem;">
+                                        {{ $customEncodedAt->format('M d, Y | h:i A') }}
+                                    </span>
+                                @endif
+                            </div>
+                            <div class="col-6 ps-2 border-start border-secondary border-opacity-25">
+                                <label class="text-secondary smaller fw-bold uppercase d-block mb-1" style="font-size: 0.6rem;">System Verifier</label>
+                                <span class="fw-bold d-block text-truncate" style="color: var(--text-main); font-size: 0.85rem;" title="{{ $customVerifierName }}">{{ $customVerifierName }}</span>
+                                @if($customVerifiedAt)
+                                    <span class="text-secondary smaller italic d-block text-truncate" style="font-size: 0.65rem;">
+                                        {{ $customVerifiedAt->format('M d, Y | h:i A') }}
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
@@ -156,20 +211,70 @@
 </div>
 @endsection
 
-<!-- VERIFY MODAL -->
+<!-- VERIFY MODAL WITH PREDEFINED CLINICAL PERSONNEL SELECTION -->
 <div class="modal fade" id="verifyModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
         <form action="{{ route('workstation.custom.verify', [$appointment->id, $customRes->id]) }}" method="POST" class="modal-content shadow-lg p-3 p-sm-4" style="background-color: var(--bg-card); border: 1.5px solid var(--border-color); color: var(--text-main);">
             @csrf
-            <h5 class="text-neon fw-bold mb-1 uppercase">Clinical Verification</h5>
-            <p class="text-secondary small mb-4">Enter your name to sign-off and approve this {{ $customRes->name }} worksheet.</p>
+            <h5 class="text-accent fw-bold mb-1 uppercase">Clinical Verification</h5>
+            <p class="text-secondary small mb-4">Select or confirm your name to sign-off and approve this {{ $customRes->name }} worksheet.</p>
+
             <div class="mb-4">
-                <label class="smaller fw-bold uppercase mb-1" style="color: var(--text-muted);">Verifier Full Name</label>
-                <input type="text" name="sig_name" class="form-control" value="{{ auth()->user()->name }}" required>
+                <label class="smaller fw-bold uppercase mb-1.5 d-block" style="color: var(--text-muted);">Choose Verifier from Clinical Registry</label>
+                
+                {{-- Search & Select Dropdown --}}
+                <div class="position-relative mb-2 signatory-search-wrapper" id="sig_verify_wrapper">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-secondary bg-opacity-10 text-muted border-secondary border-opacity-25">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" 
+                               id="sig_verify_search" 
+                               class="form-control form-control-sm signatory-search-input" 
+                               placeholder="Search or choose verifier..." 
+                               autocomplete="off"
+                               onfocus="openSignatoryMenu('verify')" 
+                               oninput="filterSignatoryMenu('verify', this.value)">
+                        <button type="button" 
+                                class="btn btn-outline-secondary btn-sm signatory-toggle-btn" 
+                                onclick="toggleSignatoryMenu('verify')" 
+                                tabindex="-1">
+                            <i class="bi bi-chevron-down" style="font-size: 0.7rem;"></i>
+                        </button>
+                    </div>
+
+                    <div class="signatory-dropdown-list shadow-lg bg-card border rounded-3 p-1 d-none position-absolute w-100 mt-1" 
+                         id="sig_verify_menu" 
+                         style="z-index: 1060; max-height: 200px; overflow-y: auto; background-color: var(--bg-card); border-color: var(--border-color) !important;">
+                        @foreach($allVerifiers as $ver)
+                            <div class="signatory-item p-2 rounded cursor-pointer transition-all d-flex justify-content-between align-items-center" 
+                                 data-name="{{ $ver->name }}" 
+                                 data-lic="{{ $ver->license_number ?: ($ver->occupation ?: '') }}" 
+                                 onclick="selectVerifier('{{ addslashes($ver->name) }}')">
+                                <div>
+                                    <span class="fw-bold small d-block text-main">{{ $ver->name }}</span>
+                                    <small class="text-muted" style="font-size: 0.68rem;">{{ $ver->occupation ?: ($ver->isAdmin() ? 'Administrator' : 'Lab Technologist') }}</small>
+                                </div>
+                                @if($ver->license_number)
+                                    <span class="badge bg-secondary bg-opacity-10 text-accent font-monospace" style="font-size: 0.65rem;">
+                                        PRC #{{ $ver->license_number }}
+                                    </span>
+                                @endif
+                            </div>
+                        @endforeach
+                        <div class="signatory-empty-msg text-muted small p-2 text-center d-none" id="sig_verify_empty">
+                            No matching personnel found
+                        </div>
+                    </div>
+                </div>
+
+                <label class="smaller fw-bold uppercase mb-1 d-block" style="color: var(--text-muted);">Verifier Full Name</label>
+                <input type="text" name="sig_name" id="sig_name_field" class="form-control" value="{{ auth()->user()->name }}" required>
             </div>
+
             <div class="d-flex flex-column flex-sm-row gap-2">
                 <button type="button" class="btn btn-outline-secondary flex-grow-1 py-2.5" data-bs-dismiss="modal">CANCEL</button>
-                <button type="submit" class="btn btn-neon flex-grow-1 py-2.5 fw-bold uppercase">Approve & Sign</button>
+                <button type="submit" class="btn btn-accent flex-grow-1 py-2.5 fw-bold uppercase">Approve & Sign</button>
             </div>
         </form>
     </div>
@@ -184,7 +289,7 @@
             <p class="text-secondary small mb-3">Provide a reason for returning this {{ $customRes->name }} worksheet for corrections.</p>
             <div class="mb-3">
                 <label for="return_reason_select" class="smaller fw-bold mb-2 d-block uppercase" style="color: var(--text-muted);">Reason for Return</label>
-                <select id="return_reason_select" class="form-select shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" required>
+                <select id="return_reason_select" name="reason" class="form-select shadow-none" style="background-color: var(--bg-card); color: var(--text-main); border: 1.5px solid var(--border-color);" required>
                     <option value="" disabled selected>-- Select a return justification --</option>
                     <option value="Mismatched patient identification or demographic fields">Mismatched patient identification or demographic fields</option>
                     <option value="Unclear, low-quality, or blurry document scan">Unclear, low-quality, or blurry document scan</option>
@@ -220,6 +325,67 @@ window.zoomQR = function(fileSrc) {
         window.zoomFile(fileSrc);
     }
 };
+
+// Searchable Signatory Dropdown Handlers
+window.openSignatoryMenu = function(key) {
+    document.querySelectorAll('.signatory-dropdown-list').forEach(el => {
+        if (el.id !== `sig_${key}_menu`) el.classList.add('d-none');
+    });
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (menu) menu.classList.remove('d-none');
+};
+
+window.toggleSignatoryMenu = function(key) {
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (menu) {
+        menu.classList.toggle('d-none');
+        if (!menu.classList.contains('d-none')) {
+            document.getElementById(`sig_${key}_search`)?.focus();
+        }
+    }
+};
+
+window.filterSignatoryMenu = function(key, query) {
+    const q = (query || '').toLowerCase().trim();
+    const menu = document.getElementById(`sig_${key}_menu`);
+    if (!menu) return;
+    menu.classList.remove('d-none');
+
+    let matchCount = 0;
+    menu.querySelectorAll('.signatory-item').forEach(item => {
+        const name = (item.dataset.name || '').toLowerCase();
+        const lic = (item.dataset.lic || '').toLowerCase();
+        const match = name.includes(q) || lic.includes(q);
+        item.classList.toggle('d-none', !match);
+        if (match) matchCount++;
+    });
+
+    const emptyMsg = document.getElementById(`sig_${key}_empty`);
+    if (emptyMsg) {
+        emptyMsg.classList.toggle('d-none', matchCount > 0);
+    }
+};
+
+window.selectVerifier = function(name) {
+    const searchInput = document.getElementById('sig_verify_search');
+    const nameInput = document.getElementById('sig_name_field');
+
+    if (searchInput) searchInput.value = name;
+    if (nameInput) {
+        nameInput.value = name;
+        nameInput.classList.remove('is-invalid');
+    }
+
+    const menu = document.getElementById('sig_verify_menu');
+    if (menu) menu.classList.add('d-none');
+};
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.signatory-search-wrapper')) {
+        document.querySelectorAll('.signatory-dropdown-list').forEach(el => el.classList.add('d-none'));
+    }
+});
 
 function previewScan(input) {
     if (input.files && input.files[0]) {
@@ -281,6 +447,13 @@ function removeScan() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Pre-populate verifier search placeholder with auth user name
+    const currentUserName = "{{ auth()->user()->name }}";
+    const verifierSearch = document.getElementById('sig_verify_search');
+    if (verifierSearch && !verifierSearch.value) {
+        verifierSearch.value = currentUserName;
+    }
+
     const selectEl = document.getElementById('return_reason_select');
     const textareaWrapper = document.getElementById('custom_return_reason_wrapper');
     const textareaEl = document.getElementById('reason_textarea');
@@ -294,6 +467,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 textareaEl.setAttribute('name', 'reason');
                 selectEl.removeAttribute('name');
                 textareaEl.value = '';
+                textareaEl.focus();
             } else {
                 textareaWrapper.classList.add('d-none');
                 textareaEl.removeAttribute('required');
@@ -307,6 +481,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (activeInput.value.trim().length < 5) {
                 e.preventDefault();
                 alert('A valid reason of at least 5 characters is required.');
+                activeInput.focus();
             }
         });
     }
@@ -390,6 +565,12 @@ document.addEventListener('DOMContentLoaded', () => {
 #custom-workstation-root .is-invalid {
     border-color: #ff4d4d !important;
     box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.15) !important;
+}
+.signatory-item {
+    cursor: pointer;
+}
+.signatory-item:hover {
+    background-color: rgba(25, 211, 140, 0.08) !important;
 }
 @media (max-width: 767.98px) {
     #scanViewer {

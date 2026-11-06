@@ -12,6 +12,9 @@
             <a href="{{ route('admin.reports') }}" class="btn btn-accent fw-bold btn-sm py-2 px-3 uppercase shadow-sm flex-grow-1 flex-md-grow-0 text-center text-nowrap">
                 <i class="bi bi-file-earmark-bar-graph-fill me-1.5"></i> Reports & Exports
             </a>
+            <a href="{{ route('organization.index') }}" class="btn btn-outline-accent fw-bold btn-sm py-2 px-3 uppercase flex-grow-1 flex-md-grow-0 text-center text-nowrap">
+                <i class="bi bi-buildings-fill me-1.5"></i> Organization Hub
+            </a>
             <a href="{{ route('admin.users.index') }}" class="btn btn-outline-accent fw-bold btn-sm py-2 px-3 uppercase flex-grow-1 flex-md-grow-0 text-center text-nowrap">
                 <i class="bi bi-people-fill me-1.5"></i> Manage Users
             </a>
@@ -44,6 +47,14 @@
                 <div class="text-center">
                     <div class="text-accent fs-3 mb-1"><i class="bi bi-kanban"></i></div>
                     <div class="fw-bold text-main small uppercase">Appointments</div>
+                </div>
+            </a>
+        </div>
+        <div style="min-width: 160px; flex: 1 0 160px;">
+            <a href="{{ route('organization.index') }}" class="card p-3 border-secondary bg-card text-decoration-none hover-card shadow-sm h-100">
+                <div class="text-center">
+                    <div class="text-accent fs-3 mb-1"><i class="bi bi-buildings"></i></div>
+                    <div class="fw-bold text-main small uppercase">Organization Hub</div>
                 </div>
             </a>
         </div>
@@ -336,8 +347,8 @@
                     @forelse($latestLogs as $log)
                         <tr class="border-secondary border-opacity-10">
                             <td class="ps-4 py-2.5">
-                                <div class="fw-bold uppercase small text-break">{{ $log->user->name ?? 'System/Deleted' }}</div>
-                                <small class="text-muted fs-x-small">{{ strtoupper($log->user->role ?? 'N/A') }}</small>
+                                <div class="fw-bold uppercase small text-break">{{ $log->user?->name ?? 'System/Deleted' }}</div>
+                                <small class="text-muted fs-x-small">{{ strtoupper($log->user?->occupation ?: ($log->user?->role ?? 'SYSTEM')) }}</small>
                             </td>
                             <td class="text-nowrap">
                                 <span class="badge border border-info text-info fw-bold small uppercase px-2 py-1">
@@ -438,12 +449,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderTrendChart('monthly');
 
-    // 2. Status Doughnut Chart (With High-Legibility Tooltips on Hover)
+    // 2. Status Doughnut Chart (With Voided Nomenclature)
     const statusCtx = document.getElementById('statusDoughnutChart').getContext('2d');
     new Chart(statusCtx, {
         type: 'doughnut',
         data: {
-            labels: ['Pending', 'Approved', 'Tested', 'Encoded', 'Released', 'Returned', 'Retest', 'Canceled', 'Expired'],
+            labels: ['Pending', 'Approved', 'Tested', 'Encoded', 'Released', 'Returned', 'Retest', 'Canceled', 'Voided'],
             datasets: [{
                 data: [
                     {{ $statusCounts['pending'] }},
@@ -497,7 +508,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 3. User Roles Breakdown Chart (With High-Legibility Tooltips on Hover)
+    // 3. User Roles Breakdown Chart
     const rolesCtx = document.getElementById('userRolesDoughnutChart').getContext('2d');
     new Chart(rolesCtx, {
         type: 'doughnut',

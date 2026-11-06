@@ -3,18 +3,20 @@
 namespace App\Http\Controllers\Workstation;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Appointment, ActivityLog};
+use App\Models\{Appointment, User, ActivityLog};
 use App\Traits\HandlesResultFiles;
-use App\Events\QueueUpdated; // Import our real-time broadcasting event
+use App\Events\QueueUpdated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 
 class MedicalCertController extends Controller
 {
     use HandlesResultFiles;
 
     /**
-     * WORKSTATION: Medical Certificate Index
+     * WORKSTATION: Medical Certificate Index.
+     * Pre-loads registered Attending Physicians for automated 1-click signatory selection.
      */
     public function index(Appointment $appointment)
     {
@@ -32,14 +34,20 @@ class MedicalCertController extends Controller
             event(new QueueUpdated());
         }
 
+        // Query registered attending physicians
+        $physicians = User::physicians()->where('is_active', true)->orderBy('last_name')->get();
+        if ($physicians->isEmpty()) {
+            $physicians = User::whereIn('role', ['admin', 'lab_tech'])->where('is_active', true)->orderBy('last_name')->get();
+        }
+
         // SECURED: Pre-authorize the embedded preview iframe to bypass the Reason-Gate safely
         session()->put("access_granted_{$appointment->id}_med_cert", true);
 
-        return view('appointments.workstations.medical', compact('appointment'));
+        return view('appointments.workstations.medical', compact('appointment', 'physicians'));
     }
 
     /**
-     * WORKSTATION: Save Medical Certificate Results
+     * WORKSTATION: Save Medical Certificate Results.
      */
     public function save(Request $request, Appointment $appointment)
     {
@@ -47,34 +55,31 @@ class MedicalCertController extends Controller
 
         $res = $appointment->result;
 
-        // FIXED: Extract cert_no and enforce global uniqueness validation across all files [153]
+        // Extract cert_no and enforce global uniqueness validation across all files
         $request->validate([
             'cert_no' => 'required|string|max:255|unique:appointment_med_certs,cert_no,' . ($res->medCert?->id ?? 'NULL'),
         ]);
 
-        $medData = $request->input('med_cert_data');
+        $medData = $request->input('med_cert_data', []);
 
         /**
          * 1. SCAN PURGE / RESET LOGIC
-         * If the scan was cleared on the front-end, remove the old file asset to 
-         * safely switch back to manual entry mode.
+         * If the scan was cleared on the front-end, remove the old file asset to safely switch back to manual entry mode.
          */
         if ($request->input('clear_scan') == '1') {
             if ($res->med_cert_scan) {
-                \Illuminate\Support\Facades\Storage::disk('public')->delete($res->med_cert_scan);
+                Storage::disk('public')->delete($res->med_cert_scan);
                 $res->update(['med_cert_scan' => null]);
             }
         }
 
         /**
          * 2. SCAN PRIORITY LOGIC
-         * If a new scan is attached, empty the findings/remarks arrays so the PDF generator 
-         * knows to prioritize rendering only the uploaded document.
+         * If a new scan is attached, empty the findings/remarks arrays so the PDF generator knows to prioritize rendering only the uploaded document.
          */
         if ($request->hasFile('med_cert_scan')) {
             $this->uploadResultFile($request, $appointment, 'med_cert_scan');
 
-            // FIXED: Do not discard cert_no when uploading a scanned copy [153]
             $medData = [
                 'metadata' => [
                     'cert_no' => $request->input('cert_no'),
@@ -88,6 +93,15 @@ class MedicalCertController extends Controller
             // Ensure cert_no is bound to metadata block for manual findings
             if (is_array($medData)) {
                 $medData['metadata']['cert_no'] = $request->input('cert_no');
+            }
+
+            // Automated Signatory Resolution via Physician User ID (Fallback if names/licenses are not typed manually)
+            if ($request->filled('physician_user_id')) {
+                $doctor = User::find($request->input('physician_user_id'));
+                if ($doctor) {
+                    $medData['sig']['name'] = $doctor->name;
+                    $medData['sig']['lic'] = $doctor->license_number ?? '';
+                }
             }
         }
 

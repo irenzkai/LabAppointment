@@ -10,7 +10,8 @@ use App\Models\{
     LaboratoryHistoryScan, 
     LaboratoryHistoryProcedure, 
     Appointment, 
-    Service
+    Service,
+    Package
 };
 use App\Notifications\AppointmentNotification;
 use App\Events\NotificationSent;
@@ -58,12 +59,12 @@ class HistoryController extends Controller
                         ->whereNotNull('batch_id')
                         ->where(function($s2) use ($targetUser) {
                             $s2->whereNull('patient_email')
-                               ->orWhere('patient_email', '')
-                               ->orWhereRaw('LOWER(patient_email) = ?', [strtolower($targetUser->email)]);
+                                ->orWhere('patient_email', '')
+                                ->orWhereRaw('LOWER(patient_email) = ?', [strtolower($targetUser->email)]);
                         })
                         ->where(function($s3) use ($targetUser) {
                             $s3->whereRaw('LOWER(patient_name) = ?', [strtolower($targetUser->name)])
-                               ->orWhere('patient_first_name', $targetUser->first_name);
+                                ->orWhere('patient_first_name', $targetUser->first_name);
                         });
                 });
             })
@@ -71,19 +72,22 @@ class HistoryController extends Controller
             ->latest()
             ->get();
 
-        // FETCH: Real catalog of active/available clinical services
+        // FETCH: Real catalog of active/available clinical services & packages
         $availableServices = Service::where('is_available', true)
-            ->orderBy('category')
+            ->orderBy('name')
+            ->get();
+
+        $availablePackages = Package::where('is_available', true)
             ->orderBy('name')
             ->get();
 
         // Retrieve digitized sub-table records & map them back into a backward-compatible array structure
         $recordsModels = LaboratoryHistoryRecord::whereHas('laboratoryHistory', function($q) use ($targetUser) {
-                $q->where('user_id', $targetUser->id);
-            })
-            ->with(['scans', 'procedures'])
-            ->latest('date_of_record')
-            ->get();
+            $q->where('user_id', $targetUser->id);
+        })
+        ->with(['scans', 'procedures'])
+        ->latest('date_of_record')
+        ->get();
 
         $existingRecords = $recordsModels->map(function($r) {
             return [
@@ -105,7 +109,14 @@ class HistoryController extends Controller
             ];
         })->toArray();
 
-        return view('patient-history', compact('targetUser', 'labHistory', 'appointments', 'availableServices', 'existingRecords'));
+        return view('patient-history', compact(
+            'targetUser', 
+            'labHistory', 
+            'appointments', 
+            'availableServices', 
+            'availablePackages', 
+            'existingRecords'
+        ));
     }
 
     /**
@@ -184,7 +195,6 @@ class HistoryController extends Controller
 
         $history->update(['permission_status' => 'granted']);
         $roleName = Auth::user()->role;
-
         ActivityLog::record('HISTORY GRANTED', "Handshake accepted by {$roleName}", $targetUser->name);
 
         // Notify patient if staff accepted their import request
@@ -264,7 +274,6 @@ class HistoryController extends Controller
         $suffix = $request->filled('patient_suffix') ? strtoupper(trim($request->patient_suffix)) : null;
 
         $fullName = $fName . ($mName !== 'N/A' ? ' ' . $mName : '') . ' ' . $lName . ($suffix ? ' ' . $suffix : '');
-
         $street = strtoupper(trim($request->patient_street));
         $barangay = strtoupper(trim($request->patient_barangay));
         $city = strtoupper(trim($request->patient_city));

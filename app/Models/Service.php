@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Facades\DB;
 
 class Service extends Model
@@ -13,6 +14,7 @@ class Service extends Model
 
     /**
      * The attributes that are mass assignable.
+     * Represents strictly atomic individual diagnostic procedures.
      */
     protected $fillable = [
         'name',
@@ -20,7 +22,6 @@ class Service extends Model
         'description',
         'preparation',
         'estimated_time',
-        'category', 
         'gender_restriction',
         'is_available',
     ];
@@ -30,8 +31,8 @@ class Service extends Model
      */
     protected $casts = [
         'is_available' => 'boolean',
-        'price'        => 'decimal:2',
-        'deleted_at'   => 'datetime',
+        'price' => 'decimal:2',
+        'deleted_at' => 'datetime',
     ];
 
     /**
@@ -43,15 +44,23 @@ class Service extends Model
     ];
 
     /**
-     * A service can be linked to many appointments.
+     * Relationship: An individual service can be directly linked to many appointments.
      */
-    public function appointments()
+    public function appointments(): BelongsToMany
     {
         return $this->belongsToMany(Appointment::class, 'appointment_service');
     }
 
     /**
-     * Dynamic Accessor to fetch compiled samples string with clinical catalog fallback.
+     * Relationship: Packages that bundle this individual service.
+     */
+    public function packages(): BelongsToMany
+    {
+        return $this->belongsToMany(Package::class, 'package_service');
+    }
+
+    /**
+     * Dynamic Accessor to fetch compiled biological specimens with clinical catalog fallback.
      */
     public function getSampleRequiredAttribute(): string
     {
@@ -100,6 +109,7 @@ class Service extends Model
             $mins = $this->estimated_time % 60;
             return $hours . 'h ' . ($mins > 0 ? "{$mins}m" : '');
         }
+
         return ($this->estimated_time ?: 5) . ' mins';
     }
 }

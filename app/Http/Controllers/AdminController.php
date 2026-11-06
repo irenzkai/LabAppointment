@@ -2,7 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{User, Dependent, Appointment, ActivityLog, LaboratoryHistory, LaboratoryHistoryRecord, Service};
+use App\Models\{
+    User, 
+    Dependent, 
+    Appointment, 
+    ActivityLog, 
+    LaboratoryHistory, 
+    LaboratoryHistoryRecord, 
+    Service, 
+    Package
+};
 use App\Events\QueueUpdated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Auth, DB, Hash, Crypt};
@@ -23,6 +32,7 @@ class AdminController extends Controller
     public function createUser(Request $request) 
     {
         if (Auth::user()->role !== 'admin') abort(403);
+
         $promotedDependent = null;
         if ($request->has('promote')) {
             try {
@@ -30,6 +40,7 @@ class AdminController extends Controller
                 $promotedDependent = Dependent::withTrashed()->find($decryptedId);
             } catch (\Exception $e) {}
         }
+
         return view('admin.users.create', compact('promotedDependent'));
     }
 
@@ -79,10 +90,17 @@ class AdminController extends Controller
             'city' => 'required|string|max:100',
             'province' => 'required|string|max:100',
             'role' => 'required|in:user,staff,lab_tech',
+            'occupation' => ['required_if:role,staff,lab_tech', 'nullable', 'string', 'max:100'],
+            'license_number' => ['required_if:role,lab_tech', 'nullable', 'string', 'max:50'],
             'password' => ['required', 'string', \Illuminate\Validation\Rules\Password::defaults(), 'confirmed'],
             'verify_email_now' => 'nullable|boolean',
             'verify_phone_now' => 'nullable|boolean',
             'promoted_dependent_id' => ['nullable', 'integer', 'exists:dependents,id'],
+        ], [
+            'occupation.required_if' => 'Please designate an official occupation for staff or laboratory technician accounts.',
+            'license_number.required_if' => 'PRC / DOH Professional license number is required for laboratory technicians.',
+            'phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
+            'suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
         ]);
 
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
@@ -96,6 +114,17 @@ class AdminController extends Controller
 
         $verifyEmailNow = $request->boolean('verify_email_now');
         $verifyPhoneNow = $request->boolean('verify_phone_now');
+        $role = $request->role;
+        $occupation = null;
+        $licenseNumber = null;
+
+        if ($role === 'staff') {
+            $occupation = $request->filled('occupation') ? trim($request->occupation) : null;
+            $licenseNumber = null;
+        } elseif ($role === 'lab_tech') {
+            $occupation = $request->filled('occupation') ? trim($request->occupation) : null;
+            $licenseNumber = $request->filled('license_number') ? trim($request->license_number) : null;
+        }
 
         $user = User::create([
             'first_name' => $fName,
@@ -111,7 +140,9 @@ class AdminController extends Controller
             'barangay' => mb_strtoupper(trim($request->barangay), 'UTF-8'),
             'city' => mb_strtoupper(trim($request->city), 'UTF-8'),
             'province' => mb_strtoupper(trim($request->province), 'UTF-8'),
-            'role' => $request->role,
+            'role' => $role,
+            'occupation' => $occupation,
+            'license_number' => $licenseNumber,
             'password' => Hash::make($request->password),
             'is_active' => true,
             'email_verified_at' => $verifyEmailNow ? now() : null,
@@ -127,10 +158,11 @@ class AdminController extends Controller
             Dependent::destroy($depId);
             ActivityLog::record('ACCOUNT PROMOTED', "Dependent account successfully promoted to independent user profile for {$user->name}", $user->name);
         } else {
-            ActivityLog::record('ADMIN USER CREATE', "Admin created user account {$user->name} ({$user->role}). Reason: {$reasonText}", $user->name);
+            ActivityLog::record('ADMIN USER CREATE', "Admin created user account {$user->name} ({$user->role}" . ($user->occupation ? " - {$user->occupation}" : "") . "). Reason: {$reasonText}", $user->name);
         }
 
         event(new QueueUpdated());
+
         return redirect()->route('admin.users.index')->with('success', "Account for {$user->name} created successfully!");
     }
 
@@ -145,6 +177,7 @@ class AdminController extends Controller
         }
 
         $user->load(['dependents' => fn($q) => $q->withTrashed()]);
+
         return view('admin.users.edit', compact('user'));
     }
 
@@ -193,13 +226,20 @@ class AdminController extends Controller
             'barangay' => 'required|string|max:100',
             'city' => 'required|string|max:100',
             'province' => 'required|string|max:100',
-            'role' => 'required|in:user,staff,lab_tech',
+            'role' => 'required|in:user,staff,lab_tech,admin',
+            'occupation' => ['required_if:role,staff,lab_tech', 'nullable', 'string', 'max:100'],
+            'license_number' => ['required_if:role,lab_tech', 'nullable', 'string', 'max:50'],
             'email' => ['required', 'email', 'unique:users,email,' . $user->id, 'regex:/^[^@\s]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
             'password_option' => 'nullable|in:send_link,manual',
             'password' => 'required_if:password_option,manual|nullable|string|min:8|confirmed',
             'email_action' => 'nullable|in:verify_now,unverify,send_notification',
             'phone_action' => 'nullable|in:verify_now,unverify',
             'send_verification_link' => 'nullable|boolean',
+        ], [
+            'occupation.required_if' => 'Please designate an official occupation for staff or laboratory technician accounts.',
+            'license_number.required_if' => 'Professional license number (PRC/DOH) is required for laboratory technicians.',
+            'phone.regex' => 'The phone number must start with 09 and contain exactly 11 digits.',
+            'suffix.regex' => 'The suffix may only contain letters, numbers, spaces, and periods.',
         ]);
 
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
@@ -216,6 +256,25 @@ class AdminController extends Controller
         $emailChanged = ($user->email !== $newEmail);
         $phoneChanged = ($user->phone !== $newPhone);
 
+        $targetRole = $request->role;
+        $targetOccupation = null;
+        $targetLicenseNumber = null;
+
+        // Role-based credential sanitization:
+        if ($targetRole === 'user') {
+            $targetOccupation = null;
+            $targetLicenseNumber = null;
+        } elseif ($targetRole === 'staff') {
+            $targetOccupation = $request->filled('occupation') ? trim($request->occupation) : null;
+            $targetLicenseNumber = null;
+        } elseif ($targetRole === 'lab_tech' || $targetRole === 'admin') {
+            $targetOccupation = $request->filled('occupation') ? trim($request->occupation) : null;
+            $targetLicenseNumber = $request->filled('license_number') ? trim($request->license_number) : null;
+        }
+
+        $oldRole = $user->role;
+        $roleChanged = ($oldRole !== $targetRole);
+
         $user->fill([
             'first_name' => $fName,
             'middle_name' => $mName,
@@ -230,7 +289,9 @@ class AdminController extends Controller
             'barangay' => mb_strtoupper(trim($request->barangay), 'UTF-8'),
             'city' => mb_strtoupper(trim($request->city), 'UTF-8'),
             'province' => mb_strtoupper(trim($request->province), 'UTF-8'),
-            'role' => $request->role,
+            'role' => $targetRole,
+            'occupation' => $targetOccupation,
+            'license_number' => $targetLicenseNumber,
         ]);
 
         $emailAction = $request->input('email_action');
@@ -266,7 +327,7 @@ class AdminController extends Controller
             }
         }
 
-        // 3. Handle Password Modifications (Reset link requires verified email)
+        // 3. Handle Password Modifications
         if ($request->input('password_option') === 'send_link') {
             if (is_null($user->email_verified_at)) {
                 return back()->withInput()->withErrors([
@@ -279,7 +340,6 @@ class AdminController extends Controller
             $user->password_change_required = true;
         }
 
-        // Commit all updates to database first
         $user->save();
 
         // 4. Dispatch verification notification if unverified and explicitly chosen
@@ -289,7 +349,9 @@ class AdminController extends Controller
             ActivityLog::record('ADMIN SENT VERIFICATION', "Dispatched email verification notification to {$user->email}", $user->name);
         }
 
-        ActivityLog::record('ADMIN USER EDIT', "Admin updated user {$user->name}. Reason: {$reasonText}", $user->name);
+        $roleTransitionNote = $roleChanged ? " [Role changed from {$oldRole} to {$targetRole}]" : "";
+        ActivityLog::record('ADMIN USER EDIT', "Admin updated user {$user->name}. Reason: {$reasonText}{$roleTransitionNote}", $user->name);
+
         event(new QueueUpdated());
 
         return redirect()->route('admin.users.index')->with('success', "Account details for {$user->name} updated successfully.");
@@ -298,6 +360,7 @@ class AdminController extends Controller
     public function toggleUserStatus(Request $request, $id)
     {
         if (Auth::user()->role !== 'admin') abort(403);
+
         $request->validate([
             'reason' => 'required|string|min:5',
             'custom_reason' => 'required_if:reason,Others|nullable|string|min:5',
@@ -306,7 +369,6 @@ class AdminController extends Controller
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
         $user = User::withTrashed()->findOrFail($id);
 
-        // Security Guard: An admin cannot deactivate/reactivate another admin account
         if ($user->role === 'admin' && $user->id !== Auth::id()) {
             abort(403, 'Unauthorized: Administrators cannot deactivate or modify another administrator account.');
         }
@@ -332,12 +394,12 @@ class AdminController extends Controller
             $user->email_verified_at = null;
             $user->phone_verified_at = null;
             $user->save();
-
             $user->delete();
             $actionLabel = "DEACTIVATED";
         }
 
         ActivityLog::record("ADMIN ACCOUNT {$actionLabel}", "Admin {$actionLabel} account for {$user->name}. Reason: {$reasonText}", $user->name);
+
         event(new QueueUpdated());
 
         return back()->with('success', "Account status for {$user->name} has been set to {$actionLabel}.");
@@ -347,11 +409,13 @@ class AdminController extends Controller
     {
         if (Auth::user()->role !== 'admin') abort(403);
         $user = User::withTrashed()->findOrFail($id);
+
         if ($user->isPatient()) {
             $user->sendEmailVerificationNotification();
             ActivityLog::record('ADMIN SENT VERIFICATION', "Dispatched email verification notification to {$user->email}", $user->name);
             return back()->with('success', "Verification notification sent to {$user->email}.");
         }
+
         return back()->with('error', "Target user is not a patient account.");
     }
 
@@ -384,6 +448,7 @@ class AdminController extends Controller
         ]);
 
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
+
         $dependent = $user->dependents()->create([
             'first_name' => mb_strtoupper(trim($request->first_name), 'UTF-8'),
             'middle_name' => ($request->middle_name && mb_strtoupper(trim($request->middle_name), 'UTF-8') !== 'N/A') ? mb_strtoupper(trim($request->middle_name), 'UTF-8') : 'N/A',
@@ -398,6 +463,7 @@ class AdminController extends Controller
         ]);
 
         ActivityLog::record('ADMIN ADD DEPENDENT', "Admin added dependent {$dependent->name} for user {$user->name}. Reason: {$reasonText}", $user->name);
+
         return redirect()->route('admin.users.edit', ['id' => $user->id, '#tab-dependents'])->with('success', "Dependent {$dependent->name} created successfully.");
     }
 
@@ -406,6 +472,7 @@ class AdminController extends Controller
         if (Auth::user()->role !== 'admin') abort(403);
         $user = User::withTrashed()->findOrFail($userId);
         $dependent = Dependent::withTrashed()->where('user_id', $user->id)->findOrFail($dependentId);
+
         return view('admin.users.dependents.edit', compact('user', 'dependent'));
     }
 
@@ -414,6 +481,7 @@ class AdminController extends Controller
         if (Auth::user()->role !== 'admin') abort(403);
         $user = User::withTrashed()->findOrFail($userId);
         $dependent = Dependent::withTrashed()->where('user_id', $user->id)->findOrFail($dependentId);
+
         $eighteenYearsAgo = Carbon::now()->subYears(18)->toDateString();
 
         $request->validate([
@@ -432,6 +500,7 @@ class AdminController extends Controller
         ]);
 
         $reasonText = $request->input('reason') === 'Others' ? $request->input('custom_reason') : $request->input('reason');
+
         $dependent->update([
             'first_name' => mb_strtoupper(trim($request->first_name), 'UTF-8'),
             'middle_name' => ($request->middle_name && mb_strtoupper(trim($request->middle_name), 'UTF-8') !== 'N/A') ? mb_strtoupper(trim($request->middle_name), 'UTF-8') : 'N/A',
@@ -446,6 +515,7 @@ class AdminController extends Controller
         ]);
 
         ActivityLog::record('ADMIN EDIT DEPENDENT', "Admin updated dependent {$dependent->name} for user {$user->name}. Reason: {$reasonText}", $user->name);
+
         return redirect()->route('admin.users.edit', ['id' => $user->id, '#tab-dependents'])->with('success', "Dependent {$dependent->name} updated successfully.");
     }
 
@@ -465,6 +535,7 @@ class AdminController extends Controller
         $dependent->delete();
 
         ActivityLog::record('ADMIN ARCHIVE DEPENDENT', "Admin archived dependent {$depName} for user {$user->name}. Reason: {$reasonText}", $user->name);
+
         return back()->with('success', "Dependent {$depName} moved to archive.");
     }
 
@@ -483,6 +554,7 @@ class AdminController extends Controller
         $dependent->restore();
 
         ActivityLog::record('ADMIN RESTORE DEPENDENT', "Admin restored dependent {$dependent->name} for user {$user->name}. Reason: {$reasonText}", $user->name);
+
         return back()->with('success', "Dependent {$dependent->name} reactivated successfully.");
     }
 
@@ -501,6 +573,7 @@ class AdminController extends Controller
         $promoUrl = route('admin.users.create', ['promote' => Crypt::encryptString($dependent->id)]);
 
         ActivityLog::record('ADMIN PROMOTE DEPENDENT', "Admin generated account promotion for dependent {$dependent->name}. Reason: {$reasonText}", $user->name);
+
         return redirect()->to($promoUrl);
     }
 
@@ -508,18 +581,21 @@ class AdminController extends Controller
     {
         if (!Auth::user()->isEmployee()) abort(403);
         $targetUser = User::withTrashed()->findOrFail($id);
+
         if (!session()->has("access_granted_{$targetUser->id}_history")) {
             return redirect()->route('admin.users.index')->with('error', 'Clinical authorization required to view patient records.');
         }
 
         $labHistory = LaboratoryHistory::firstOrCreate(['user_id' => $targetUser->id]);
-        $appointments = Appointment::with(['services', 'result'])
+        $appointments = Appointment::with(['services', 'packages.services', 'result'])
             ->where('user_id', $targetUser->id)
             ->latest()
             ->get();
 
         ActivityLog::record('VIEWED HISTORY', 'Accessed clinical archive via User Management', $targetUser->name);
-        $availableServices = Service::where('is_available', true)->orderBy('category')->orderBy('name')->get();
+
+        $availableServices = Service::where('is_available', true)->orderBy('name')->get();
+        $availablePackages = Package::where('is_available', true)->orderBy('name')->get();
 
         $recordsModels = LaboratoryHistoryRecord::whereHas('laboratoryHistory', fn($q) => $q->where('user_id', $targetUser->id))
             ->with(['scans', 'procedures'])
@@ -540,7 +616,7 @@ class AdminController extends Controller
             ];
         })->toArray();
 
-        return view('patient-history', compact('targetUser', 'appointments', 'labHistory', 'availableServices', 'existingRecords'));
+        return view('patient-history', compact('targetUser', 'appointments', 'labHistory', 'availableServices', 'availablePackages', 'existingRecords'));
     }
 
     public function viewLogs(Request $request) 
@@ -548,20 +624,45 @@ class AdminController extends Controller
         if (Auth::user()->role !== 'admin') abort(403);
         $roleFilter = $request->query('role');
         $query = ActivityLog::with('user')->latest();
+
         if ($roleFilter) {
             $query->whereHas('user', fn($q) => $q->where('role', $roleFilter));
         }
+
         $logs = $query->paginate(20)->withQueryString();
+
         return view('admin.logs', compact('logs'));
     }
 
     /**
-     * Dedicated Reports & Export Console View
+     * Dedicated Reports & Export Console View (Enforces Granular RBAC, Column Sorting, and Classification Filtering).
      */
     public function reports(Request $request)
     {
-        if (Auth::user()->role !== 'admin') abort(403);
-        $type = $request->query('type', 'transactions');
+        $currentUser = Auth::user();
+        if (!$currentUser->isEmployee()) abort(403);
+
+        // RBAC Access Matrix:
+        // Staff: transactions, services, appointments
+        // Lab Tech: services, appointments
+        // Admin: transactions, services, appointments, accounts, logs
+        $allowedTypes = ['appointments', 'services'];
+        if ($currentUser->role === 'staff' || $currentUser->role === 'admin') {
+            $allowedTypes[] = 'transactions';
+        }
+        if ($currentUser->role === 'admin') {
+            $allowedTypes[] = 'accounts';
+            $allowedTypes[] = 'logs';
+        }
+
+        $type = $request->query('type', in_array('transactions', $allowedTypes) ? 'transactions' : 'appointments');
+        if (!in_array($type, $allowedTypes)) {
+            $type = $allowedTypes[0];
+        }
+
+        // Sorting configuration (Default: appointment_date or created_at DESC)
+        $sortBy = $request->query('sort_by', 'date');
+        $order = in_array(strtolower($request->query('order', 'desc')), ['asc', 'desc']) ? strtolower($request->query('order', 'desc')) : 'desc';
 
         $nowSub24 = Carbon::now()->subHours(24)->toDateTimeString();
 
@@ -573,19 +674,19 @@ class AdminController extends Controller
         $txStatus = $request->query('tx_status', 'all');
         $txAppStatus = $request->query('tx_app_status', 'all');
 
-        $txQuery = Appointment::with('services');
-
+        $txQuery = Appointment::with(['services', 'packages.services']);
         if ($txStatus !== 'all') {
             $txQuery->where('payment_status', $txStatus);
         }
         if ($txAppStatus !== 'all') {
-            if ($txAppStatus === 'expired') {
+            if ($txAppStatus === 'expired' || $txAppStatus === 'voided') {
                 $txQuery->whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])
                     ->whereRaw("TIMESTAMP(appointment_date, time_slot) < ?", [$nowSub24]);
             } else {
                 $txQuery->where('status', $txAppStatus);
             }
         }
+
         if ($txPeriod === 'daily' && $txDate) {
             $txQuery->whereDate('appointment_date', $txDate);
         } elseif ($txPeriod === 'monthly' && $txMonth) {
@@ -596,7 +697,22 @@ class AdminController extends Controller
         } elseif ($txPeriod === 'yearly' && $txYear) {
             $txQuery->whereYear('appointment_date', $txYear);
         }
-        $transactions = $txQuery->latest()->get();
+
+        if ($sortBy === 'id') {
+            $txQuery->orderBy('id', $order);
+        } elseif ($sortBy === 'patient') {
+            $txQuery->orderBy('patient_name', $order);
+        } elseif ($sortBy === 'amount') {
+            $txQuery->orderBy('payment_amount', $order);
+        } elseif ($sortBy === 'payment_status') {
+            $txQuery->orderBy('payment_status', $order);
+        } elseif ($sortBy === 'status') {
+            $txQuery->orderBy('status', $order);
+        } else {
+            $txQuery->orderBy('appointment_date', $order)->orderBy('time_slot', $order);
+        }
+
+        $transactions = $txQuery->get();
 
         // 2. Appointments Master Report Filters
         $appPeriod = $request->query('app_period', 'cumulative');
@@ -605,16 +721,18 @@ class AdminController extends Controller
         $appYear = $request->query('app_year', Carbon::now()->format('Y'));
         $appStatus = $request->query('app_status', 'all');
         $appType = $request->query('app_type', 'all');
-        $appQuery = Appointment::with(['services', 'user', 'dependent']);
+
+        $appQuery = Appointment::with(['services', 'packages.services', 'user', 'dependent']);
 
         if ($appStatus !== 'all') {
-            if ($appStatus === 'expired') {
+            if ($appStatus === 'expired' || $appStatus === 'voided') {
                 $appQuery->whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])
                     ->whereRaw("TIMESTAMP(appointment_date, time_slot) < ?", [$nowSub24]);
             } else {
                 $appQuery->where('status', $appStatus);
             }
         }
+
         if ($appType === 'self') {
             $appQuery->whereNull('dependent_id')->whereNull('batch_id');
         } elseif ($appType === 'dependent') {
@@ -622,6 +740,7 @@ class AdminController extends Controller
         } elseif ($appType === 'bulk') {
             $appQuery->whereNotNull('batch_id');
         }
+
         if ($appPeriod === 'daily' && $appDate) {
             $appQuery->whereDate('appointment_date', $appDate);
         } elseif ($appPeriod === 'monthly' && $appMonth) {
@@ -632,28 +751,60 @@ class AdminController extends Controller
         } elseif ($appPeriod === 'yearly' && $appYear) {
             $appQuery->whereYear('appointment_date', $appYear);
         }
-        $appointments = $appQuery->latest()->get();
 
-        // 3. Clinical Service / Test Utilization Report
-        $svcCategory = $request->query('svc_category', 'all');
-        $svcStatus = $request->query('svc_status', 'all');
-        $svcQuery = Service::withTrashed()->withCount('appointments');
-
-        if ($svcCategory !== 'all') {
-            $svcQuery->where('category', $svcCategory);
+        if ($sortBy === 'id') {
+            $appQuery->orderBy('id', $order);
+        } elseif ($sortBy === 'patient') {
+            $appQuery->orderBy('patient_name', $order);
+        } elseif ($sortBy === 'status') {
+            $appQuery->orderBy('status', $order);
+        } elseif ($sortBy === 'payment_status') {
+            $appQuery->orderBy('payment_status', $order);
+        } else {
+            $appQuery->orderBy('appointment_date', $order)->orderBy('time_slot', $order);
         }
+
+        $appointments = $appQuery->get();
+
+        // 3. Clinical Services & Packages Utilization Report
+        $svcStatus = $request->query('svc_status', 'all');
+        $svcKind = $request->query('svc_kind', 'all'); // 'all', 'individual', 'package'
+
+        $svcQuery = Service::withTrashed()->withCount('appointments');
+        $pkgQuery = Package::withTrashed()->withCount('appointments')->with('services');
+
         if ($svcStatus === 'active') {
             $svcQuery->whereNull('deleted_at')->where('is_available', true);
+            $pkgQuery->whereNull('deleted_at')->where('is_available', true);
         } elseif ($svcStatus === 'disabled') {
             $svcQuery->whereNull('deleted_at')->where('is_available', false);
+            $pkgQuery->whereNull('deleted_at')->where('is_available', false);
         } elseif ($svcStatus === 'archived') {
             $svcQuery->onlyTrashed();
+            $pkgQuery->onlyTrashed();
         }
-        $services = $svcQuery->orderBy('appointments_count', 'desc')->get();
 
-        // 4. Accounts Filters
+        if ($sortBy === 'name') {
+            $svcQuery->orderBy('name', $order);
+            $pkgQuery->orderBy('name', $order);
+        } elseif ($sortBy === 'price') {
+            $svcQuery->orderBy('price', $order);
+            $pkgQuery->orderBy('price', $order);
+        } elseif ($sortBy === 'bookings') {
+            $svcQuery->orderBy('appointments_count', $order);
+            $pkgQuery->orderBy('appointments_count', $order);
+        } else {
+            $svcQuery->orderBy('appointments_count', $order);
+            $pkgQuery->orderBy('appointments_count', $order);
+        }
+
+        $services = ($svcKind !== 'package') ? $svcQuery->get() : collect();
+        $packages = ($svcKind !== 'individual') ? $pkgQuery->get() : collect();
+
+        // 4. Accounts Filters (Admin Only)
         $accRole = $request->query('acc_role', 'all');
         $accStatus = $request->query('acc_status', 'all');
+
         $accQuery = User::withTrashed();
 
         if ($accRole === 'patients') {
@@ -669,19 +820,31 @@ class AdminController extends Controller
         } elseif ($accStatus === 'deactivated') {
             $accQuery->onlyTrashed();
         }
-        $accounts = $accQuery->latest()->get();
 
-        // 5. Logs Filters
+        if ($sortBy === 'id') {
+            $accQuery->orderBy('id', $order);
+        } elseif ($sortBy === 'name') {
+            $accQuery->orderBy('name', $order);
+        } elseif ($sortBy === 'role') {
+            $accQuery->orderBy('role', $order);
+        } else {
+            $accQuery->orderBy('created_at', $order);
+        }
+
+        $accounts = ($currentUser->role === 'admin') ? $accQuery->get() : collect();
+
+        // 5. System Logs Filters (Admin Only)
         $logPeriod = $request->query('log_period', 'cumulative');
         $logDate = $request->query('log_date', Carbon::today()->toDateString());
         $logMonth = $request->query('log_month', Carbon::now()->format('Y-m'));
         $logYear = $request->query('log_year', Carbon::now()->format('Y'));
         $logCategory = $request->query('log_category', 'all');
-        $logQuery = ActivityLog::with('user');
 
+        $logQuery = ActivityLog::with('user');
         if ($logCategory !== 'all') {
             $logQuery->where('action', 'like', "%{$logCategory}%");
         }
+
         if ($logPeriod === 'daily' && $logDate) {
             $logQuery->whereDate('created_at', $logDate);
         } elseif ($logPeriod === 'monthly' && $logMonth) {
@@ -692,30 +855,40 @@ class AdminController extends Controller
         } elseif ($logPeriod === 'yearly' && $logYear) {
             $logQuery->whereYear('created_at', $logYear);
         }
-        $logs = $logQuery->latest()->get();
+
+        $logs = ($currentUser->role === 'admin') ? $logQuery->orderBy('created_at', $order)->get() : collect();
 
         return view('admin.reports', compact(
-            'type',
+            'type', 'allowedTypes', 'sortBy', 'order',
             'transactions', 'txPeriod', 'txDate', 'txMonth', 'txYear', 'txStatus', 'txAppStatus',
             'appointments', 'appPeriod', 'appDate', 'appMonth', 'appYear', 'appStatus', 'appType',
-            'services', 'svcCategory', 'svcStatus',
+            'services', 'packages', 'svcStatus', 'svcKind',
             'accounts', 'accRole', 'accStatus',
             'logs', 'logPeriod', 'logDate', 'logMonth', 'logYear', 'logCategory'
         ));
     }
 
     /**
-     * Dedicated Printable & PDF Report Export View (Formatted Clinical Letterhead)
+     * Dedicated Printable & PDF Report Export View (Formatted Clinical Letterhead with Custom Signatory).
      */
     public function printReport(Request $request)
     {
-        if (Auth::user()->role !== 'admin') abort(403);
-        $type = $request->query('type', 'transactions');
+        $currentUser = Auth::user();
+        if (!$currentUser->isEmployee()) abort(403);
 
+        $type = $request->query('type', 'transactions');
         $nowSub24 = Carbon::now()->subHours(24)->toDateTimeString();
+
         $selectedIds = $request->filled('selected_ids') 
-            ? array_filter(explode(',', $request->query('selected_ids'))) 
+            ? array_filter(explode(',', (string)$request->query('selected_ids'))) 
             : null;
+
+        $sortBy = $request->query('sort_by', 'date');
+        $order = in_array(strtolower($request->query('order', 'desc')), ['asc', 'desc']) ? strtolower($request->query('order', 'desc')) : 'desc';
+
+        // Signatory custom details editable before printing
+        $signatoryName = $request->query('signatory_name', $currentUser->name);
+        $signatoryRole = $request->query('signatory_role', $currentUser->occupation ?: ($currentUser->isAdmin() ? 'Laboratory Administrator' : strtoupper($currentUser->role)));
 
         // 1. Transactions Filters
         $txPeriod = $request->query('tx_period', 'cumulative');
@@ -725,8 +898,7 @@ class AdminController extends Controller
         $txStatus = $request->query('tx_status', 'all');
         $txAppStatus = $request->query('tx_app_status', 'all');
 
-        $txQuery = Appointment::with('services');
-
+        $txQuery = Appointment::with(['services', 'packages.services']);
         if (!empty($selectedIds)) {
             $txQuery->whereIn('id', $selectedIds);
         }
@@ -734,13 +906,14 @@ class AdminController extends Controller
             $txQuery->where('payment_status', $txStatus);
         }
         if ($txAppStatus !== 'all') {
-            if ($txAppStatus === 'expired') {
+            if ($txAppStatus === 'expired' || $txAppStatus === 'voided') {
                 $txQuery->whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])
                     ->whereRaw("TIMESTAMP(appointment_date, time_slot) < ?", [$nowSub24]);
             } else {
                 $txQuery->where('status', $txAppStatus);
             }
         }
+
         if ($txPeriod === 'daily' && $txDate) {
             $txQuery->whereDate('appointment_date', $txDate);
         } elseif ($txPeriod === 'monthly' && $txMonth) {
@@ -751,7 +924,22 @@ class AdminController extends Controller
         } elseif ($txPeriod === 'yearly' && $txYear) {
             $txQuery->whereYear('appointment_date', $txYear);
         }
-        $transactions = $txQuery->latest()->get();
+
+        if ($sortBy === 'id') {
+            $txQuery->orderBy('id', $order);
+        } elseif ($sortBy === 'patient') {
+            $txQuery->orderBy('patient_name', $order);
+        } elseif ($sortBy === 'amount') {
+            $txQuery->orderBy('payment_amount', $order);
+        } elseif ($sortBy === 'payment_status') {
+            $txQuery->orderBy('payment_status', $order);
+        } elseif ($sortBy === 'status') {
+            $txQuery->orderBy('status', $order);
+        } else {
+            $txQuery->orderBy('appointment_date', $order)->orderBy('time_slot', $order);
+        }
+
+        $transactions = $txQuery->get();
 
         // 2. Appointments Master Report Filters
         $appPeriod = $request->query('app_period', 'cumulative');
@@ -760,19 +948,21 @@ class AdminController extends Controller
         $appYear = $request->query('app_year', Carbon::now()->format('Y'));
         $appStatus = $request->query('app_status', 'all');
         $appType = $request->query('app_type', 'all');
-        $appQuery = Appointment::with(['services', 'user', 'dependent']);
 
+        $appQuery = Appointment::with(['services', 'packages.services', 'user', 'dependent']);
         if (!empty($selectedIds)) {
             $appQuery->whereIn('id', $selectedIds);
         }
+
         if ($appStatus !== 'all') {
-            if ($appStatus === 'expired') {
+            if ($appStatus === 'expired' || $appStatus === 'voided') {
                 $appQuery->whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])
                     ->whereRaw("TIMESTAMP(appointment_date, time_slot) < ?", [$nowSub24]);
             } else {
                 $appQuery->where('status', $appStatus);
             }
         }
+
         if ($appType === 'self') {
             $appQuery->whereNull('dependent_id')->whereNull('batch_id');
         } elseif ($appType === 'dependent') {
@@ -780,6 +970,7 @@ class AdminController extends Controller
         } elseif ($appType === 'bulk') {
             $appQuery->whereNotNull('batch_id');
         }
+
         if ($appPeriod === 'daily' && $appDate) {
             $appQuery->whereDate('appointment_date', $appDate);
         } elseif ($appPeriod === 'monthly' && $appMonth) {
@@ -790,36 +981,82 @@ class AdminController extends Controller
         } elseif ($appPeriod === 'yearly' && $appYear) {
             $appQuery->whereYear('appointment_date', $appYear);
         }
-        $appointments = $appQuery->latest()->get();
 
-        // 3. Clinical Service / Test Utilization Report
-        $svcCategory = $request->query('svc_category', 'all');
+        if ($sortBy === 'id') {
+            $appQuery->orderBy('id', $order);
+        } elseif ($sortBy === 'patient') {
+            $appQuery->orderBy('patient_name', $order);
+        } elseif ($sortBy === 'status') {
+            $appQuery->orderBy('status', $order);
+        } elseif ($sortBy === 'payment_status') {
+            $appQuery->orderBy('payment_status', $order);
+        } else {
+            $appQuery->orderBy('appointment_date', $order)->orderBy('time_slot', $order);
+        }
+
+        $appointments = $appQuery->get();
+
+        // 3. Clinical Services & Packages
         $svcStatus = $request->query('svc_status', 'all');
+        $svcKind = $request->query('svc_kind', 'all'); // 'all', 'individual', 'package'
+
+        $packageIds = [];
+        $serviceIds = [];
+        if (!empty($selectedIds)) {
+            foreach ($selectedIds as $sid) {
+                if (str_starts_with((string)$sid, 'pkg_')) {
+                    $packageIds[] = (int) str_replace('pkg_', '', (string)$sid);
+                } else {
+                    $serviceIds[] = (int) $sid;
+                }
+            }
+        }
+
         $svcQuery = Service::withTrashed()->withCount('appointments');
+        $pkgQuery = Package::withTrashed()->withCount('appointments')->with('services');
 
         if (!empty($selectedIds)) {
-            $svcQuery->whereIn('id', $selectedIds);
+            $svcQuery->whereIn('id', $serviceIds);
+            $pkgQuery->whereIn('id', $packageIds);
         }
-        if ($svcCategory !== 'all') {
-            $svcQuery->where('category', $svcCategory);
-        }
+
         if ($svcStatus === 'active') {
             $svcQuery->whereNull('deleted_at')->where('is_available', true);
+            $pkgQuery->whereNull('deleted_at')->where('is_available', true);
         } elseif ($svcStatus === 'disabled') {
             $svcQuery->whereNull('deleted_at')->where('is_available', false);
+            $pkgQuery->whereNull('deleted_at')->where('is_available', false);
         } elseif ($svcStatus === 'archived') {
             $svcQuery->onlyTrashed();
+            $pkgQuery->onlyTrashed();
         }
-        $services = $svcQuery->orderBy('appointments_count', 'desc')->get();
+
+        if ($sortBy === 'name') {
+            $svcQuery->orderBy('name', $order);
+            $pkgQuery->orderBy('name', $order);
+        } elseif ($sortBy === 'price') {
+            $svcQuery->orderBy('price', $order);
+            $pkgQuery->orderBy('price', $order);
+        } elseif ($sortBy === 'bookings') {
+            $svcQuery->orderBy('appointments_count', $order);
+            $pkgQuery->orderBy('appointments_count', $order);
+        } else {
+            $svcQuery->orderBy('appointments_count', $order);
+            $pkgQuery->orderBy('appointments_count', $order);
+        }
+
+        $services = ($svcKind !== 'package') ? $svcQuery->get() : collect();
+        $packages = ($svcKind !== 'individual') ? $pkgQuery->get() : collect();
 
         // 4. Accounts Filters
         $accRole = $request->query('acc_role', 'all');
         $accStatus = $request->query('acc_status', 'all');
-        $accQuery = User::withTrashed();
 
+        $accQuery = User::withTrashed();
         if (!empty($selectedIds)) {
             $accQuery->whereIn('id', $selectedIds);
         }
+
         if ($accRole === 'patients') {
             $accQuery->where('role', 'user');
         } elseif ($accRole === 'employees') {
@@ -833,7 +1070,18 @@ class AdminController extends Controller
         } elseif ($accStatus === 'deactivated') {
             $accQuery->onlyTrashed();
         }
-        $accounts = $accQuery->latest()->get();
+
+        if ($sortBy === 'id') {
+            $accQuery->orderBy('id', $order);
+        } elseif ($sortBy === 'name') {
+            $accQuery->orderBy('name', $order);
+        } elseif ($sortBy === 'role') {
+            $accQuery->orderBy('role', $order);
+        } else {
+            $accQuery->orderBy('created_at', $order);
+        }
+
+        $accounts = ($currentUser->role === 'admin') ? $accQuery->get() : collect();
 
         // 5. Logs Filters
         $logPeriod = $request->query('log_period', 'cumulative');
@@ -841,14 +1089,16 @@ class AdminController extends Controller
         $logMonth = $request->query('log_month', Carbon::now()->format('Y-m'));
         $logYear = $request->query('log_year', Carbon::now()->format('Y'));
         $logCategory = $request->query('log_category', 'all');
-        $logQuery = ActivityLog::with('user');
 
+        $logQuery = ActivityLog::with('user');
         if (!empty($selectedIds)) {
             $logQuery->whereIn('id', $selectedIds);
         }
+
         if ($logCategory !== 'all') {
             $logQuery->where('action', 'like', "%{$logCategory}%");
         }
+
         if ($logPeriod === 'daily' && $logDate) {
             $logQuery->whereDate('created_at', $logDate);
         } elseif ($logPeriod === 'monthly' && $logMonth) {
@@ -859,30 +1109,36 @@ class AdminController extends Controller
         } elseif ($logPeriod === 'yearly' && $logYear) {
             $logQuery->whereYear('created_at', $logYear);
         }
-        $logs = $logQuery->latest()->get();
+
+        $logs = ($currentUser->role === 'admin') ? $logQuery->orderBy('created_at', $order)->get() : collect();
 
         return view('admin.exports', compact(
-            'type',
+            'type', 'sortBy', 'order', 'signatoryName', 'signatoryRole',
             'transactions', 'txPeriod', 'txDate', 'txMonth', 'txYear', 'txStatus', 'txAppStatus',
             'appointments', 'appPeriod', 'appDate', 'appMonth', 'appYear', 'appStatus', 'appType',
-            'services', 'svcCategory', 'svcStatus',
+            'services', 'packages', 'svcStatus', 'svcKind',
             'accounts', 'accRole', 'accStatus',
             'logs', 'logPeriod', 'logDate', 'logMonth', 'logYear', 'logCategory'
         ));
     }
 
     /**
-     * CSV Stream Exporter for Reports Page
+     * CSV Stream Exporter for Reports Page (Includes Packages & De-duplicated Itemizations).
      */
     public function exportReport(Request $request)
     {
-        if (Auth::user()->role !== 'admin') abort(403);
+        $currentUser = Auth::user();
+        if (!$currentUser->isEmployee()) abort(403);
+
         $reportType = $request->query('report_type', 'transactions');
         $filename = "medscreen_" . $reportType . "_report_" . date('Y-m-d') . ".csv";
 
         $selectedIds = $request->filled('selected_ids')
-            ? array_filter(explode(',', $request->input('selected_ids')))
+            ? array_filter(explode(',', (string)$request->input('selected_ids')))
             : null;
+
+        $sortBy = $request->query('sort_by', 'date');
+        $order = in_array(strtolower($request->query('order', 'desc')), ['asc', 'desc']) ? strtolower($request->query('order', 'desc')) : 'desc';
 
         $headers = [
             "Content-type" => "text/csv; charset=UTF-8",
@@ -892,13 +1148,14 @@ class AdminController extends Controller
             "Expires" => "0"
         ];
 
-        $callback = function() use ($request, $reportType, $selectedIds) {
+        $callback = function() use ($request, $reportType, $selectedIds, $sortBy, $order) {
             $file = fopen('php://output', 'w');
             fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
+
             $nowSub24 = Carbon::now()->subHours(24)->toDateTimeString();
 
             if ($reportType === 'transactions') {
-                fputcsv($file, ['Date (M/D/Y)', 'Reference ID', 'Patient Name', 'Services Requested', 'Method', 'Payment Status', 'Appointment Status', 'Amount (PHP)']);
+                fputcsv($file, ['Date (M/D/Y)', 'Reference ID', 'Patient Name', 'Services & Packages Requested', 'Method', 'Payment Status', 'Appointment Status', 'Amount (PHP)']);
 
                 $txPeriod = $request->query('tx_period', 'cumulative');
                 $txDate = $request->query('tx_date', Carbon::today()->toDateString());
@@ -907,8 +1164,7 @@ class AdminController extends Controller
                 $txStatus = $request->query('tx_status', 'all');
                 $txAppStatus = $request->query('tx_app_status', 'all');
 
-                $txQuery = Appointment::with('services');
-
+                $txQuery = Appointment::with(['services', 'packages']);
                 if (!empty($selectedIds)) {
                     $txQuery->whereIn('id', $selectedIds);
                 }
@@ -916,34 +1172,58 @@ class AdminController extends Controller
                     $txQuery->where('payment_status', $txStatus);
                 }
                 if ($txAppStatus !== 'all') {
-                    if ($txAppStatus === 'expired') {
+                    if ($txAppStatus === 'expired' || $txAppStatus === 'voided') {
                         $txQuery->whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])
                             ->whereRaw("TIMESTAMP(appointment_date, time_slot) < ?", [$nowSub24]);
                     } else {
                         $txQuery->where('status', $txAppStatus);
                     }
                 }
-                if ($txPeriod === 'daily' && $txDate) $txQuery->whereDate('appointment_date', $txDate);
-                elseif ($txPeriod === 'monthly' && $txMonth) {
-                    $mParts = explode('-', $txMonth);
-                    if (count($mParts) === 2) $txQuery->whereYear('appointment_date', $mParts[0])->whereMonth('appointment_date', $mParts[1]);
-                } elseif ($txPeriod === 'yearly' && $txYear) $txQuery->whereYear('appointment_date', $txYear);
 
-                foreach ($txQuery->latest()->get() as $tx) {
+                if ($txPeriod === 'daily' && $txDate) {
+                    $txQuery->whereDate('appointment_date', $txDate);
+                } elseif ($txPeriod === 'monthly' && $txMonth) {
+                    $mParts = explode('-', $txMonth);
+                    if (count($mParts) === 2) {
+                        $txQuery->whereYear('appointment_date', $mParts[0])->whereMonth('appointment_date', $mParts[1]);
+                    }
+                } elseif ($txPeriod === 'yearly' && $txYear) {
+                    $txQuery->whereYear('appointment_date', $txYear);
+                }
+
+                if ($sortBy === 'id') {
+                    $txQuery->orderBy('id', $order);
+                } elseif ($sortBy === 'patient') {
+                    $txQuery->orderBy('patient_name', $order);
+                } elseif ($sortBy === 'amount') {
+                    $txQuery->orderBy('payment_amount', $order);
+                } elseif ($sortBy === 'payment_status') {
+                    $txQuery->orderBy('payment_status', $order);
+                } elseif ($sortBy === 'status') {
+                    $txQuery->orderBy('status', $order);
+                } else {
+                    $txQuery->orderBy('appointment_date', $order)->orderBy('time_slot', $order);
+                }
+
+                foreach ($txQuery->get() as $tx) {
                     $amt = $tx->payment_amount ?: $tx->totalPrice();
+                    $items = $tx->packages->pluck('name')->map(fn($n) => "[PKG] {$n}")
+                        ->concat($tx->services->pluck('name'))
+                        ->implode(', ');
+
                     fputcsv($file, [
                         $tx->appointment_date ? $tx->appointment_date->format('M d, Y') : $tx->created_at->format('M d, Y'),
                         '#' . $tx->id,
                         $tx->patient_name,
-                        $tx->services->pluck('name')->implode(', '),
+                        $items,
                         $tx->payment_method,
                         strtoupper($tx->payment_status),
-                        $tx->isExpired() ? 'EXPIRED' : strtoupper($tx->status),
+                        $tx->isExpired() ? 'VOIDED' : strtoupper($tx->status),
                         number_format($amt, 2)
                     ]);
                 }
             } elseif ($reportType === 'appointments') {
-                fputcsv($file, ['Schedule Date', 'Time Slot', 'Ref #', 'Patient Name', 'Age/Sex', 'Booking Type', 'Services', 'Status', 'Payment Status', 'Total Bill (PHP)']);
+                fputcsv($file, ['Schedule Date', 'Time Slot', 'Ref #', 'Patient Name', 'Age/Sex', 'Booking Type', 'Services & Packages', 'Status', 'Payment Status', 'Total Bill (PHP)']);
 
                 $appPeriod = $request->query('app_period', 'cumulative');
                 $appDate = $request->query('app_date', Carbon::today()->toDateString());
@@ -952,30 +1232,57 @@ class AdminController extends Controller
                 $appStatus = $request->query('app_status', 'all');
                 $appType = $request->query('app_type', 'all');
 
-                $appQuery = Appointment::with(['services', 'user', 'dependent']);
+                $appQuery = Appointment::with(['services', 'packages', 'user', 'dependent']);
                 if (!empty($selectedIds)) {
                     $appQuery->whereIn('id', $selectedIds);
                 }
+
                 if ($appStatus !== 'all') {
-                    if ($appStatus === 'expired') {
+                    if ($appStatus === 'expired' || $appStatus === 'voided') {
                         $appQuery->whereNotIn('status', ['retest', 'tested', 'encoded', 'released'])
                             ->whereRaw("TIMESTAMP(appointment_date, time_slot) < ?", [$nowSub24]);
                     } else {
                         $appQuery->where('status', $appStatus);
                     }
                 }
-                if ($appType === 'self') $appQuery->whereNull('dependent_id')->whereNull('batch_id');
-                elseif ($appType === 'dependent') $appQuery->whereNotNull('dependent_id');
-                elseif ($appType === 'bulk') $appQuery->whereNotNull('batch_id');
 
-                if ($appPeriod === 'daily' && $appDate) $appQuery->whereDate('appointment_date', $appDate);
-                elseif ($appPeriod === 'monthly' && $appMonth) {
+                if ($appType === 'self') {
+                    $appQuery->whereNull('dependent_id')->whereNull('batch_id');
+                } elseif ($appType === 'dependent') {
+                    $appQuery->whereNotNull('dependent_id');
+                } elseif ($appType === 'bulk') {
+                    $appQuery->whereNotNull('batch_id');
+                }
+
+                if ($appPeriod === 'daily' && $appDate) {
+                    $appQuery->whereDate('appointment_date', $appDate);
+                } elseif ($appPeriod === 'monthly' && $appMonth) {
                     $mParts = explode('-', $appMonth);
-                    if (count($mParts) === 2) $appQuery->whereYear('appointment_date', $mParts[0])->whereMonth('appointment_date', $mParts[1]);
-                } elseif ($appPeriod === 'yearly' && $appYear) $appQuery->whereYear('appointment_date', $appYear);
+                    if (count($mParts) === 2) {
+                        $appQuery->whereYear('appointment_date', $mParts[0])->whereMonth('appointment_date', $mParts[1]);
+                    }
+                } elseif ($appPeriod === 'yearly' && $appYear) {
+                    $appQuery->whereYear('appointment_date', $appYear);
+                }
 
-                foreach ($appQuery->latest()->get() as $app) {
+                if ($sortBy === 'id') {
+                    $appQuery->orderBy('id', $order);
+                } elseif ($sortBy === 'patient') {
+                    $appQuery->orderBy('patient_name', $order);
+                } elseif ($sortBy === 'status') {
+                    $appQuery->orderBy('status', $order);
+                } elseif ($sortBy === 'payment_status') {
+                    $appQuery->orderBy('payment_status', $order);
+                } else {
+                    $appQuery->orderBy('appointment_date', $order)->orderBy('time_slot', $order);
+                }
+
+                foreach ($appQuery->get() as $app) {
                     $typeLabel = $app->batch_id ? ('BULK (' . ($app->organization_name ?: 'BATCH #' . $app->batch_id) . ')') : ($app->dependent_id ? 'DEPENDENT' : 'PERSONAL');
+                    $items = $app->packages->pluck('name')->map(fn($n) => "[PKG] {$n}")
+                        ->concat($app->services->pluck('name'))
+                        ->implode(', ');
+
                     fputcsv($file, [
                         $app->appointment_date ? $app->appointment_date->format('M d, Y') : 'N/A',
                         $app->time_slot ? date('h:i A', strtotime($app->time_slot)) : 'N/A',
@@ -983,51 +1290,114 @@ class AdminController extends Controller
                         $app->patient_name,
                         $app->patient_age . ' / ' . strtoupper($app->patient_sex),
                         $typeLabel,
-                        $app->services->pluck('name')->implode(', '),
-                        $app->isExpired() ? 'EXPIRED' : strtoupper($app->status),
+                        $items,
+                        $app->isExpired() ? 'VOIDED' : strtoupper($app->status),
                         strtoupper($app->payment_status),
                         number_format($app->payment_amount ?: $app->totalPrice(), 2)
                     ]);
                 }
             } elseif ($reportType === 'services') {
-                fputcsv($file, ['Service ID', 'Service Name', 'Category', 'Price (PHP)', 'Gender Restriction', 'Est. Time (Mins)', 'Total Bookings', 'Gross Revenue (PHP)', 'Catalog Status']);
+                fputcsv($file, ['ID', 'Item Name', 'Classification', 'Price (PHP)', 'Gender Restriction', 'Est. Time (Mins)', 'Total Bookings', 'Gross Revenue (PHP)', 'Catalog Status']);
 
-                $svcCategory = $request->query('svc_category', 'all');
                 $svcStatus = $request->query('svc_status', 'all');
+                $svcKind = $request->query('svc_kind', 'all'); // 'all', 'individual', 'package'
+
+                $packageIds = [];
+                $serviceIds = [];
+                if (!empty($selectedIds)) {
+                    foreach ($selectedIds as $sid) {
+                        if (str_starts_with((string)$sid, 'pkg_')) {
+                            $packageIds[] = (int) str_replace('pkg_', '', (string)$sid);
+                        } else {
+                            $serviceIds[] = (int) $sid;
+                        }
+                    }
+                }
+
                 $svcQuery = Service::withTrashed()->withCount('appointments');
+                $pkgQuery = Package::withTrashed()->withCount('appointments')->with('services');
 
                 if (!empty($selectedIds)) {
-                    $svcQuery->whereIn('id', $selectedIds);
+                    $svcQuery->whereIn('id', $serviceIds);
+                    $pkgQuery->whereIn('id', $packageIds);
                 }
-                if ($svcCategory !== 'all') $svcQuery->where('category', $svcCategory);
-                if ($svcStatus === 'active') $svcQuery->whereNull('deleted_at')->where('is_available', true);
-                elseif ($svcStatus === 'disabled') $svcQuery->whereNull('deleted_at')->where('is_available', false);
-                elseif ($svcStatus === 'archived') $svcQuery->onlyTrashed();
 
-                foreach ($svcQuery->orderBy('appointments_count', 'desc')->get() as $svc) {
-                    $revenueEst = $svc->appointments_count * $svc->price;
-                    $catStatus = $svc->trashed() ? 'ARCHIVED' : ($svc->is_available ? 'ACTIVE' : 'DISABLED');
-                    fputcsv($file, [
-                        '#' . $svc->id,
-                        $svc->name,
-                        strtoupper($svc->category),
-                        number_format($svc->price, 2),
-                        strtoupper($svc->gender_restriction),
-                        $svc->estimated_time,
-                        $svc->appointments_count,
-                        number_format($revenueEst, 2),
-                        $catStatus
-                    ]);
+                if ($svcStatus === 'active') {
+                    $svcQuery->whereNull('deleted_at')->where('is_available', true);
+                    $pkgQuery->whereNull('deleted_at')->where('is_available', true);
+                } elseif ($svcStatus === 'disabled') {
+                    $svcQuery->whereNull('deleted_at')->where('is_available', false);
+                    $pkgQuery->whereNull('deleted_at')->where('is_available', false);
+                } elseif ($svcStatus === 'archived') {
+                    $svcQuery->onlyTrashed();
+                    $pkgQuery->onlyTrashed();
+                }
+
+                if ($sortBy === 'name') {
+                    $svcQuery->orderBy('name', $order);
+                    $pkgQuery->orderBy('name', $order);
+                } elseif ($sortBy === 'price') {
+                    $svcQuery->orderBy('price', $order);
+                    $pkgQuery->orderBy('price', $order);
+                } elseif ($sortBy === 'bookings') {
+                    $svcQuery->orderBy('appointments_count', $order);
+                    $pkgQuery->orderBy('appointments_count', $order);
+                } else {
+                    $svcQuery->orderBy('appointments_count', $order);
+                    $pkgQuery->orderBy('appointments_count', $order);
+                }
+
+                // Export Diagnostic Packages if not restricted to individual only
+                if ($svcKind !== 'individual') {
+                    foreach ($pkgQuery->get() as $pkg) {
+                        $revenueEst = $pkg->appointments_count * $pkg->price;
+                        $catStatus = $pkg->trashed() ? 'ARCHIVED' : ($pkg->is_available ? 'ACTIVE' : 'DISABLED');
+                        $constituentNames = $pkg->services->pluck('name')->implode(', ');
+
+                        fputcsv($file, [
+                            'P-' . $pkg->id,
+                            $pkg->name . ($constituentNames ? " (Includes: {$constituentNames})" : ""),
+                            'PACKAGE',
+                            number_format($pkg->price, 2),
+                            strtoupper($pkg->gender_restriction ?? 'BOTH'),
+                            $pkg->estimated_time ?: 15,
+                            $pkg->appointments_count ?? 0,
+                            number_format($revenueEst, 2),
+                            $catStatus
+                        ]);
+                    }
+                }
+
+                // Export Individual Services if not restricted to packages only
+                if ($svcKind !== 'package') {
+                    foreach ($svcQuery->get() as $svc) {
+                        $revenueEst = $svc->appointments_count * $svc->price;
+                        $catStatus = $svc->trashed() ? 'ARCHIVED' : ($svc->is_available ? 'ACTIVE' : 'DISABLED');
+
+                        fputcsv($file, [
+                            '#' . $svc->id,
+                            $svc->name,
+                            'INDIVIDUAL',
+                            number_format($svc->price, 2),
+                            strtoupper($svc->gender_restriction),
+                            $svc->estimated_time,
+                            $svc->appointments_count,
+                            number_format($revenueEst, 2),
+                            $catStatus
+                        ]);
+                    }
                 }
             } elseif ($reportType === 'accounts') {
-                fputcsv($file, ['ID', 'Full Name', 'Email Address', 'Phone Number', 'Role', 'Status', 'Registered Date']);
+                fputcsv($file, ['ID', 'Full Name', 'Email Address', 'Phone Number', 'Role', 'Occupation', 'License #', 'Status', 'Registered Date']);
+
                 $accRole = $request->query('acc_role', 'all');
                 $accStatus = $request->query('acc_status', 'all');
-                $accQuery = User::withTrashed();
 
+                $accQuery = User::withTrashed();
                 if (!empty($selectedIds)) {
                     $accQuery->whereIn('id', $selectedIds);
                 }
+
                 if ($accRole === 'patients') $accQuery->where('role', 'user');
                 elseif ($accRole === 'employees') $accQuery->whereIn('role', ['staff', 'lab_tech']);
                 elseif ($accRole === 'admins') $accQuery->where('role', 'admin');
@@ -1035,19 +1405,32 @@ class AdminController extends Controller
                 if ($accStatus === 'active') $accQuery->whereNull('deleted_at');
                 elseif ($accStatus === 'deactivated') $accQuery->onlyTrashed();
 
-                foreach ($accQuery->latest()->get() as $acc) {
+                if ($sortBy === 'id') {
+                    $accQuery->orderBy('id', $order);
+                } elseif ($sortBy === 'name') {
+                    $accQuery->orderBy('name', $order);
+                } elseif ($sortBy === 'role') {
+                    $accQuery->orderBy('role', $order);
+                } else {
+                    $accQuery->orderBy('created_at', $order);
+                }
+
+                foreach ($accQuery->get() as $acc) {
                     fputcsv($file, [
                         '#' . $acc->id,
                         $acc->name,
                         $acc->email,
                         $acc->phone,
                         strtoupper($acc->role),
+                        $acc->occupation ?? 'N/A',
+                        $acc->license_number ?? 'N/A',
                         $acc->trashed() ? 'DEACTIVATED' : 'ACTIVE',
                         $acc->created_at ? $acc->created_at->format('M d, Y') : 'N/A'
                     ]);
                 }
             } elseif ($reportType === 'logs') {
                 fputcsv($file, ['Date & Time', 'Performer', 'Role', 'Action Event', 'Target Patient', 'Audit Reason']);
+
                 $logPeriod = $request->query('log_period', 'cumulative');
                 $logDate = $request->query('log_date', Carbon::today()->toDateString());
                 $logMonth = $request->query('log_month', Carbon::now()->format('Y-m'));
@@ -1058,26 +1441,34 @@ class AdminController extends Controller
                 if (!empty($selectedIds)) {
                     $logQuery->whereIn('id', $selectedIds);
                 }
+
                 if ($logCategory !== 'all') {
                     $logQuery->where('action', 'like', "%{$logCategory}%");
                 }
-                if ($logPeriod === 'daily' && $logDate) $logQuery->whereDate('created_at', $logDate);
-                elseif ($logPeriod === 'monthly' && $logMonth) {
-                    $lParts = explode('-', $logMonth);
-                    if (count($lParts) === 2) $logQuery->whereYear('created_at', $lParts[0])->whereMonth('created_at', $lParts[1]);
-                } elseif ($logPeriod === 'yearly' && $logYear) $logQuery->whereYear('created_at', $logYear);
 
-                foreach ($logQuery->latest()->get() as $log) {
+                if ($logPeriod === 'daily' && $logDate) {
+                    $logQuery->whereDate('created_at', $logDate);
+                } elseif ($logPeriod === 'monthly' && $logMonth) {
+                    $lParts = explode('-', $logMonth);
+                    if (count($lParts) === 2) {
+                        $logQuery->whereYear('created_at', $lParts[0])->whereMonth('created_at', $lParts[1]);
+                    }
+                } elseif ($logPeriod === 'yearly' && $logYear) {
+                    $logQuery->whereYear('created_at', $logYear);
+                }
+
+                foreach ($logQuery->orderBy('created_at', $order)->get() as $log) {
                     fputcsv($file, [
                         $log->created_at ? $log->created_at->format('M d, Y h:i A') : 'N/A',
-                        $log->user->name ?? 'System/Deleted',
-                        strtoupper($log->user->role ?? 'SYSTEM'),
+                        $log->user?->name ?? 'System/Deleted',
+                        strtoupper($log->user?->occupation ?: ($log->user?->role ?? 'SYSTEM')),
                         $log->action,
                         $log->patient_name,
                         $log->reason
                     ]);
                 }
             }
+
             fclose($file);
         };
 
