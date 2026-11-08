@@ -167,13 +167,20 @@
                     <div class="col-md-5">
                         <select id="test_dropdown" class="form-select">
                             <option value="" disabled selected>-- Select a procedure --</option>
-                            @foreach($availableServices->groupBy('category') as $category => $services)
-                                <optgroup label="{{ strtoupper($category === 'individual' ? 'Individual Tests' : 'Health Packages') }}">
-                                    @foreach($services as $service)
+                            @if(isset($availableServices) && $availableServices->isNotEmpty())
+                                <optgroup label="INDIVIDUAL CLINICAL TESTS">
+                                    @foreach($availableServices as $service)
                                         <option value="{{ $service->name }}">{{ $service->name }}</option>
                                     @endforeach
                                 </optgroup>
-                            @endforeach
+                            @endif
+                            @if(isset($availablePackages) && $availablePackages->isNotEmpty())
+                                <optgroup label="DIAGNOSTIC HEALTH PACKAGES">
+                                    @foreach($availablePackages as $package)
+                                        <option value="{{ $package->name }}">[PKG] {{ $package->name }}</option>
+                                    @endforeach
+                                </optgroup>
+                            @endif
                         </select>
                     </div>
                     <div class="col-md-4">
@@ -285,6 +292,7 @@
 
 @push('scripts')
 <script>
+const digApiBase = "https://psgc.gitlab.io/api";
 const digProvinceVal = "{{ $targetUser->province }}";
 const digCityVal = "{{ $targetUser->city }}";
 const digBrgyVal = "{{ $targetUser->barangay }}";
@@ -306,6 +314,9 @@ function saveDigitizeDraft() {
         age: document.getElementById('dig_age')?.value || '',
         sex: document.getElementById('dig_sex')?.value || '',
         street: document.getElementById('dig_street')?.value || '',
+        province: document.getElementById('dig_province_hidden')?.value || '',
+        city: document.getElementById('dig_city_hidden')?.value || '',
+        barangay: document.getElementById('dig_barangay_hidden')?.value || '',
         procedures: Array.from(selectedProcedures)
     };
     try {
@@ -344,43 +355,106 @@ function clearDigitizeDraft() {
     } catch (e) {}
 }
 
-// PSGC Address API for Digitizer Panel (Lazy loaded on form demand)
-async function fetchDigProvinces() {
-    const sel = document.getElementById('dig_province');
-    if (!sel || sel.options.length > 1) return;
+// Flexible Option Matching (Handles "CITY OF", punctuation, and whitespace variations)
+function findDigOptionFlexibly(selectEl, searchVal) {
+    if (!selectEl || !searchVal) return null;
+    const target = searchVal.toString().trim().toUpperCase();
+    return Array.from(selectEl.options).find(opt => {
+        if (!opt.value && !opt.text) return false;
+        const optVal = opt.value.toString().trim().toUpperCase();
+        const optText = opt.text.toString().trim().toUpperCase();
+        if (optVal === target || optText === target) return true;
+        const normOpt = optText.replace(/\b(CITY|PROVINCE|MUNICIPALITY) OF\b/g, '').replace(/[^A-Z0-9]/g, '');
+        const normTarget = target.replace(/\b(CITY|PROVINCE|MUNICIPALITY) OF\b/g, '').replace(/[^A-Z0-9]/g, '');
+        return normOpt && normOpt === normTarget;
+    });
+}
+
+// PSGC Address API for Digitizer Panel
+async function fetchDigProvinces(targetProv = null, targetCity = null, targetBrgy = null) {
+    const provSel = document.getElementById('dig_province');
+    if (!provSel) return;
     try {
-        const res = await fetch(`https://psgc.gitlab.io/api/provinces/`);
+        const res = await fetch(`${digApiBase}/provinces.json`);
         if (!res.ok) throw new Error('Network error');
         const data = await res.json();
-        sel.innerHTML = '<option value="">Select Province</option>';
+        provSel.innerHTML = '<option value="">Select Province</option>';
         data.sort((a, b) => a.name.localeCompare(b.name)).forEach(p => {
-            sel.innerHTML += `<option value="${p.code}">${p.name}</option>`;
+            const opt = document.createElement('option');
+            opt.value = p.name;
+            opt.dataset.code = p.code;
+            opt.textContent = p.name;
+            provSel.appendChild(opt);
         });
+
+        if (targetProv) {
+            const matched = findDigOptionFlexibly(provSel, targetProv);
+            if (matched) {
+                provSel.value = matched.value;
+                await fetchDigCities(matched.value, targetCity, targetBrgy);
+            }
+        }
     } catch (e) {
-        if (digProvinceVal && sel) {
-            sel.innerHTML = `<option value="${digProvinceVal}" selected>${digProvinceVal}</option>`;
+        console.error("Provinces fetch error:", e);
+        if (digProvinceVal && provSel) {
+            provSel.innerHTML = `<option value="${digProvinceVal}" selected>${digProvinceVal}</option>`;
         }
     }
 }
 
-async function fetchDigCities(provCode) {
-    if (!provCode) return;
+async function fetchDigCities(provName, targetCity = null, targetBrgy = null) {
+    const provSel = document.getElementById('dig_province');
     const citySel = document.getElementById('dig_city');
     const brgySel = document.getElementById('dig_brgy');
     if (!citySel || !brgySel) return;
+
     citySel.disabled = true;
     brgySel.disabled = true;
     citySel.innerHTML = '<option value="">Loading Cities...</option>';
+    brgySel.innerHTML = '<option value="">Select City First</option>';
+
+    if (!provName) {
+        citySel.innerHTML = '<option value="">Select Province First</option>';
+        updateDigCompiledAddress();
+        return;
+    }
+
+    const matchedProv = findDigOptionFlexibly(provSel, provName);
+    const provCode = matchedProv ? matchedProv.dataset.code : null;
+
+    if (!provCode) {
+        citySel.innerHTML = '<option value="">Select City</option>';
+        citySel.disabled = false;
+        return;
+    }
+
     try {
-        const res = await fetch(`https://psgc.gitlab.io/api/provinces/${provCode}/cities-municipalities/`);
+        let res = await fetch(`${digApiBase}/provinces/${provCode}/cities-municipalities.json`);
+        if (!res.ok) {
+            // Region-level fallback (e.g. NCR)
+            res = await fetch(`${digApiBase}/regions/${provCode}/cities-municipalities.json`);
+        }
         if (!res.ok) throw new Error('Network error');
         const data = await res.json();
         citySel.innerHTML = '<option value="">Select City</option>';
         data.sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
-            citySel.innerHTML += `<option value="${c.code}">${c.name}</option>`;
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.dataset.code = c.code;
+            opt.textContent = c.name;
+            citySel.appendChild(opt);
         });
         citySel.disabled = false;
+
+        if (targetCity) {
+            const matchedCity = findDigOptionFlexibly(citySel, targetCity);
+            if (matchedCity) {
+                citySel.value = matchedCity.value;
+                await fetchDigBarangays(matchedCity.value, targetBrgy);
+            }
+        }
     } catch (e) {
+        console.error("Cities fetch error:", e);
         if (digCityVal) {
             citySel.innerHTML = `<option value="${digCityVal}" selected>${digCityVal}</option>`;
             citySel.disabled = false;
@@ -390,22 +464,51 @@ async function fetchDigCities(provCode) {
     saveDigitizeDraft();
 }
 
-async function fetchDigBarangays(cityCode) {
-    if (!cityCode) return;
+async function fetchDigBarangays(cityName, targetBrgy = null) {
+    const citySel = document.getElementById('dig_city');
     const brgySel = document.getElementById('dig_brgy');
     if (!brgySel) return;
+
     brgySel.disabled = true;
     brgySel.innerHTML = '<option value="">Loading Barangays...</option>';
+
+    if (!cityName) {
+        brgySel.innerHTML = '<option value="">Select City First</option>';
+        updateDigCompiledAddress();
+        return;
+    }
+
+    const matchedCity = findDigOptionFlexibly(citySel, cityName);
+    const cityCode = matchedCity ? matchedCity.dataset.code : null;
+
+    if (!cityCode) {
+        brgySel.innerHTML = '<option value="">Select Barangay</option>';
+        brgySel.disabled = false;
+        return;
+    }
+
     try {
-        const res = await fetch(`https://psgc.gitlab.io/api/cities-municipalities/${cityCode}/barangays/`);
+        const res = await fetch(`${digApiBase}/cities-municipalities/${cityCode}/barangays.json`);
         if (!res.ok) throw new Error('Network error');
         const data = await res.json();
         brgySel.innerHTML = '<option value="">Select Barangay</option>';
         data.sort((a, b) => a.name.localeCompare(b.name)).forEach(b => {
-            brgySel.innerHTML += `<option value="${b.name}">${b.name}</option>`;
+            const opt = document.createElement('option');
+            opt.value = b.name;
+            opt.dataset.code = b.code;
+            opt.textContent = b.name;
+            brgySel.appendChild(opt);
         });
         brgySel.disabled = false;
+
+        if (targetBrgy) {
+            const matchedBrgy = findDigOptionFlexibly(brgySel, targetBrgy);
+            if (matchedBrgy) {
+                brgySel.value = matchedBrgy.value;
+            }
+        }
     } catch (e) {
+        console.error("Barangays fetch error:", e);
         if (digBrgyVal) {
             brgySel.innerHTML = `<option value="${digBrgyVal}" selected>${digBrgyVal}</option>`;
             brgySel.disabled = false;
@@ -424,9 +527,11 @@ function updateDigCompiledAddress() {
     if (!streetInput || !brgy || !city || !prov) return;
 
     const street = streetInput.value.trim();
-    const brgyName = brgy.options[brgy.selectedIndex]?.text || '';
-    const cityName = city.options[city.selectedIndex]?.text || '';
-    const provName = prov.options[prov.selectedIndex]?.text || '';
+    const brgyName = brgy.value || (brgy.selectedIndex >= 0 ? brgy.options[brgy.selectedIndex]?.text : '') || '';
+    const cityName = city.value || (city.selectedIndex >= 0 ? city.options[city.selectedIndex]?.text : '') || '';
+    const provName = prov.value || (prov.selectedIndex >= 0 ? prov.options[prov.selectedIndex]?.text : '') || '';
+
+    compileDigAddress();
 
     if (street || brgyName || cityName || provName) {
         let parts = [];
@@ -448,13 +553,17 @@ function compileDigAddress() {
     const city = document.getElementById('dig_city');
     const prov = document.getElementById('dig_province');
 
-    const brgyName = brgy ? (brgy.options[brgy.selectedIndex]?.text || '') : '';
-    const cityName = city ? (city.options[city.selectedIndex]?.text || '') : '';
-    const provName = prov ? (prov.options[prov.selectedIndex]?.text || '') : '';
+    const brgyName = brgy ? (brgy.value || (brgy.selectedIndex >= 0 ? brgy.options[brgy.selectedIndex]?.text : '')) : '';
+    const cityName = city ? (city.value || (city.selectedIndex >= 0 ? city.options[city.selectedIndex]?.text : '')) : '';
+    const provName = prov ? (prov.value || (prov.selectedIndex >= 0 ? prov.options[prov.selectedIndex]?.text : '')) : '';
 
-    if (brgyName && !brgyName.includes('Select') && cityName && !cityName.includes('Select') && provName && !provName.includes('Select')) {
+    if (provName && !provName.includes('Select')) {
         document.getElementById('dig_province_hidden').value = provName;
+    }
+    if (cityName && !cityName.includes('Select')) {
         document.getElementById('dig_city_hidden').value = cityName;
+    }
+    if (brgyName && !brgyName.includes('Select')) {
         document.getElementById('dig_barangay_hidden').value = brgyName;
     }
 }
@@ -462,34 +571,22 @@ function compileDigAddress() {
 async function initializeDigAddress() {
     if (digAddressInitialized) return;
     digAddressInitialized = true;
-    await fetchDigProvinces();
-    if (digProvinceVal) {
-        const provSel = document.getElementById('dig_province');
-        if (provSel) {
-            let provOpt = Array.from(provSel.options).find(opt => opt.text.toUpperCase() === digProvinceVal.toUpperCase());
-            if (provOpt) {
-                provSel.value = provOpt.value;
-                await fetchDigCities(provSel.value);
+    
+    let targetProv = digProvinceVal;
+    let targetCity = digCityVal;
+    let targetBrgy = digBrgyVal;
 
-                const citySel = document.getElementById('dig_city');
-                if (citySel) {
-                    let cityOpt = Array.from(citySel.options).find(opt => opt.text.toUpperCase() === digCityVal.toUpperCase());
-                    if (cityOpt) {
-                        citySel.value = cityOpt.value;
-                        await fetchDigBarangays(citySel.value);
-
-                        const brgySel = document.getElementById('dig_brgy');
-                        if (brgySel) {
-                            let brgyOpt = Array.from(brgySel.options).find(opt => opt.text.toUpperCase() === digBrgyVal.toUpperCase());
-                            if (brgyOpt) {
-                                brgySel.value = brgyOpt.value;
-                            }
-                        }
-                    }
-                }
-            }
+    try {
+        const raw = sessionStorage.getItem(draftStorageKey);
+        if (raw) {
+            const draft = JSON.parse(raw);
+            if (draft.province) targetProv = draft.province;
+            if (draft.city) targetCity = draft.city;
+            if (draft.barangay) targetBrgy = draft.barangay;
         }
-    }
+    } catch (e) {}
+
+    await fetchDigProvinces(targetProv, targetCity, targetBrgy);
     updateDigCompiledAddress();
 }
 window.initializeDigAddress = initializeDigAddress;
