@@ -6,6 +6,7 @@
 // =========================================================================
 let rowCount = 0;
 let activeRowIdx = null;
+let isDuplicatingRow = false;
 const apiBase = "https://psgc.gitlab.io/api";
 
 // =========================================================================
@@ -246,79 +247,102 @@ window.duplicateRow = function(idx) {
     modalInstance.show();
 };
 
-window.executeModularDuplication = function() {
+window.executeModularDuplication = async function() {
+    if (isDuplicatingRow) return;
+
     const sourceIdx = document.getElementById('source_row_index_to_duplicate').value;
     const tr = document.getElementById(`r_${sourceIdx}`);
     if (!tr) return;
 
-    const dupTests = document.getElementById('dup_tests').checked;
-    const dupAddress = document.getElementById('dup_address').checked;
-    const dupSchedule = document.getElementById('dup_schedule').checked;
-    const dupPersonal = document.getElementById('dup_personal').checked;
+    isDuplicatingRow = true;
 
-    const src = getRowPatientData(sourceIdx);
-    const newPatient = {};
+    try {
+        const dupTests = document.getElementById('dup_tests').checked;
+        const dupAddress = document.getElementById('dup_address').checked;
+        const dupSchedule = document.getElementById('dup_schedule').checked;
+        const dupPersonal = document.getElementById('dup_personal').checked;
 
-    // 1. Personal Identity
-    if (dupPersonal) {
-        newPatient.first_name = src.first_name;
-        newPatient.middle_name = src.middle_name;
-        newPatient.last_name = src.last_name;
-        newPatient.suffix = src.suffix;
-        newPatient.name = src.name;
-        newPatient.sex = src.sex;
-        newPatient.birthdate = src.birthdate;
-        newPatient.phone = src.phone;
-        newPatient.email = src.email;
-    } else {
-        newPatient.first_name = '';
-        newPatient.middle_name = 'N/A';
-        newPatient.last_name = '';
-        newPatient.suffix = '';
-        newPatient.name = '';
-        newPatient.sex = src.sex || 'Male';
-        newPatient.birthdate = '';
-        newPatient.phone = '';
-        newPatient.email = '';
-    }
+        const src = getRowPatientData(sourceIdx);
+        const newPatient = {};
 
-    // 2. Address Details
-    if (dupAddress) {
-        newPatient.province = src.province;
-        newPatient.city = src.city;
-        newPatient.barangay = src.barangay;
-        newPatient.street = src.street;
-    }
+        // 1. Personal Identity
+        if (dupPersonal) {
+            newPatient.first_name = src.first_name;
+            newPatient.middle_name = src.middle_name;
+            newPatient.last_name = src.last_name;
+            newPatient.suffix = src.suffix;
+            newPatient.name = src.name;
+            newPatient.sex = src.sex;
+            newPatient.birthdate = src.birthdate;
+            newPatient.phone = src.phone;
+            newPatient.email = src.email;
+        } else {
+            newPatient.first_name = '';
+            newPatient.middle_name = 'N/A';
+            newPatient.last_name = '';
+            newPatient.suffix = '';
+            newPatient.name = '';
+            newPatient.sex = src.sex || 'Male';
+            newPatient.birthdate = '';
+            newPatient.phone = '';
+            newPatient.email = '';
+        }
 
-    // 3. Tests & Packages
-    if (dupTests) {
-        const svcInputs = tr.querySelectorAll(`input[name="patients[${sourceIdx}][service_ids][]"]`);
-        newPatient.service_ids = Array.from(svcInputs).map(i => i.value);
+        // 2. Address Details
+        if (dupAddress) {
+            newPatient.province = src.province;
+            newPatient.city = src.city;
+            newPatient.barangay = src.barangay;
+            newPatient.street = src.street;
+        }
 
-        const pkgInputs = tr.querySelectorAll(`input[name="patients[${sourceIdx}][package_ids][]"]`);
-        newPatient.package_ids = Array.from(pkgInputs).map(i => i.value);
-    }
+        // 3. Tests & Packages
+        if (dupTests) {
+            const svcInputs = tr.querySelectorAll(`input[name="patients[${sourceIdx}][service_ids][]"]`);
+            newPatient.service_ids = Array.from(svcInputs).map(i => i.value);
 
-    // 4. Schedule Slot
-    if (dupSchedule && src.appointment_date) {
-        newPatient.appointment_date = src.appointment_date;
-        newPatient.time_slot = src.time_slot;
-    }
+            const pkgInputs = tr.querySelectorAll(`input[name="patients[${sourceIdx}][package_ids][]"]`);
+            newPatient.package_ids = Array.from(pkgInputs).map(i => i.value);
+        }
 
-    const modalEl = document.getElementById('duplicateRowModal');
-    if (modalEl) {
-        const modalInstance = bootstrap.Modal.getInstance(modalEl);
-        if (modalInstance) modalInstance.hide();
-    }
+        // 4. Schedule Slot (Cascades automatically through full slots, Sunday/CLOSED, and NO SLOTS)
+        if (dupSchedule) {
+            const fallbackDate = document.getElementById('master_date')?.value || '';
+            const baseDate = src.appointment_date || fallbackDate;
+            const baseSlot = src.time_slot || '';
 
-    const targetRowIdx = rowCount;
-    addRow(newPatient);
+            if (baseDate && typeof window.findNextAvailableSlot === 'function') {
+                const nextSched = await window.findNextAvailableSlot(baseDate, baseSlot);
+                if (nextSched) {
+                    newPatient.appointment_date = nextSched.date;
+                    newPatient.time_slot = nextSched.time_slot;
+                } else {
+                    newPatient.appointment_date = baseDate;
+                    newPatient.time_slot = baseSlot;
+                }
+            } else if (baseDate) {
+                newPatient.appointment_date = baseDate;
+                newPatient.time_slot = baseSlot;
+            }
+        }
 
-    // If personal info was left blank, immediately prompt the user to input details
-    if (!dupPersonal) {
-        setTimeout(() => {
-            openEditPatientModal(targetRowIdx);
-        }, 300);
+        const modalEl = document.getElementById('duplicateRowModal');
+        if (modalEl) {
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) modalInstance.hide();
+        }
+
+        const targetRowIdx = rowCount;
+        addRow(newPatient);
+
+        // If personal info was left blank, immediately prompt the user to input details
+        if (!dupPersonal) {
+            setTimeout(() => {
+                openEditPatientModal(targetRowIdx);
+            }, 300);
+        }
+    } finally {
+        isDuplicatingRow = false;
     }
 };
 

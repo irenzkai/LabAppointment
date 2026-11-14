@@ -41,7 +41,7 @@ class BulkAppointmentController extends Controller
 
         // Fetch all packages available for user (global packages + their approved org packages)
         $packages = Package::availableFor($user)->orderBy('name')->get();
-        $configs = AppointmentConfig::all()->keyBy('day_of_week');
+        $configs = AppointmentConfig::whereNotNull('day_of_week')->get()->keyBy('day_of_week');
         $paymentProviders = PaymentProvider::where('is_active', true)->get();
 
         return view('appointments.bulk', compact(
@@ -348,14 +348,16 @@ class BulkAppointmentController extends Controller
     {
         $currentDate = Carbon::parse($startDate);
         $currentTime = $startTime;
+        $daySafety = 0;
 
-        while (true) {
+        while ($daySafety < 365) {
             $dateStr = $currentDate->toDateString();
             $config = AppointmentConfig::getEffectiveConfig($dateStr);
 
             // If day is closed (e.g. Sunday or holiday override), advance to next calendar day
             if (!$config || !$config->is_open) {
                 $currentDate->addDay();
+                $daySafety++;
                 $nextConfig = AppointmentConfig::getEffectiveConfig($currentDate->toDateString());
                 $currentTime = $nextConfig ? $nextConfig->opening_time : '08:00:00';
                 continue;
@@ -370,12 +372,19 @@ class BulkAppointmentController extends Controller
                 $currentTime = $openingTime;
             }
 
-            // Same-day booking lead-time cutoff enforcement
+            // Same-day booking lead-time cutoff enforcement (aligned to clinic slot grid)
             if ($dateStr === Carbon::today()->toDateString()) {
-                $leadBuffer = $config->lead_time_hours ?: 2;
+                $leadBuffer = $config->lead_time_hours ?? 2;
                 $earliestAllowedTime = Carbon::now()->addHours($leadBuffer)->format('H:i:00');
-                if ($currentTime < $earliestAllowedTime) {
-                    $currentTime = $earliestAllowedTime;
+
+                while ($currentTime < $earliestAllowedTime && $currentTime < $closingTime) {
+                    $nextTimeUnix = strtotime("+{$slotDuration} minutes", strtotime("{$dateStr} {$currentTime}"));
+                    $nextTime = date('H:i:00', $nextTimeUnix);
+                    if ($nextTime <= $currentTime) {
+                        $currentTime = $closingTime;
+                        break;
+                    }
+                    $currentTime = $nextTime;
                 }
             }
 
@@ -385,6 +394,7 @@ class BulkAppointmentController extends Controller
 
             if ($currentTime >= $closingTime) {
                 $currentDate->addDay();
+                $daySafety++;
                 $nextConfig = AppointmentConfig::getEffectiveConfig($currentDate->toDateString());
                 $currentTime = $nextConfig ? $nextConfig->opening_time : '08:00:00';
                 continue;
@@ -409,6 +419,11 @@ class BulkAppointmentController extends Controller
             $nextTimeUnix = strtotime("+{$slotDuration} minutes", strtotime("{$dateStr} {$currentTime}"));
             $currentTime = date('H:i:00', $nextTimeUnix);
         }
+
+        return [
+            'date' => $currentDate->toDateString(),
+            'time_slot' => $currentTime,
+        ];
     }
 
     /**
@@ -429,6 +444,7 @@ class BulkAppointmentController extends Controller
         if ($orgId) {
             $query->where('organization_id', $orgId);
         }
+
         if ($groupName) {
             $query->where('group_name', $groupName);
         }
@@ -582,6 +598,7 @@ class BulkAppointmentController extends Controller
         ]);
 
         Excel::import(new BulkAppointmentImport($request->all()), $request->file('excel_file'));
+
         event(new QueueUpdated());
 
         return redirect()->route('appointments.index')->with('success', 'Excel data imported successfully!');

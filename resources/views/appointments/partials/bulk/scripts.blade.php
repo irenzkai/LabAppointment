@@ -9,6 +9,8 @@
 // Global Configuration Hydration
 window.cachedConfigs = @json($configs);
 window.cachedOccupancy = {};
+window.cachedOccupancyByDate = {};
+window.cachedDateConfigs = {};
 window.servicesMap = @json($services->keyBy('id'));
 window.packagesMap = @json($packages->keyBy('id'));
 window.isRecognizedOrg = false;
@@ -424,20 +426,83 @@ window.performGlobalSync = performGlobalSync;
 // =========================================================================
 // 4. OCCUPANCY & UNCAPPED CASCADING TIME ALLOCATOR
 // =========================================================================
-async function fetchOccupancy() {
-    const mDateInput = document.getElementById('master_date')?.value;
-    const now = new Date();
-    const todayLocal = now.toLocaleDateString('en-CA');
-    const mDate = mDateInput || todayLocal;
+function parseLocalDate(dateStr) {
+    if (!dateStr) return null;
+    const parts = String(dateStr).split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+}
+
+function formatLocalDate(dateObj) {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const d = String(dateObj.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function buildLocalDateTime(dateStr, timeStr) {
+    const d = parseLocalDate(dateStr);
+    if (!d) return new Date(NaN);
+    const tParts = String(timeStr || '00:00:00').split(':').map(Number);
+    d.setHours(tParts[0] || 0, tParts[1] || 0, tParts[2] || 0, 0);
+    return d;
+}
+
+function isConfigClosed(config) {
+    return !config || !config.is_open || config.is_open === '0' || config.is_open === 0 || config.is_open === false;
+}
+
+async function fetchDateSlotInfo(dateStr, forceRefresh = false) {
+    if (!dateStr) {
+        return { occupied_slots: {}, config: null, is_closed: true };
+    }
+
+    if (!forceRefresh && window.cachedOccupancyByDate[dateStr] !== undefined && window.cachedDateConfigs[dateStr] !== undefined) {
+        const cachedCfg = window.cachedDateConfigs[dateStr];
+        return {
+            occupied_slots: window.cachedOccupancyByDate[dateStr],
+            config: cachedCfg,
+            is_closed: isConfigClosed(cachedCfg)
+        };
+    }
 
     try {
-        const res = await fetch(`/api/check-slots?date=${mDate}`);
+        const res = await fetch(`/api/check-slots?date=${encodeURIComponent(dateStr)}`);
         const data = await res.json();
-        window.cachedOccupancy = data.occupied_slots || {};
+        const occ = data.occupied_slots || {};
+        const cfg = data.config || null;
+        window.cachedOccupancyByDate[dateStr] = occ;
+        window.cachedDateConfigs[dateStr] = cfg;
+
+        return {
+            occupied_slots: occ,
+            config: cfg,
+            is_closed: Boolean(data.is_closed) || isConfigClosed(cfg)
+        };
     } catch (e) {
         console.error("Occupancy Fetch Failed", e);
-        window.cachedOccupancy = {};
+        const d = parseLocalDate(dateStr);
+        const fallbackCfg = d && window.cachedConfigs ? window.cachedConfigs[d.getDay()] : null;
+        return {
+            occupied_slots: {},
+            config: fallbackCfg,
+            is_closed: isConfigClosed(fallbackCfg)
+        };
     }
+}
+window.fetchDateSlotInfo = fetchDateSlotInfo;
+
+async function fetchOccupancy(dateOverride = null) {
+    const mDateInput = document.getElementById('master_date')?.value;
+    const todayLocal = formatLocalDate(new Date());
+    const mDate = dateOverride || mDateInput || todayLocal;
+
+    window.cachedOccupancyByDate = {};
+    window.cachedDateConfigs = {};
+
+    const info = await fetchDateSlotInfo(mDate, true);
+    window.cachedOccupancy = info.occupied_slots || {};
+    return info;
 }
 window.fetchOccupancy = fetchOccupancy;
 
@@ -446,15 +511,14 @@ async function validateMasterDate() {
     const selectedDate = masterDate.value;
     if (!selectedDate) return false;
 
-    const parts = selectedDate.split('-');
-    const d = new Date(parts[0], parts[1] - 1, parts[2]);
-    const dayNum = d.getDay();
-    const config = window.cachedConfigs ? window.cachedConfigs[dayNum] : null;
+    const info = await fetchDateSlotInfo(selectedDate);
+    const localDate = parseLocalDate(selectedDate);
+    const config = info.config || (localDate && window.cachedConfigs ? window.cachedConfigs[localDate.getDay()] : null);
 
     const proceedBtn = document.getElementById('proceed_to_compilation_btn');
     const errorMsg = document.getElementById('date_validation_msg');
 
-    if (!config || !config.is_open || config.is_open === '0' || config.is_open === 0 || config.is_open === false) {
+    if (info.is_closed || isConfigClosed(config)) {
         if (errorMsg) {
             errorMsg.innerText = "Clinic is closed on this day. Please select another date.";
             errorMsg.classList.remove('d-none');
@@ -487,11 +551,7 @@ if (masterDate) {
     });
 }
 
-function updateRowSlots(input, savedSlot = '') {
-    const td = input.closest('td');
-    if (!td) return;
-    const select = td.querySelector('.t-select');
-    const selectedDate = input.value;
+function renderRowSlotOptions(select, selectedDate, savedSlot = '') {
     if (!select) return;
 
     if (!selectedDate || !window.cachedConfigs) {
@@ -499,34 +559,45 @@ function updateRowSlots(input, savedSlot = '') {
         return;
     }
 
-    const dayNum = new Date(selectedDate).getDay();
-    const config = window.cachedConfigs[dayNum];
+    const localDate = parseLocalDate(selectedDate);
+    if (!localDate) {
+        select.innerHTML = '<option value="">Pick Date First</option>';
+        return;
+    }
 
-    if (!config || !config.is_open || config.is_open === '0' || config.is_open === 0 || config.is_open === false) {
+    const dayNum = localDate.getDay();
+    const config = (window.cachedDateConfigs && window.cachedDateConfigs[selectedDate] !== undefined)
+        ? window.cachedDateConfigs[selectedDate]
+        : window.cachedConfigs[dayNum];
+
+    if (isConfigClosed(config)) {
         select.innerHTML = '<option value="">CLOSED</option>';
         return;
     }
 
     let html = '<option value="">Choose Time</option>';
-    let start = new Date(`2000-01-01 ${config.opening_time}`);
-    let end = new Date(`2000-01-01 ${config.closing_time}`);
+    let start = buildLocalDateTime('2000-01-01', config.opening_time || '08:00:00');
+    let end = buildLocalDateTime('2000-01-01', config.closing_time || '17:00:00');
+    let slotDuration = parseInt(config.slot_duration) || 60;
     let availableCount = 0;
 
     const now = new Date();
-    const todayLocal = now.toLocaleDateString('en-CA');
+    const todayLocal = formatLocalDate(now);
+    const hasLunch = (config.has_lunch_break === true || config.has_lunch_break === 1 || parseInt(config.has_lunch_break) === 1);
+    const leadHours = (config.lead_time_hours !== undefined && config.lead_time_hours !== null) ? parseInt(config.lead_time_hours) : 2;
 
     while (start < end) {
         let hours = start.getHours().toString().padStart(2, '0');
         let minutes = start.getMinutes().toString().padStart(2, '0');
         let tStr = `${hours}:${minutes}:00`;
 
-        let isLunch = ((config.has_lunch_break === true || config.has_lunch_break === 1 || parseInt(config.has_lunch_break) === 1) && tStr >= config.lunch_start && tStr < config.lunch_end);
+        let isLunch = (hasLunch && config.lunch_start && config.lunch_end && tStr >= config.lunch_start && tStr < config.lunch_end);
         let isPast = false;
 
         if (selectedDate === todayLocal) {
-            const leadTimeMs = (parseInt(config.lead_time_hours) || 0) * 3600 * 1000;
+            const leadTimeMs = leadHours * 3600 * 1000;
             const cutoffTime = now.getTime() + leadTimeMs;
-            const slotDate = new Date(`${selectedDate} ${tStr}`);
+            const slotDate = buildLocalDateTime(selectedDate, tStr);
             isPast = slotDate.getTime() < cutoffTime;
         }
 
@@ -537,10 +608,29 @@ function updateRowSlots(input, savedSlot = '') {
             availableCount++;
         }
 
-        start.setMinutes(start.getMinutes() + parseInt(config.slot_duration));
+        start.setMinutes(start.getMinutes() + slotDuration);
     }
 
     select.innerHTML = (availableCount > 0) ? html : '<option value="">NO SLOTS</option>';
+}
+
+function updateRowSlots(input, savedSlot = '') {
+    const td = input.closest('td');
+    if (!td) return;
+    const select = td.querySelector('.t-select');
+    const selectedDate = input.value;
+    if (!select) return;
+
+    renderRowSlotOptions(select, selectedDate, savedSlot);
+
+    if (selectedDate && (!window.cachedDateConfigs || window.cachedDateConfigs[selectedDate] === undefined)) {
+        fetchDateSlotInfo(selectedDate).then(() => {
+            if (input.value === selectedDate) {
+                const currentSelected = savedSlot || select.value || '';
+                renderRowSlotOptions(select, selectedDate, currentSelected);
+            }
+        });
+    }
 }
 window.updateRowSlots = updateRowSlots;
 
@@ -559,6 +649,103 @@ function refreshAllRowSlots() {
 }
 window.refreshAllRowSlots = refreshAllRowSlots;
 
+// Find next available slot starting from (startDateStr, startTimeStr),
+// cascading past full slots, Sunday/CLOSED days, and NO SLOTS days.
+async function findNextAvailableSlot(startDateStr, startTimeStr = '') {
+    const now = new Date();
+    const todayLocal = formatLocalDate(now);
+    const mDateVal = document.getElementById('master_date')?.value || todayLocal;
+    const minAllowedDate = mDateVal > todayLocal ? mDateVal : todayLocal;
+
+    let effectiveStartDate = startDateStr || minAllowedDate;
+    let effectiveStartTime = startTimeStr || '';
+
+    if (effectiveStartDate < minAllowedDate) {
+        effectiveStartDate = minAllowedDate;
+        effectiveStartTime = '';
+    }
+
+    // Count slots already allocated across current spreadsheet rows
+    const tableCounts = {};
+    document.querySelectorAll('#rowContainer tr').forEach(tr => {
+        const rDate = tr.querySelector('.row-date-input')?.value;
+        const rSlot = tr.querySelector('.t-select')?.value;
+        if (rDate && rSlot) {
+            const key = `${rDate}_${rSlot}`;
+            tableCounts[key] = (tableCounts[key] || 0) + 1;
+        }
+    });
+
+    let currentPtrDate = parseLocalDate(effectiveStartDate);
+    if (!currentPtrDate) return null;
+
+    let minStartTime = effectiveStartTime;
+    let daySafety = 0;
+
+    while (daySafety < 90) {
+        const dStr = formatLocalDate(currentPtrDate);
+        const info = await fetchDateSlotInfo(dStr);
+        const config = info.config || (window.cachedConfigs ? window.cachedConfigs[currentPtrDate.getDay()] : null);
+
+        if (info.is_closed || isConfigClosed(config)) {
+            currentPtrDate.setDate(currentPtrDate.getDate() + 1);
+            minStartTime = '';
+            daySafety++;
+            continue;
+        }
+
+        const openingTime = config.opening_time || '08:00:00';
+        const closingTime = config.closing_time || '17:00:00';
+        const slotDuration = parseInt(config.slot_duration) || 60;
+        const maxPatients = parseInt(config.max_patients_per_slot) || 2;
+        const hasLunch = (config.has_lunch_break === true || config.has_lunch_break === 1 || parseInt(config.has_lunch_break) === 1);
+        const leadHours = (config.lead_time_hours !== undefined && config.lead_time_hours !== null) ? parseInt(config.lead_time_hours) : 2;
+
+        let startPtr = buildLocalDateTime(dStr, openingTime);
+        let endPtr = buildLocalDateTime(dStr, closingTime);
+
+        while (startPtr < endPtr) {
+            const hours = startPtr.getHours().toString().padStart(2, '0');
+            const minutes = startPtr.getMinutes().toString().padStart(2, '0');
+            const tStr = `${hours}:${minutes}:00`;
+
+            if (!minStartTime || tStr >= minStartTime) {
+                const isLunch = (hasLunch && config.lunch_start && config.lunch_end && tStr >= config.lunch_start && tStr < config.lunch_end);
+                let isPast = false;
+
+                if (dStr === todayLocal) {
+                    const leadTimeMs = leadHours * 3600 * 1000;
+                    const cutoffTime = now.getTime() + leadTimeMs;
+                    const slotDate = buildLocalDateTime(dStr, tStr);
+                    isPast = slotDate.getTime() < cutoffTime;
+                }
+
+                if (!isLunch && !isPast) {
+                    const dbCount = parseInt((info.occupied_slots && info.occupied_slots[tStr]) || 0);
+                    const localCount = tableCounts[`${dStr}_${tStr}`] || 0;
+
+                    if (dbCount + localCount < maxPatients) {
+                        return {
+                            date: dStr,
+                            time_slot: tStr
+                        };
+                    }
+                }
+            }
+
+            startPtr.setMinutes(startPtr.getMinutes() + slotDuration);
+        }
+
+        // Current day is CLOSED or has NO SLOTS left -> cascade to next day
+        currentPtrDate.setDate(currentPtrDate.getDate() + 1);
+        minStartTime = '';
+        daySafety++;
+    }
+
+    return null;
+}
+window.findNextAvailableSlot = findNextAvailableSlot;
+
 // Uncapped Cascading Smart Auto-Time Allocation
 async function runSmartScheduler() {
     const mDateInput = document.getElementById('master_date')?.value;
@@ -573,51 +760,58 @@ async function runSmartScheduler() {
     try {
         await fetchOccupancy();
         let localTracker = {};
-        let currentPtrDate = new Date(mDateInput);
+        let currentPtrDate = parseLocalDate(mDateInput);
+        if (!currentPtrDate) return;
+
         const rows = document.querySelectorAll('#rowContainer tr');
         const now = new Date();
-        const todayLocal = now.toLocaleDateString('en-CA');
+        const todayLocal = formatLocalDate(now);
 
         for (let tr of rows) {
             const dInput = tr.querySelector('.row-date-input');
             let assigned = false;
             let daySafety = 0;
 
-            while (!assigned && daySafety < 60) {
-                let dStr = currentPtrDate.toLocaleDateString('en-CA');
-                let config = window.cachedConfigs[currentPtrDate.getDay()];
+            while (!assigned && daySafety < 90) {
+                let dStr = formatLocalDate(currentPtrDate);
+                let info = await fetchDateSlotInfo(dStr);
+                let config = info.config || (window.cachedConfigs ? window.cachedConfigs[currentPtrDate.getDay()] : null);
 
-                if (!config || parseInt(config.is_open) === 0) {
+                // Skip Sunday / CLOSED / specific-date closures
+                if (info.is_closed || isConfigClosed(config)) {
                     currentPtrDate.setDate(currentPtrDate.getDate() + 1);
                     daySafety++;
                     continue;
                 }
 
-                const openingTime = config ? config.opening_time : '08:00:00';
-                const closingTime = config ? config.closing_time : '17:00:00';
+                const openingTime = config.opening_time || '08:00:00';
+                const closingTime = config.closing_time || '17:00:00';
+                const slotDuration = parseInt(config.slot_duration) || 60;
+                const maxPatients = parseInt(config.max_patients_per_slot) || 2;
+                const hasLunch = (config.has_lunch_break === true || config.has_lunch_break === 1 || parseInt(config.has_lunch_break) === 1);
+                const leadHours = (config.lead_time_hours !== undefined && config.lead_time_hours !== null) ? parseInt(config.lead_time_hours) : 2;
 
-                let startPtr = new Date(`${dStr} ${openingTime}`);
-                let endPtr = new Date(`${dStr} ${closingTime}`);
+                let startPtr = buildLocalDateTime(dStr, openingTime);
+                let endPtr = buildLocalDateTime(dStr, closingTime);
 
                 while (startPtr < endPtr) {
                     let hours = startPtr.getHours().toString().padStart(2, '0');
                     let minutes = startPtr.getMinutes().toString().padStart(2, '0');
                     let tStr = `${hours}:${minutes}:00`;
 
-                    let isLunch = ((config.has_lunch_break === true || config.has_lunch_break === 1 || parseInt(config.has_lunch_break) === 1) && tStr >= config.lunch_start && tStr < config.lunch_end);
+                    let isLunch = (hasLunch && config.lunch_start && config.lunch_end && tStr >= config.lunch_start && tStr < config.lunch_end);
                     let isPast = false;
 
                     if (dStr === todayLocal) {
-                        const leadTimeMs = (parseInt(config.lead_time_hours) || 0) * 3600 * 1000;
+                        const leadTimeMs = leadHours * 3600 * 1000;
                         const cutoffTime = now.getTime() + leadTimeMs;
-                        const slotDate = new Date(`${dStr} ${tStr}`);
+                        const slotDate = buildLocalDateTime(dStr, tStr);
                         isPast = slotDate.getTime() < cutoffTime;
                     }
 
                     if (!isLunch && !isPast) {
-                        let dbCount = parseInt(window.cachedOccupancy[tStr] || 0);
+                        let dbCount = parseInt((info.occupied_slots && info.occupied_slots[tStr]) || 0);
                         let localCount = localTracker[`${dStr}_${tStr}`] || 0;
-                        const maxPatients = config ? parseInt(config.max_patients_per_slot) : 2;
 
                         if (dbCount + localCount < maxPatients) {
                             dInput.value = dStr;
@@ -628,10 +822,13 @@ async function runSmartScheduler() {
                         }
                     }
 
-                    startPtr.setMinutes(startPtr.getMinutes() + parseInt(config.slot_duration));
+                    startPtr.setMinutes(startPtr.getMinutes() + slotDuration);
                 }
 
-                if (!assigned) currentPtrDate.setDate(currentPtrDate.getDate() + 1);
+                // If NO SLOTS available on this day, cascade to the next calendar day
+                if (!assigned) {
+                    currentPtrDate.setDate(currentPtrDate.getDate() + 1);
+                }
                 daySafety++;
             }
         }
@@ -1321,8 +1518,7 @@ async function loadBulkDraft() {
         if (!draft) return false;
 
         isRestoringDraft = true;
-        const now = new Date();
-        const todayLocal = now.toLocaleDateString('en-CA');
+        const todayLocal = formatLocalDate(new Date());
         let isDateOutdated = false;
 
         if (draft.appointment_date) {
